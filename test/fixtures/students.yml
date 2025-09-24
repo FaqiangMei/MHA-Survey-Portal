@@ -4,14 +4,14 @@ one:
   student_id: 1
   name: MyString
   email: MyString
-  NetID: MyString
+  net_id: MyString
   track: 1
-  adivsor_id: 1
+  advisor_id: 1
 
 two:
   student_id: 1
   name: MyString
   email: MyString
-  NetID: MyString
+  net_id: MyString
   track: 1
-  adivsor_id: 1
+  advisor_id: 1

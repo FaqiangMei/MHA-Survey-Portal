@@ -1,4 +1,7 @@
 class Admins::OmniauthCallbacksController < Devise::OmniauthCallbacksController
+  # Skip CSRF verification for OAuth callbacks since they come from external sources
+  skip_before_action :verify_authenticity_token, only: [:google_oauth2, :failure]
+  
   def google_oauth2
     # Debug: Log the OAuth params
     Rails.logger.debug "OAuth params: #{request.env['omniauth.params']}"
@@ -17,13 +20,23 @@ class Admins::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       sign_in(admin, event: :authentication)
       
       # Redirect based on role with fallback
-      redirect_path = case admin.role || role
-                     when 'student'
-                       student_dashboard_path
+      redirect_path = case admin.role
+                     when 'admin'
+                       admin_dashboard_path
                      when 'advisor'
                        advisor_dashboard_path
+                     when 'student'
+                       student_dashboard_path
                      else
-                       root_path
+                       # If no role set, use the login role parameter
+                       case role
+                       when 'student'
+                         student_dashboard_path
+                       when 'advisor'
+                         advisor_dashboard_path
+                       else
+                         root_path
+                       end
                      end
       
       Rails.logger.debug "Redirecting to: #{redirect_path}"

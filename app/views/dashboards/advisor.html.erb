@@ -1,188 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Advisor Dashboard</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
-    }
-
-    .header {
-      background-color: #7D2A28;
-      color: white;
-      padding: 15px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .logo-section {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-
-    .logo {
-      font-size: 24px;
-      font-weight: bold;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 30px;
-    }
-
-    .nav-links a {
-      color: white;
-      text-decoration: none;
-      font-size: 18px;
-      font-weight: bold;
-    }
-
-    .nav-links a:hover {
-      text-decoration: underline;
-    }
-
-    .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: #ccc;
-    }
-
-    .page-title {
-      text-align: center;
-      font-size: 14px;
-      color: #666;
-      padding: 10px;
-      background-color: #f9f9f9;
-      border-bottom: 1px solid #ddd;
-    }
-
-    .main-content {
-      padding: 20px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .featured-section {
-      background-color: #7D2A28;
-      color: white;
-      padding: 15px 20px;
-      border-radius: 8px 8px 0 0;
-      font-size: 18px;
-      font-weight: bold;
-      position: relative;
-    }
-
-    .dropdown-arrow {
-      position: absolute;
-      right: 20px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 20px;
-    }
-
-    .features-grid {
-      display: flex;
-      gap: 20px;
-      background-color: white;
-      padding: 40px;
-      border-radius: 0 0 8px 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .feature-item {
-      flex: 1;
-      text-align: center;
-      padding: 20px;
-    }
-
-    .feature-icon {
-      width: 80px;
-      height: 80px;
-      background-color: #ddd;
-      border-radius: 50%;
-      margin: 0 auto 15px auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
-    }
-
-    .students-icon {
-      background-color: #ddd;
-    }
-
-    .surveys-icon {
-      background-color: #ddd;
-    }
-
-    .notifications-icon {
-      background-color: #ddd;
-    }
-
-    .feature-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: #333;
-      margin-top: 10px;
-    }
-
-    .sign-out-link {
-      position: absolute;
-      top: 15px;
-      right: 60px;
-      color: white;
-      text-decoration: none;
-      font-size: 14px;
-    }
-  </style>
+  <title>Advisor Dashboard - MHA Program</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%= stylesheet_link_tag 'application', 'data-turbo-track': 'reload' %>
 </head>
 <body>
-  <div class="header">
-    <div class="logo-section">
-      <div class="logo">ATM TEXAS A&M<br>UNIVERSITY</div>
-      <div class="nav-links">
-        <a href="#">Home</a>
-        <a href="#">Student Records</a>
-        <a href="#">Surveys</a>
-        <a href="#">Reports</a>
-      </div>
-    </div>
-    <%= link_to "Sign Out", destroy_admin_session_path, class: "sign-out-link" %>
-    <div class="user-avatar"></div>
-  </div>
+  <%= render 'shared/advisor_navbar', active_page: 'home' %>
 
-  <div class="page-title">
-    Home View - Advisor
-  </div>
-
-  <div class="main-content">
-    <div class="featured-section">
-      Featured
-      <span class="dropdown-arrow">▼</span>
-    </div>
-    
-    <div class="features-grid">
-      <div class="feature-item">
-        <div class="feature-icon students-icon">👨‍🎓</div>
-        <div class="feature-title">Students</div>
+  <!-- Main Content -->
+  <main class="main-content">
+    <section class="dashboard-section">
+      <div class="section-header">
+        <h1 class="section-title">Advisor Dashboard</h1>
+        <p class="section-subtitle">Student guidance for the MHA Program</p>
       </div>
       
-      <div class="feature-item">
-        <div class="feature-icon surveys-icon">📄</div>
-        <div class="feature-title">Surveys</div>
+      <div class="dashboard-grid dashboard-grid-3">
+        <!-- Students -->
+        <div class="feature-item">
+          <div class="feature-icon">👨‍🎓</div>
+          <div class="feature-title">Students</div>
+          <div class="feature-description">0 assigned</div>
+        </div>
+
+        <!-- Surveys -->
+        <div class="feature-item">
+          <div class="feature-icon">📄</div>
+          <div class="feature-title">Surveys</div>
+          <div class="feature-description">0 active</div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="feature-item">
+          <div class="feature-icon">🔔</div>
+          <div class="feature-title">Notifications</div>
+          <div class="feature-description">0 pending</div>
+        </div>
       </div>
-      
-      <div class="feature-item">
-        <div class="feature-icon notifications-icon">🔔</div>
-        <div class="feature-title">Notifications</div>
-      </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </body>
 </html>

@@ -4,6 +4,12 @@ Rails.application.routes.draw do
   # Role-specific dashboard routes
   get 'student_dashboard', to: 'dashboards#student', as: :student_dashboard
   get 'advisor_dashboard', to: 'dashboards#advisor', as: :advisor_dashboard
+  get 'admin_dashboard', to: 'dashboards#admin', as: :admin_dashboard
+  
+  # Admin-specific management routes
+  get 'manage_members', to: 'dashboards#manage_members', as: :manage_members
+  patch 'update_roles', to: 'dashboards#update_roles', as: :update_roles
+  get 'debug_users', to: 'dashboards#debug_users', as: :debug_users
   
   devise_for :admins, controllers: { omniauth_callbacks: 'admins/omniauth_callbacks' }
   

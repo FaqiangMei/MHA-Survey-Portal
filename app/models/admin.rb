@@ -27,4 +27,19 @@ class Admin < ApplicationRecord
       nil # Return nil if role column doesn't exist
     end
   end
+
+  # Check if user is admin (has all advisor powers + role management)
+  def admin?
+    role == 'admin'
+  end
+
+  # Check if user has advisor-level permissions (advisor or admin)
+  def advisor?
+    %w[advisor admin].include?(role)
+  end
+
+  # Check if user can manage roles (promote/demote advisors)
+  def can_manage_roles?
+    admin?
+  end
 end

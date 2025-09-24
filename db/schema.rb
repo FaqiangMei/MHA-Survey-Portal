@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_09_23_000001) do
+ActiveRecord::Schema[8.0].define(version: 2025_09_24_154224) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,5 +23,98 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_23_000001) do
     t.datetime "updated_at", null: false
     t.string "role", default: "student"
     t.index ["email"], name: "index_admins_on_email", unique: true
+  end
+
+  create_table "advisors", force: :cascade do |t|
+    t.integer "advisor_id"
+    t.string "name"
+    t.string "email"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "competencies", force: :cascade do |t|
+    t.integer "competency_id"
+    t.integer "survey_id"
+    t.string "name"
+    t.string "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "competency_responses", force: :cascade do |t|
+    t.integer "competencyresponse_id"
+    t.integer "surveyresponse_id"
+    t.integer "competency_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "evidence_uploads", force: :cascade do |t|
+    t.integer "evidenceupload_id"
+    t.integer "questionresponse_id"
+    t.integer "competencyresponse_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "link"
+  end
+
+  create_table "feedbacks", force: :cascade do |t|
+    t.integer "feedback_id"
+    t.integer "advisor_id"
+    t.integer "competency_id"
+    t.integer "rating"
+    t.string "comments"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "question_responses", force: :cascade do |t|
+    t.integer "questionresponse_id"
+    t.integer "competencyresponse_id"
+    t.integer "question_id"
+    t.string "answer"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "questions", force: :cascade do |t|
+    t.integer "question_id"
+    t.integer "competency_id"
+    t.integer "question_order"
+    t.string "question_type"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "students", force: :cascade do |t|
+    t.integer "student_id"
+    t.string "name"
+    t.string "email"
+    t.string "NetID"
+    t.integer "track"
+    t.integer "advisor_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "survey_responses", force: :cascade do |t|
+    t.integer "surveyresponse_id"
+    t.integer "student_id"
+    t.integer "advisor_id"
+    t.integer "survey_id"
+    t.string "semester"
+    t.integer "status"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "surveys", force: :cascade do |t|
+    t.integer "survey_id"
+    t.date "assigned_date"
+    t.date "completion_date"
+    t.date "approval_date"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
   end
 end

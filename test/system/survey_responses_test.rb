@@ -2,7 +2,7 @@ require "application_system_test_case"
 
 class SurveyResponsesTest < ApplicationSystemTestCase
   include Devise::Test::IntegrationHelpers
-  
+
   setup do
     @survey_response = survey_responses(:one)
     sign_in admins(:one)

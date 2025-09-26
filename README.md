@@ -97,3 +97,35 @@ docker compose up --build
 
 This approach ensures everyone runs the same DB and Ruby environment in containers and avoids touching shared/production databases.
 
+### Docker quickstart (project-specific)
+
+The repository includes a `docker-compose.yml` that mounts the repository into the web container. The compose file sets the web service working directory to the mounted path so you don't need to `cd` inside the container before running Rails commands.
+
+Recommended commands (from your host shell):
+
+Create the DB, run migrations and seed default data:
+```bash
+docker-compose run --rm web bin/rails db:create db:migrate db:seed
+```
+
+Run the app (build first if you changed Dockerfile/gems):
+```bash
+docker-compose up -d --build
+```
+
+Run the rails console or runners without cd:
+```bash
+docker-compose run --rm web bin/rails console
+docker-compose run --rm web bin/rails runner "puts Survey.count"
+```
+
+What the seeds add
+- A default survey titled "Default Sample Survey" with sample competencies and questions.
+- A local test student: `faqiangmei@gmail.com` (track set to `residential`).
+
+Troubleshooting notes
+- If seeds abort with an enum validation (e.g. invalid `track`), check `app/models/student.rb` for valid values (`residential`, `executive`).
+- If you still see the older built-in copy of the project inside the container (`/rails`), rebuild the web image and restart with `docker-compose up -d --build` to ensure the compose `working_dir` change is active.
+
+If you'd like, I can remove the obsolete top-level `version:` key from `docker-compose.yml` to suppress the startup warning.
+

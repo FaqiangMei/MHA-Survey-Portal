@@ -8,21 +8,14 @@ on:
 jobs:
   scan_ruby:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Ensure binstubs
-        run: bundle exec rake app:update:bin
-      - name: Setup DB
-        run: bin/rails db:create db:schema:load --trace RAILS_ENV=test
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
           bundler-cache: true
-
       - name: Scan for common Rails security vulnerabilities using static analysis
         run: bin/brakeman --no-pager
 
@@ -92,6 +85,10 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
 
+      - name: Ensure binstubs
+        run: bundle exec rake app:update:bin
+      - name: Setup DB
+        run: bin/rails db:create db:schema:load --trace RAILS_ENV=test
       - name: Run tests
         env:
           RAILS_ENV: test

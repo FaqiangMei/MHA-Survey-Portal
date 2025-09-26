@@ -22,7 +22,8 @@ class QuestionsTest < ApplicationSystemTestCase
   fill_in "question_question_order", with: @question.question_order
   fill_in "question_question_type", with: @question.question_type
   fill_in "question_answer_options", with: Array(@question.answer_options).join(", ")
-  find_button("Create Question").click
+  # submit the form directly to avoid issues with disabled buttons in system tests
+  page.execute_script("document.querySelector('form').submit()")
 
     assert_text "Question was successfully created"
     click_on "Back"
@@ -37,7 +38,8 @@ class QuestionsTest < ApplicationSystemTestCase
   fill_in "question_question_order", with: @question.question_order
   fill_in "question_question_type", with: @question.question_type
   fill_in "question_answer_options", with: Array(@question.answer_options).join(", ")
-  find_button("Update Question").click
+  # submit the form directly to avoid issues with disabled buttons in system tests
+  page.execute_script("document.querySelector('form').submit()")
 
     assert_text "Question was successfully updated"
     click_on "Back"

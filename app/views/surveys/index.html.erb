@@ -4,12 +4,13 @@
   <% @surveys.each do |survey| %>
     <div class="survey-card">
       <h2>
+
         <% survey_name =
-          case survey.survey_id
+          case survey.id
           when 1 then "Current Residential and Executive MHA Track Study Survey"
           when 2 then "Competency Self-Assessment Survey"
           when 3 then "Final Feedback Survey"
-          else "Survey ##{survey.survey_id}"
+          else "Survey ##{survey.id}"
           end
         %>
 

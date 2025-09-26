@@ -1,13 +1,15 @@
 version: '3.8'
+
 services:
   db:
     image: postgres:14
+    container_name: health-db
     environment:
       POSTGRES_USER: dev_user
       POSTGRES_PASSWORD: dev_pass
       POSTGRES_DB: health_app_development
     ports:
-      - "5433:5432"
+      - "5433:5432" 
     volumes:
       - db-data:/var/lib/postgresql/data
 
@@ -16,18 +18,19 @@ services:
       context: .
       args:
         RUBY_VERSION: 3.4.5
+    container_name: health-web
     environment:
-      DATABASE_HOST: db
-      DATABASE_USER: dev_user
-      DATABASE_PASSWORD: dev_pass
+      PGHOST: db
+      PGUSER: dev_user
+      PGPASSWORD: dev_pass
       RAILS_ENV: development
     ports:
       - "3000:3000"
     volumes:
-      - .:/rails:cached
+      - .:/csce431/501_health:cached
     depends_on:
       - db
-    command: bash -lc "bundle install && bin/rails db:create db:migrate db:seed && bin/rails s -b 0.0.0.0"
+    command: bash -lc "bundle install && bin/rails s -b 0.0.0.0 -p 3000"
 
 volumes:
   db-data:

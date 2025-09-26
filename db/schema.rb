@@ -106,6 +106,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_25_200246) do
     t.integer "advisor_id"
     t.integer "survey_id"
     t.string "status"
+    t.string "semester"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
   end

@@ -35,7 +35,7 @@ class EvidenceUploadsTest < ApplicationSystemTestCase
     fill_in "Evidenceupload", with: @evidence_upload.evidenceupload_id
     fill_in "Link", with: @evidence_upload.link
     fill_in "Questionresponse", with: @evidence_upload.questionresponse_id
-    click_on "Update EvidenceUpload"
+    click_on "Update Evidence upload"
 
     assert_text "Evidence upload was successfully updated"
     click_on "Back"

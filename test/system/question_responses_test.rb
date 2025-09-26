@@ -35,7 +35,7 @@ class QuestionResponsesTest < ApplicationSystemTestCase
     fill_in "Competencyresponse", with: @question_response.competencyresponse_id
     fill_in "Question", with: @question_response.question_id
     fill_in "Questionresponse", with: @question_response.questionresponse_id
-    click_on "Update QuestionResponse"
+    click_on "Update Question response"
 
     assert_text "Question response was successfully updated"
     click_on "Back"

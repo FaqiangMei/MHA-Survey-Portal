@@ -1,10 +1,55 @@
-<p style="color: green"><%= notice %></p>
+<% survey_name =
+  case @survey.survey_id
+  when 1 then "Current Residential and Executive MHA Track Study Survey"
+  when 2 then "Competency Self-Assessment Survey"
+  when 3 then "Final Feedback Survey"
+  else "Survey ##{@survey.survey_id}"
+  end
+%>
 
-<%= render @survey %>
+<div class="survey-container">
+  <h1 class="survey-title"><%= survey_name %></h1>
+  <%= form_with url: submit_survey_path(@survey), local: true, class: "survey-form" do |f| %>
+    <% if @survey.respond_to?(:questions) && @survey.questions.any? %>
+      <% @survey.questions.order(:question_order).each do |q| %>
+        <div class="form-group question-block">
+          <label class="form-label"><%= q.question || "Question #{q.id}" %></label>
+          <% case q.question_type %>
+          <% when 'text' %>
+            <%= text_area_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control', rows: 3 %>
+          <% when 'select' %>
+            <% options = (q.answer_options || '').split(',').map(&:strip) %>
+            <%= select_tag "answers[#{q.id}]", options_for_select(options, @existing_answers[q.id]), include_blank: true, class: 'form-control' %>
+          <% when 'radio' %>
+            <% options = (q.answer_options || '').split(',').map(&:strip) %>
+            <% options.each do |opt| %>
+              <label class="form-check">
+                <%= radio_button_tag "answers[#{q.id}]", opt, (@existing_answers[q.id].to_s == opt.to_s) %> <%= opt %>
+              </label>
+            <% end %>
+          <% when 'checkbox' %>
+            <% options = (q.answer_options || '').split(',').map(&:strip) %>
+            <% selected = Array(@existing_answers[q.id]) %>
+            <% options.each do |opt| %>
+              <label class="form-check">
+                <%= check_box_tag "answers[#{q.id}][]", opt, selected.include?(opt) %> <%= opt %>
+              </label>
+            <% end %>
+          <% else %>
+            <%= text_field_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control' %>
+          <% end %>
+        </div>
+      <% end %>
+    <% else %>
+      <!-- Fallback sample questions if none exist in DB -->
+      <div class="form-group">
+        <label class="form-label">Sample free text</label>
+        <%= text_area_tag "answers[sample_text]", nil, class: 'form-control' %>
+      </div>
+    <% end %>
 
-<div>
-  <%= link_to "Edit this survey", edit_survey_path(@survey) %> |
-  <%= link_to "Back to surveys", surveys_path %>
-
-  <%= button_to "Destroy this survey", @survey, method: :delete %>
+    <div class="form-actions">
+      <%= f.submit "Submit Survey", class: "btn btn-primary" %>
+    </div>
+  <% end %>
 </div>

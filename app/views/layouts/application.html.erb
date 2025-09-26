@@ -29,6 +29,18 @@
         <div id="flash_<%= key %>"><%= value %></div>
       <% end -%>
     <% end %>
+
+    <% if admin_signed_in? %>
+      <% case current_admin.role %>
+      <% when "student" %>
+        <%= render "shared/student_navbar" %>
+      <% when "advisor" %>
+        <%= render "shared/advisor_navbar" %>
+      <% when "admin" %>
+        <%= render "shared/admin_navbar" %>
+      <% end %>
+    <% end %>
+
     <%= yield %>
   </body>
 </html>

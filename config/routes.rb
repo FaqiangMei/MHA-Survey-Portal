@@ -33,4 +33,11 @@ Rails.application.routes.draw do
   resources :surveys, only: [:index, :show] do
     post :submit, on: :member
   end
+
+  # Full CRUD routes for survey_responses (index, show, new, create, edit, update, destroy)
+  resources :survey_responses do
+    member do
+      patch :reopen
+    end
+  end
 end

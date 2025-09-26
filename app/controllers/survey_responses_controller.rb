@@ -1,5 +1,6 @@
 class SurveyResponsesController < ApplicationController
-  before_action :set_survey_response, only: %i[ show edit update destroy ]
+  before_action :set_survey_response, only: %i[ show edit update destroy reopen ]
+  before_action :authorize_student_view!, only: %i[ show edit update destroy ]
 
   # GET /survey_responses or /survey_responses.json
   def index
@@ -8,6 +9,15 @@ class SurveyResponsesController < ApplicationController
 
   # GET /survey_responses/1 or /survey_responses/1.json
   def show
+    # collect all question ids for this survey (through competencies)
+    survey = @survey_response.survey
+    question_ids = []
+    if survey && survey.respond_to?(:competencies)
+      survey.competencies.each do |comp|
+        question_ids.concat(comp.questions.pluck(:id)) if comp.respond_to?(:questions)
+      end
+    end
+    @question_responses = QuestionResponse.where(question_id: question_ids)
   end
 
   # GET /survey_responses/new
@@ -17,6 +27,10 @@ class SurveyResponsesController < ApplicationController
 
   # GET /survey_responses/1/edit
   def edit
+    # Only non-student users (advisors/admins) may edit
+    if current_student && @survey_response.student_id == current_student.id
+      redirect_to @survey_response, alert: 'Students are not allowed to edit survey responses.'
+    end
   end
 
   # POST /survey_responses or /survey_responses.json
@@ -36,6 +50,10 @@ class SurveyResponsesController < ApplicationController
 
   # PATCH/PUT /survey_responses/1 or /survey_responses/1.json
   def update
+    # Prevent students from updating
+    if current_student && @survey_response.student_id == current_student.id
+      redirect_to @survey_response, alert: 'Students are not allowed to update survey responses.' and return
+    end
     respond_to do |format|
       if @survey_response.update(survey_response_params)
         format.html { redirect_to @survey_response, notice: "Survey response was successfully updated.", status: :see_other }
@@ -49,6 +67,10 @@ class SurveyResponsesController < ApplicationController
 
   # DELETE /survey_responses/1 or /survey_responses/1.json
   def destroy
+    # Prevent students from destroying
+    if current_student && @survey_response.student_id == current_student.id
+      redirect_to survey_responses_path, alert: 'Students are not allowed to destroy survey responses.' and return
+    end
     @survey_response.destroy!
 
     respond_to do |format|
@@ -57,14 +79,33 @@ class SurveyResponsesController < ApplicationController
     end
   end
 
+  # PATCH /survey_responses/:id/reopen
+  def reopen
+    # Only allow reopening if current_student owns it
+    if current_student && @survey_response.student_id == current_student.id
+      @survey_response.update!(status: SurveyResponse.statuses[:not_started])
+      redirect_to student_dashboard_path, notice: 'Survey has been moved back to To-do.'
+    else
+      redirect_to survey_responses_path, alert: 'Not authorized to reopen this survey.'
+    end
+  end
+
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_survey_response
-      @survey_response = SurveyResponse.find(params.expect(:id))
+      @survey_response = SurveyResponse.find(params[:id])
+    end
+
+    def authorize_student_view!
+      # Students may only view their own survey responses. Advisors and admins can view any.
+      return unless current_student
+      if @survey_response && @survey_response.student_id != current_student.id
+        redirect_to student_dashboard_path, alert: 'You are not authorized to view that survey response.'
+      end
     end
 
     # Only allow a list of trusted parameters through.
     def survey_response_params
-      params.expect(survey_response: [ :surveyresponse_id, :student_id, :advisor_id, :survey_id, :semester, :status ])
+      params.require(:survey_response).permit(:surveyresponse_id, :student_id, :advisor_id, :survey_id, :semester, :status)
     end
 end

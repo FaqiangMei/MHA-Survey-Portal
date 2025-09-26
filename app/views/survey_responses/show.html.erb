@@ -1,10 +1,43 @@
+<div class="survey-response-view">
+  <h1>Survey Response for Survey #<%= @survey_response.survey_id %></h1>
+
+  <div class="response-meta">
+    <p>Student ID: <%= @survey_response.student_id %></p>
+    <p>Advisor ID: <%= @survey_response.advisor_id %></p>
+    <p>Semester: <%= @survey_response.semester %></p>
+    <p>Status: <%= @survey_response.status %></p>
+  </div>
+
+  <div class="question-responses">
+    <% if @question_responses.present? %>
+      <% @question_responses.each do |qr| %>
+        <div class="question-response">
+          <% q = Question.find_by(id: qr.question_id) %>
+          <h3><%= q&.question || "Question #{qr.question_id}" %></h3>
+          <div class="answer"><%= qr.answer.is_a?(Array) ? qr.answer.join(', ') : qr.answer %></div>
+        </div>
+      <% end %>
+    <% else %>
+      <p>No question responses found for this survey response.</p>
+    <% end %>
+  </div>
+</div>
 <p style="color: green"><%= notice %></p>
 
 <%= render @survey_response %>
 
 <div>
-  <%= link_to "Edit this survey response", edit_survey_response_path(@survey_response) %> |
-  <%= link_to "Back to survey responses", survey_responses_path %>
+  <%# Only allow editing/destroying when the current user is NOT the student owner %>
+    <% if current_student && current_student.id == @survey_response.student_id %>
+      <%= link_to "Edit answers for this survey", survey_path(@survey_response.survey_id) %> |
+      <% if @survey_response.status == SurveyResponse.statuses[:submitted] %>
+        <%= button_to "Reopen (move to To-do)", reopen_survey_response_path(@survey_response), method: :patch, data: { confirm: 'Move this completed survey back to To-do?' } %> |
+      <% end %>
+      <%= link_to "Back to my dashboard", student_dashboard_path %>
+    <% else %>
+      <%= link_to "Edit this survey response", edit_survey_response_path(@survey_response) %> |
+      <%= link_to "Back to survey responses", survey_responses_path %>
 
-  <%= button_to "Destroy this survey response", @survey_response, method: :delete %>
+      <%= button_to "Destroy this survey response", @survey_response, method: :delete, data: { confirm: 'Are you sure?' } %>
+    <% end %>
 </div>

@@ -9,37 +9,44 @@
 
 <div class="survey-container">
   <h1 class="survey-title"><%= survey_name %></h1>
-
   <%= form_with url: submit_survey_path(@survey), local: true, class: "survey-form" do |f| %>
-    <div class="form-group">
-      <%= f.label :track, "Which track are you in?", class: "form-label" %>
-      <%= f.select :track, ["Residential", "Executive"], {}, class: "form-control" %>
-    </div>
-
-    <div class="form-group">
-      <%= f.label :skills, "Which skills have you improved?", class: "form-label" %>
-      <% ["Leadership", "Analytics", "Finance"].each do |skill| %>
-        <label class="form-check">
-          <%= f.check_box :skills, { multiple: true }, skill, nil %>
-          <span><%= skill %></span>
-        </label>
+    <% if @survey.respond_to?(:questions) && @survey.questions.any? %>
+      <% @survey.questions.order(:question_order).each do |q| %>
+        <div class="form-group question-block">
+          <label class="form-label"><%= q.question || "Question #{q.id}" %></label>
+          <% case q.question_type %>
+          <% when 'text' %>
+            <%= text_area_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control', rows: 3 %>
+          <% when 'select' %>
+            <% options = (q.answer_options || '').split(',').map(&:strip) %>
+            <%= select_tag "answers[#{q.id}]", options_for_select(options, @existing_answers[q.id]), include_blank: true, class: 'form-control' %>
+          <% when 'radio' %>
+            <% options = (q.answer_options || '').split(',').map(&:strip) %>
+            <% options.each do |opt| %>
+              <label class="form-check">
+                <%= radio_button_tag "answers[#{q.id}]", opt, (@existing_answers[q.id].to_s == opt.to_s) %> <%= opt %>
+              </label>
+            <% end %>
+          <% when 'checkbox' %>
+            <% options = (q.answer_options || '').split(',').map(&:strip) %>
+            <% selected = Array(@existing_answers[q.id]) %>
+            <% options.each do |opt| %>
+              <label class="form-check">
+                <%= check_box_tag "answers[#{q.id}][]", opt, selected.include?(opt) %> <%= opt %>
+              </label>
+            <% end %>
+          <% else %>
+            <%= text_field_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control' %>
+          <% end %>
+        </div>
       <% end %>
-    </div>
-
-    <div class="form-group">
-      <%= f.label :confidence, "Do you feel confident about your progress?", class: "form-label" %><br>
-      <label class="form-check">
-        <%= f.radio_button :confidence, true %> True
-      </label>
-      <label class="form-check">
-        <%= f.radio_button :confidence, false %> False
-      </label>
-    </div>
-
-    <div class="form-group">
-      <%= f.label :feedback, "Additional Feedback:", class: "form-label" %>
-      <%= f.text_area :feedback, rows: 3, class: "form-control" %>
-    </div>
+    <% else %>
+      <!-- Fallback sample questions if none exist in DB -->
+      <div class="form-group">
+        <label class="form-label">Sample free text</label>
+        <%= text_area_tag "answers[sample_text]", nil, class: 'form-control' %>
+      </div>
+    <% end %>
 
     <div class="form-actions">
       <%= f.submit "Submit Survey", class: "btn btn-primary" %>

@@ -81,3 +81,33 @@ Survey.find_or_create_by!(id: 3) do |s|
 end
 
 puts "Created default surveys"
+
+# Ensure faqiangmei@gmail.com exists as a login admin with student role and corresponding Student
+student_admin = Admin.find_or_create_by(email: 'faqiangmei@gmail.com') do |a|
+  a.full_name = 'Faqiang Mei'
+  a.role = 'student'
+  puts "Created student admin: #{a.email}"
+end
+
+Student.find_or_create_by(email: 'faqiangmei@gmail.com') do |s|
+  s.name = 'Faqiang Mei'
+  s.NetID = 'faqiangmei'
+  s.track = 0
+  s.advisor_id = nil
+  puts "Created Student record for #{s.email}"
+end
+
+# Assign surveys 1..3 to this student (create SurveyResponse if missing)
+student = Student.find_by(email: 'faqiangmei@gmail.com')
+if student
+  (1..3).each do |i|
+    survey = Survey.find_by(survey_id: i) || Survey.find_by(id: i) || Survey.find_or_create_by(survey_id: i)
+    sr = SurveyResponse.find_or_initialize_by(student_id: student.id, survey_id: survey.id)
+    if sr.new_record?
+      sr.status = SurveyResponse.statuses[:not_started]
+      sr.advisor_id = student.advisor_id
+      sr.save!
+      puts "Assigned survey #{survey.id} to student #{student.email}"
+    end
+  end
+end

@@ -11,26 +11,20 @@
       </h2>
       
       <div class="todo-list">
-        <div class="todo-item">
-          <%= link_to survey_path(1), class: "todo-link" do %>
-            <div class="survey-icon"></div>
-            Current Residential and Executive MHA Track Study Survey
+        <% if @pending_surveys.present? %>
+          <% @pending_surveys.each do |survey| %>
+            <div class="todo-item">
+              <div class="survey-icon"></div>
+              <div class="survey-title"><%= "Survey ##{survey.id}" %></div>
+              <div class="survey-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
+                <%= link_to 'Open', survey_path(survey), class: 'btn btn-primary' %>
+                <%= button_to 'Mark as Completed', submit_survey_path(survey), method: :post, form: { data: { turbo: false } }, class: 'btn btn-primary' %>
+              </div>
+            </div>
           <% end %>
-        </div>
-
-        <div class="todo-item">
-          <%= link_to survey_path(2), class: "todo-link" do %>
-            <div class="survey-icon"></div>
-            Current Residential and Executive MHA Track Study Survey
-          <% end %>
-        </div>
-
-        <div class="todo-item">
-          <%= link_to survey_path(3), class: "todo-link" do %>
-            <div class="survey-icon"></div>
-            Current Residential and Executive MHA Track Study Survey
-          <% end %>
-        </div>
+        <% else %>
+          <div class="todo-item empty">No pending surveys</div>
+        <% end %>
       </div>
     </section>
 
@@ -41,7 +35,7 @@
         Notifications
       </h2>
       
-      <div class="notification-list">
+  <div class="notification-list">
         <div class="notification">
           <div class="notification-icon"></div>
           <div class="notification-content">
@@ -63,6 +57,30 @@
             <div class="notification-time">1 day ago</div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Completed Surveys Section -->
+    <section class="dashboard-card">
+      <h2 class="section-title">
+        <div class="section-icon"></div>
+        Completed Surveys
+      </h2>
+
+      <div class="completed-list">
+        <% if @completed_surveys.present? %>
+          <% @completed_surveys.each do |survey| %>
+            <div class="completed-item">
+              <div class="survey-icon"></div>
+              <div class="survey-title"><%= "Survey ##{survey.id}" %></div>
+              <div class="survey-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
+                <%= link_to 'View response', survey_response_path(SurveyResponse.find_by(student_id: @student.id, survey_id: survey.id)), class: 'btn btn-primary' %>
+              </div>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="completed-item empty">No completed surveys</div>
+        <% end %>
       </div>
     </section>
 

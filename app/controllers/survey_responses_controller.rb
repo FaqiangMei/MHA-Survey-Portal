@@ -18,6 +18,21 @@ class SurveyResponsesController < ApplicationController
       end
     end
     @question_responses = QuestionResponse.where(question_id: question_ids)
+
+    respond_to do |format|
+      format.html
+      format.pdf do
+        html = render_to_string(
+          template: "survey_responses/show",
+          layout: 'pdf',
+          encoding: 'UTF-8',
+          locals: { :@survey_response => @survey_response, :@question_responses => @question_responses }
+        )
+        render pdf: "survey_response_#{@survey_response.id}",
+               html: html,
+               encoding: 'UTF-8'
+      end
+    end
   end
 
   # GET /survey_responses/new

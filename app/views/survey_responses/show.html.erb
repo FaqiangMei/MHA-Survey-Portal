@@ -1,43 +1,42 @@
-<div class="survey-response-view">
-  <h1>Survey Response for Survey #<%= @survey_response.survey_id %></h1>
 
-  <div class="response-meta">
-    <p>Student ID: <%= @survey_response.student_id %></p>
-    <p>Advisor ID: <%= @survey_response.advisor_id %></p>
-    <p>Semester: <%= @survey_response.semester %></p>
-    <p>Status: <%= @survey_response.status %></p>
-  </div>
-
-  <div class="question-responses">
+<div class="survey-response-view" style="max-width:700px;margin:2em auto;padding:2em;background:#fff;border-radius:8px;box-shadow:0 2px 8px #eee;">
+  <h1 style="display:flex;align-items:center;justify-content:space-between;">
+    Survey Response for Survey #<%= @survey_response.survey_id %>
+    <%= link_to 'Export as PDF', survey_response_path(@survey_response, format: :pdf), class: 'btn btn-secondary', style: 'font-size:0.9em;padding:0.4em 1em;margin-left:1em;' %>
+  </h1>
+  <table style="width:100%;margin-bottom:1.5em;border-collapse:collapse;">
+    <tr><th align="left">Student ID</th><td><%= @survey_response.student_id %></td></tr>
+    <tr><th align="left">Advisor ID</th><td><%= @survey_response.advisor_id %></td></tr>
+    <tr><th align="left">Semester</th><td><%= @survey_response.semester %></td></tr>
+    <tr><th align="left">Status</th><td><%= @survey_response.status %></td></tr>
+  </table>
+  <h2>Answers</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr style="background:#f0f0f0;"><th align="left">Question</th><th align="left">Answer</th></tr>
     <% if @question_responses.present? %>
       <% @question_responses.each do |qr| %>
-        <div class="question-response">
-          <% q = Question.find_by(id: qr.question_id) %>
-          <h3><%= q&.question || "Question #{qr.question_id}" %></h3>
-          <div class="answer"><%= qr.answer.is_a?(Array) ? qr.answer.join(', ') : qr.answer %></div>
-        </div>
+        <% q = Question.find_by(id: qr.question_id) %>
+        <tr>
+          <td style="vertical-align:top;"><%= q&.question || "Question #{qr.question_id}" %></td>
+          <td><%= qr.answer.is_a?(Array) ? qr.answer.join(', ') : qr.answer %></td>
+        </tr>
       <% end %>
     <% else %>
-      <p>No question responses found for this survey response.</p>
+      <tr><td colspan="2">No question responses found for this survey response.</td></tr>
+    <% end %>
+  </table>
+
+  <div style="margin-top:2em;display:flex;gap:1em;flex-wrap:wrap;">
+    <% if current_student && current_student.id == @survey_response.student_id %>
+      <%= link_to "Edit answers for this survey", survey_path(@survey_response.survey_id), class: 'btn btn-primary' %>
+      <% if @survey_response.status == SurveyResponse.statuses[:submitted] %>
+        <%= button_to "Reopen (move to To-do)", reopen_survey_response_path(@survey_response), method: :patch, data: { confirm: 'Move this completed survey back to To-do?' }, class: 'btn btn-warning' %>
+      <% end %>
+      <%= link_to "Back to my dashboard", student_dashboard_path, class: 'btn btn-light' %>
+    <% else %>
+      <%= link_to "Edit this survey response", edit_survey_response_path(@survey_response), class: 'btn btn-primary' %>
+      <%= link_to "Back to survey responses", survey_responses_path, class: 'btn btn-light' %>
+      <%= button_to "Destroy this survey response", @survey_response, method: :delete, data: { confirm: 'Are you sure?' }, class: 'btn btn-danger' %>
     <% end %>
   </div>
-</div>
-<p style="color: green"><%= notice %></p>
-
-<%= render @survey_response %>
-
-<div>
-  <%# Only allow editing/destroying when the current user is NOT the student owner %>
-    <% if current_student && current_student.id == @survey_response.student_id %>
-      <%= link_to "Edit answers for this survey", survey_path(@survey_response.survey_id) %> |
-      <% if @survey_response.status == SurveyResponse.statuses[:submitted] %>
-        <%= button_to "Reopen (move to To-do)", reopen_survey_response_path(@survey_response), method: :patch, data: { confirm: 'Move this completed survey back to To-do?' } %> |
-      <% end %>
-      <%= link_to "Back to my dashboard", student_dashboard_path %>
-    <% else %>
-      <%= link_to "Edit this survey response", edit_survey_response_path(@survey_response) %> |
-      <%= link_to "Back to survey responses", survey_responses_path %>
-
-      <%= button_to "Destroy this survey response", @survey_response, method: :delete, data: { confirm: 'Are you sure?' } %>
-    <% end %>
 </div>

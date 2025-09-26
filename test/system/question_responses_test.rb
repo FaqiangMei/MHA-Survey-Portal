@@ -21,7 +21,7 @@ class QuestionResponsesTest < ApplicationSystemTestCase
     fill_in "Competencyresponse", with: @question_response.competencyresponse_id
     fill_in "Question", with: @question_response.question_id
     fill_in "Questionresponse", with: @question_response.questionresponse_id
-    click_on "Create Question response"
+    click_on "Create QuestionResponse"
 
     assert_text "Question response was successfully created"
     click_on "Back"
@@ -35,7 +35,7 @@ class QuestionResponsesTest < ApplicationSystemTestCase
     fill_in "Competencyresponse", with: @question_response.competencyresponse_id
     fill_in "Question", with: @question_response.question_id
     fill_in "Questionresponse", with: @question_response.questionresponse_id
-    click_on "Update Question response"
+    click_on "Update QuestionResponse"
 
     assert_text "Question response was successfully updated"
     click_on "Back"

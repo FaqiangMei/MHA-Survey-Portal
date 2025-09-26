@@ -68,7 +68,7 @@ comp_tech = Competency.find_or_create_by!(survey_id: survey.id, name: "Technical
 # Questions for Professional Skills
 Question.find_or_create_by!(competency_id: comp_prof.id, question_order: 1, question: "I communicate effectively with my peers.") do |q|
   q.question_type = 'radio'
-  q.answer_options = ['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'].to_json
+  q.answer_options = [ 'Strongly disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly agree' ].to_json
 end
 
 Question.find_or_create_by!(competency_id: comp_prof.id, question_order: 2, question: "Describe a recent teamwork experience.") do |q|
@@ -79,7 +79,7 @@ end
 # Questions for Technical Skills
 Question.find_or_create_by!(competency_id: comp_tech.id, question_order: 1, question: "Rate your proficiency in Ruby on Rails.") do |q|
   q.question_type = 'select'
-  q.answer_options = ['Beginner','Intermediate','Advanced'].to_json
+  q.answer_options = [ 'Beginner', 'Intermediate', 'Advanced' ].to_json
 end
 
 Question.find_or_create_by!(competency_id: comp_tech.id, question_order: 2, question: "Which frameworks have you used recently?") do |q|

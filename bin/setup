@@ -1,3 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bin/setup
+# Developer setup script for Health app (macOS / Linux)
+# - checks ruby version
+# - installs bundler and gems
+# - attempts to create/migrate/seed the development DB
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "==> Project root: $ROOT_DIR"
+
+# .ruby-version check
+if [ -f .ruby-version ]; then
+  expected_ruby=$(cat .ruby-version)
+  echo "==> Expected Ruby: $expected_ruby (from .ruby-version)"
+  if command -v ruby >/dev/null 2>&1; then
+    actual_ruby=$(ruby -v)
+    echo "    Current ruby: $actual_ruby"
+    if ! ruby -v | grep -q "$expected_ruby"; then
+      echo "WARNING: Current Ruby doesn't match .ruby-version"
+      echo "Install the correct Ruby with rbenv or rvm and re-run this script."
+      echo "  Example (rbenv):"
+      echo "    rbenv install $expected_ruby"
+      echo "    rbenv local $expected_ruby"
+      echo "    gem install bundler"
+      echo "    bundle install"
+      echo ""
+    fi
+  else
+    echo "ruby not found in PATH. Please install Ruby $expected_ruby (rbenv recommended)."
+  fi
+else
+  echo "No .ruby-version file found; continuing but verify ruby version manually."
+fi
+
+echo "\n==> Installing gems (bundle install)"
+if ! command -v bundle >/dev/null 2>&1; then
+  gem install bundler
+fi
+bundle install --jobs 4
+
+echo "\n==> Checking Postgres availability (psql)"
+if command -v psql >/dev/null 2>&1; then
+  if psql -h localhost -d postgres -c '\l' >/dev/null 2>&1; then
+    echo "psql is available and can connect to localhost:5432"
+  else
+    echo "psql present but cannot connect to localhost:5432. Ensure Postgres is running."
+    echo "macOS Homebrew example: brew services start postgresql"
+  fi
+else
+  echo "psql not found. Install Postgres client or run Postgres via Docker."
+fi
+
+echo "\n==> Creating and migrating the development database"
+echo "If your DB user in config/database.yml doesn't exist, create it or set DATABASE_USER/DATABASE_PASSWORD env vars."
+echo "You can create a DB role as a Postgres superuser (example):"
+echo "  createuser user_501_health -P"
+echo "  createdb health_app_development -O user_501_health"
+
+bin/rails db:create db:migrate
+
+echo "\n==> Seeding the database (db:seed)"
+bin/rails db:seed
+
+echo "\n==> Setup finished. Start the app with: bin/rails server"
+
+exit 0
 #!/usr/bin/env ruby
 require "fileutils"
 

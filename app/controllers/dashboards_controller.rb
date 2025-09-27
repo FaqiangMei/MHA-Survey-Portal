@@ -18,6 +18,61 @@ class DashboardsController < ApplicationController
 
   def student
     # Student dashboard
+    # Try to map the signed-in admin to a Student record by email
+    @student = nil
+    if defined?(current_admin) && current_admin.present?
+      @student = Student.find_by(email: current_admin.email)
+    end
+
+    if @student
+      # Ensure there are at least 3 surveys in the system and each has 5 questions
+      (1..3).each do |i|
+        # Attempt to find or create by the external survey_id. In rare cases a
+        # create can fail with a unique constraint on the primary key (sequence
+        # out of sync or race). Rescue and fetch the existing record instead of
+        # letting the request raise 404.
+        begin
+          survey = Survey.find_or_create_by(survey_id: i) do |s|
+            s.assigned_date = Date.today
+          end
+        rescue ActiveRecord::RecordNotUnique => e
+          Rails.logger.warn "Survey create conflict for survey_id=#{i}: #{e.message}"
+          survey = Survey.find_by(survey_id: i)
+          # If we still can't find the survey something else is wrong — re-raise
+          raise unless survey
+        end
+
+        # ensure 5 questions for this survey via competencies -> questions; we'll create a single competency to hold them
+        if survey.competencies.empty?
+          comp = survey.competencies.create!(name: "Default competency #{survey.id}", description: "Auto-generated")
+          # create five questions: select, checkbox, radio, text, text
+          comp.questions.create!(question_order: 1, question_type: "select", question: "Choose your primary focus", answer_options: "Leadership,Analytics,Finance")
+          comp.questions.create!(question_order: 2, question_type: "checkbox", question: "Which skills improved", answer_options: "Leadership,Analytics,Finance")
+          comp.questions.create!(question_order: 3, question_type: "radio", question: "Do you feel confident?", answer_options: "Yes,No")
+          comp.questions.create!(question_order: 4, question_type: "text", question: "Please describe one achievement", answer_options: nil)
+          comp.questions.create!(question_order: 5, question_type: "text", question: "Any additional feedback", answer_options: nil)
+        end
+
+        # create a SurveyResponse for this student if missing
+        sr = SurveyResponse.find_or_initialize_by(student_id: @student.id, survey_id: survey.id)
+        if sr.new_record?
+          sr.status = SurveyResponse.statuses[:not_started]
+          sr.advisor_id = @student.advisor_id
+          sr.save!
+        end
+      end
+
+      # pending: not submitted
+      @pending_survey_responses = SurveyResponse.pending_for_student(@student.id)
+      @pending_surveys = Survey.where(id: @pending_survey_responses.pluck(:survey_id))
+
+      # completed: submitted
+      @completed_survey_responses = SurveyResponse.completed_for_student(@student.id)
+      @completed_surveys = Survey.where(id: @completed_survey_responses.pluck(:survey_id))
+    else
+      @pending_surveys = []
+      @completed_surveys = []
+    end
   end
 
   def advisor

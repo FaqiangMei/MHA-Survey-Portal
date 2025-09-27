@@ -79,7 +79,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_26_151746) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "question"
-    t.string "answer_options", default: [], array: true
+    t.text "answer_options"
   end
 
   create_table "students", force: :cascade do |t|
@@ -97,6 +97,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_26_151746) do
     t.integer "advisor_id"
     t.integer "survey_id"
     t.string "status"
+    t.string "semester"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
   end

@@ -41,4 +41,16 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+
+  # Survey routes
+  resources :surveys, only: [ :index, :show ] do
+    post :submit, on: :member
+  end
+
+  # Full CRUD routes for survey_responses (index, show, new, create, edit, update, destroy)
+  resources :survey_responses do
+    member do
+      patch :reopen
+    end
+  end
 end

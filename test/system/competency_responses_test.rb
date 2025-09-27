@@ -17,9 +17,8 @@ class CompetencyResponsesTest < ApplicationSystemTestCase
     visit competency_responses_url
     click_on "New competency response"
 
-    fill_in "Competency", with: @competency_response.competency_id
-    fill_in "Competencyresponse", with: @competency_response.competencyresponse_id
-    fill_in "Surveyresponse", with: @competency_response.surveyresponse_id
+    fill_in "Competency", with: competency(:one).id
+    fill_in "Surveyresponse", with: survey_response(:one).id
     click_on "Create Competency response"
 
     assert_text "Competency response was successfully created"
@@ -30,9 +29,8 @@ class CompetencyResponsesTest < ApplicationSystemTestCase
     visit competency_response_url(@competency_response)
     click_on "Edit this competency response", match: :first
 
-    fill_in "Competency", with: @competency_response.competency_id
-    fill_in "Competencyresponse", with: @competency_response.competencyresponse_id
-    fill_in "Surveyresponse", with: @competency_response.surveyresponse_id
+    fill_in "Competency", with: competency(:one).id
+    fill_in "Surveyresponse", with: survey_response(:one).id
     click_on "Update Competency response"
 
     assert_text "Competency response was successfully updated"

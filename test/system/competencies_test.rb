@@ -17,10 +17,9 @@ class CompetenciesTest < ApplicationSystemTestCase
     visit competencies_url
     click_on "New competency"
 
-    fill_in "Competency", with: @competency.competency_id
     fill_in "Description", with: @competency.description
     fill_in "Name", with: @competency.name
-    fill_in "Survey", with: @competency.survey_id
+    fill_in "Survey", with: survey(:one).id
     click_on "Create Competency"
 
     assert_text "Competency was successfully created"
@@ -31,10 +30,9 @@ class CompetenciesTest < ApplicationSystemTestCase
     visit competency_url(@competency)
     click_on "Edit this competency", match: :first
 
-    fill_in "Competency", with: @competency.competency_id
     fill_in "Description", with: @competency.description
     fill_in "Name", with: @competency.name
-    fill_in "Survey", with: @competency.survey_id
+    fill_in "Survey", with: survey(:one).id
     click_on "Update Competency"
 
     assert_text "Competency was successfully updated"

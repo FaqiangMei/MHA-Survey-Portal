@@ -65,6 +65,6 @@ class QuestionsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def question_params
-      params.expect(question: [ :question_id, :competency_id, :question_order, :question_type ])
+      params.expect(question: [ :competency_id, :question_order, :question_type ])
     end
 end

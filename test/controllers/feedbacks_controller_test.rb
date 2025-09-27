@@ -21,7 +21,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
 
   test "should create feedback" do
     assert_difference("Feedback.count") do
-      post feedbacks_url, params: { feedback: { advisor_id: @feedback.advisor_id, comments: @feedback.comments, competency_id: @feedback.competency_id, feedback_id: @feedback.feedback_id, rating: @feedback.rating } }
+      post feedbacks_url, params: { feedback: { advisor_id: advisors(:one).id, comments: @feedback.comments, competency_id: competencies(:one).id, rating: @feedback.rating } }
     end
 
     assert_redirected_to feedback_url(Feedback.last)

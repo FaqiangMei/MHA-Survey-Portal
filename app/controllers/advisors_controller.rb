@@ -65,6 +65,6 @@ class AdvisorsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def advisor_params
-      params.expect(advisor: [ :advisor_id, :name, :email ])
+      params.expect(advisor: [ :name, :email ])
     end
 end

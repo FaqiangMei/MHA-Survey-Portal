@@ -21,7 +21,7 @@ class EvidenceUploadsControllerTest < ActionDispatch::IntegrationTest
 
   test "should create evidence_upload" do
     assert_difference("EvidenceUpload.count") do
-      post evidence_uploads_url, params: { evidence_upload: { competencyresponse_id: @evidence_upload.competencyresponse_id, evidenceupload_id: @evidence_upload.evidenceupload_id, link: @evidence_upload.link, questionresponse_id: @evidence_upload.questionresponse_id } }
+      post evidence_uploads_url, params: { evidence_upload: { competencyresponse_id: competency_responses(:one).id, link: @evidence_upload.link, questionresponse_id: question_responses(:one).id } }
     end
 
     assert_redirected_to evidence_upload_url(EvidenceUpload.last)

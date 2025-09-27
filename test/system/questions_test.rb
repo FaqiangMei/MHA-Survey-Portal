@@ -17,7 +17,7 @@ class QuestionsTest < ApplicationSystemTestCase
     visit questions_url
     click_on "New question"
 
-    fill_in "Competency", with: @question.competency_id
+    fill_in "Competency", with: competency(:one).id
     fill_in "Question", with: @question.question
     fill_in "Question order", with: @question.question_order
     fill_in "Question type", with: @question.question_type
@@ -32,7 +32,7 @@ class QuestionsTest < ApplicationSystemTestCase
     visit question_url(@question)
     click_on "Edit this question", match: :first
 
-    fill_in "Competency", with: @question.competency_id
+    fill_in "Competency", with: competency(:one).id
     fill_in "Question", with: @question.question
     fill_in "Question order", with: @question.question_order
     fill_in "Question type", with: @question.question_type

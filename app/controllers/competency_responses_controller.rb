@@ -65,6 +65,6 @@ class CompetencyResponsesController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def competency_response_params
-      params.expect(competency_response: [ :competencyresponse_id, :surveyresponse_id, :competency_id ])
+      params.expect(competency_response: [ :surveyresponse_id, :competency_id ])
     end
 end

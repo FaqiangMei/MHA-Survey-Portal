@@ -17,10 +17,10 @@ class SurveyResponsesTest < ApplicationSystemTestCase
     visit survey_responses_url
     click_on "New survey response"
 
-    fill_in "Advisor", with: @survey_response.advisor_id
+    fill_in "Student", with: students(:one).id
+    fill_in "Advisor", with: advisors(:one).id
+    fill_in "Survey", with: surveys(:one).id
     fill_in "Status", with: @survey_response.status
-    fill_in "Student", with: @survey_response.student_id
-    fill_in "Survey", with: @survey_response.survey_id
     fill_in "Surveyresponse", with: @survey_response.surveyresponse_id
     click_on "Create Survey response"
 
@@ -32,10 +32,10 @@ class SurveyResponsesTest < ApplicationSystemTestCase
     visit survey_response_url(@survey_response)
     click_on "Edit this survey response", match: :first
 
-    fill_in "Advisor", with: @survey_response.advisor_id
     fill_in "Status", with: @survey_response.status
-    fill_in "Student", with: @survey_response.student_id
-    fill_in "Survey", with: @survey_response.survey_id
+    fill_in "Student", with: students(:one).id
+    fill_in "Advisor", with: advisors(:one).id
+    fill_in "Survey", with: surveys(:one).id
     fill_in "Surveyresponse", with: @survey_response.surveyresponse_id
     click_on "Update Survey response"
 

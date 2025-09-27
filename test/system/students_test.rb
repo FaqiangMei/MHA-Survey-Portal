@@ -18,10 +18,9 @@ class StudentsTest < ApplicationSystemTestCase
     click_on "New student"
 
     fill_in "Net id", with: @student.net_id
-    fill_in "Advisor", with: @student.advisor_id
+    fill_in "Advisor", with: advisors(:one).id
     fill_in "Email", with: @student.email
     fill_in "Name", with: @student.name
-    fill_in "Student", with: @student.student_id
     fill_in "Track", with: @student.track
     click_on "Create Student"
 
@@ -34,10 +33,9 @@ class StudentsTest < ApplicationSystemTestCase
     click_on "Edit this student", match: :first
 
     fill_in "Net id", with: @student.net_id
-    fill_in "Advisor", with: @student.advisor_id
+    fill_in "Advisor", with: advisors(:one).id
     fill_in "Email", with: @student.email
     fill_in "Name", with: @student.name
-    fill_in "Student", with: @student.student_id
     fill_in "Track", with: @student.track
     click_on "Update Student"
 

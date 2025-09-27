@@ -1,7 +1,6 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  survey_id: 1
   title: MyString
   semester: MyString
   assigned_date: 2025-09-23
@@ -9,7 +8,6 @@ one:
   approval_date: 2025-09-23
 
 two:
-  survey_id: 1
   title: MyString
   semester: MyString
   assigned_date: 2025-09-23

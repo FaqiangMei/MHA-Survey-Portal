@@ -21,7 +21,7 @@ class CompetenciesControllerTest < ActionDispatch::IntegrationTest
 
   test "should create competency" do
     assert_difference("Competency.count") do
-      post competencies_url, params: { competency: { competency_id: @competency.competency_id, description: @competency.description, name: @competency.name, survey_id: @competency.survey_id } }
+      post competencies_url, params: { competency: { description: @competency.description, name: @competency.name, survey_id: surveys(:one).id } }
     end
 
     assert_redirected_to competency_url(Competency.last)

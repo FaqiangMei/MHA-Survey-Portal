@@ -21,7 +21,7 @@ class AdvisorsControllerTest < ActionDispatch::IntegrationTest
 
   test "should create advisor" do
     assert_difference("Advisor.count") do
-      post advisors_url, params: { advisor: { advisor_id: @advisor.advisor_id, email: @advisor.email, name: @advisor.name } }
+      post advisors_url, params: { advisor: { email: @advisor.email, name: @advisor.name } }
     end
 
     assert_redirected_to advisor_url(Advisor.last)

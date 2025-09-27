@@ -21,7 +21,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
   test "should create survey" do
     assert_difference("Survey.count") do
-      post surveys_url, params: { survey: { title: @survey.title, semester: @survey.semester, approval_date: @survey.approval_date, assigned_date: @survey.assigned_date, completion_date: @survey.completion_date, survey_id: @survey.survey_id } }
+      post surveys_url, params: { survey: { title: @survey.title, semester: @survey.semester, approval_date: @survey.approval_date, assigned_date: @survey.assigned_date, completion_date: @survey.completion_date } }
     end
 
     assert_redirected_to survey_url(Survey.last)

@@ -17,7 +17,6 @@ class AdvisorsTest < ApplicationSystemTestCase
     visit advisors_url
     click_on "New advisor"
 
-    fill_in "Advisor", with: @advisor.advisor_id
     fill_in "Email", with: @advisor.email
     fill_in "Name", with: @advisor.name
     click_on "Create Advisor"
@@ -30,7 +29,6 @@ class AdvisorsTest < ApplicationSystemTestCase
     visit advisor_url(@advisor)
     click_on "Edit this advisor", match: :first
 
-    fill_in "Advisor", with: @advisor.advisor_id
     fill_in "Email", with: @advisor.email
     fill_in "Name", with: @advisor.name
     click_on "Update Advisor"

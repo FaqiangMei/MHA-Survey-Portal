@@ -21,7 +21,6 @@ class SurveysTest < ApplicationSystemTestCase
     fill_in "Approval date", with: @survey.approval_date
     fill_in "Assigned date", with: @survey.assigned_date
     fill_in "Completion date", with: @survey.completion_date
-    fill_in "Survey", with: @survey.survey_id
     click_on "Create Survey"
 
     assert_text "Survey was successfully created"
@@ -36,7 +35,6 @@ class SurveysTest < ApplicationSystemTestCase
     fill_in "Approval date", with: @survey.approval_date
     fill_in "Assigned date", with: @survey.assigned_date
     fill_in "Completion date", with: @survey.completion_date
-    fill_in "Survey", with: @survey.survey_id
     click_on "Update Survey"
 
     assert_text "Survey was successfully updated"

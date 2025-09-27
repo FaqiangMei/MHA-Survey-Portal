@@ -18,9 +18,8 @@ class QuestionResponsesTest < ApplicationSystemTestCase
     click_on "New question response"
 
     fill_in "Answer", with: @question_response.answer
-    fill_in "Competencyresponse", with: @question_response.competencyresponse_id
-    fill_in "Question", with: @question_response.question_id
-    fill_in "Questionresponse", with: @question_response.questionresponse_id
+    fill_in "Competencyresponse", with: competency_response(:one).id
+    fill_in "Question", with: question(:one).id
     click_on "Create Question response"
 
     assert_text "Question response was successfully created"
@@ -32,9 +31,8 @@ class QuestionResponsesTest < ApplicationSystemTestCase
     click_on "Edit this question response", match: :first
 
     fill_in "Answer", with: @question_response.answer
-    fill_in "Competencyresponse", with: @question_response.competencyresponse_id
-    fill_in "Question", with: @question_response.question_id
-    fill_in "Questionresponse", with: @question_response.questionresponse_id
+    fill_in "Competencyresponse", with: competency_response(:one).id
+    fill_in "Question", with: question(:one).id
     click_on "Update Question response"
 
     assert_text "Question response was successfully updated"

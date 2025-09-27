@@ -65,6 +65,6 @@ class FeedbacksController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def feedback_params
-      params.expect(feedback: [ :feedback_id, :advisor_id, :competency_id, :rating, :comments ])
+      params.expect(feedback: [ :advisor_id, :competency_id, :rating, :comments ])
     end
 end

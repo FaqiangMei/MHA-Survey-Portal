@@ -17,10 +17,9 @@ class EvidenceUploadsTest < ApplicationSystemTestCase
     visit evidence_uploads_url
     click_on "New evidence upload"
 
-    fill_in "Competencyresponse", with: @evidence_upload.competencyresponse_id
-    fill_in "Evidenceupload", with: @evidence_upload.evidenceupload_id
+    fill_in "Competencyresponse", with: competency_response(:one).id
+    fill_in "Questionresponse", with: question_response(:one).id
     fill_in "Link", with: @evidence_upload.link
-    fill_in "Questionresponse", with: @evidence_upload.questionresponse_id
     click_on "Create Evidence upload"
 
     assert_text "Evidence upload was successfully created"
@@ -31,10 +30,9 @@ class EvidenceUploadsTest < ApplicationSystemTestCase
     visit evidence_upload_url(@evidence_upload)
     click_on "Edit this evidence upload", match: :first
 
-    fill_in "Competencyresponse", with: @evidence_upload.competencyresponse_id
-    fill_in "Evidenceupload", with: @evidence_upload.evidenceupload_id
+    fill_in "Competencyresponse", with: competency_response(:one).id
+    fill_in "Questionresponse", with: question_response(:one).id
     fill_in "Link", with: @evidence_upload.link
-    fill_in "Questionresponse", with: @evidence_upload.questionresponse_id
     click_on "Update Evidence upload"
 
     assert_text "Evidence upload was successfully updated"

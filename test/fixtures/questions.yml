@@ -1,17 +1,15 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  question_id: 1
-  competency_id: 1
+  competency: one
   question: MyString
-  question_order: 1
+  question: one
   question_type: MyString
   answer_options: ["Yes", "No"]
 
 two:
-  question_id: 1
-  competency_id: 1
+  competency: one
   question: MyString
-  question_order: 1
+  question: one
   question_type: MyString
   answer_options: ["Yes", "No"]

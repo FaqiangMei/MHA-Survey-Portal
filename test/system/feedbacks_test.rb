@@ -17,10 +17,9 @@ class FeedbacksTest < ApplicationSystemTestCase
     visit feedbacks_url
     click_on "New feedback"
 
-    fill_in "Advisor", with: @feedback.advisor_id
     fill_in "Comments", with: @feedback.comments
-    fill_in "Competency", with: @feedback.competency_id
-    fill_in "Feedback", with: @feedback.feedback_id
+    fill_in "Competency", with: competency(:one).id
+    fill_in "Advisor", with: advisor(:one).id
     fill_in "Rating", with: @feedback.rating
     click_on "Create Feedback"
 
@@ -32,10 +31,9 @@ class FeedbacksTest < ApplicationSystemTestCase
     visit feedback_url(@feedback)
     click_on "Edit this feedback", match: :first
 
-    fill_in "Advisor", with: @feedback.advisor_id
     fill_in "Comments", with: @feedback.comments
-    fill_in "Competency", with: @feedback.competency_id
-    fill_in "Feedback", with: @feedback.feedback_id
+    fill_in "Competency", with: competency(:one).id
+    fill_in "Advisor", with: advisor(:one).id
     fill_in "Rating", with: @feedback.rating
     click_on "Update Feedback"
 

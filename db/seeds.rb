@@ -89,11 +89,19 @@ end
 
 puts "Ensured default survey and questions exist (survey id=#{survey.id})"
 
-# Ensure a student account for local login/testing
-Student.find_or_create_by!(email: 'faqiangmei@gmail.com') do |s|
-  s.name = 'Faqiang Mei'
-  s.net_id = 'fmei'
-  # valid tracks per Student enum are 'residential' and 'executive'
-  s.track = 'residential'
-  puts "Created student: #{s.email}"
+
+# Ensure student accounts for local login/testing
+[
+  { email: 'faqiangmei@gmail.com', name: 'Faqiang Mei', net_id: 'fmei' },
+  { email: 'j.belew714@gmail.com', name: 'J Belew', net_id: 'jbelew714' },
+  { email: 'rainsuds123@gmail.com', name: 'Rainsuds', net_id: 'rainsuds123' },
+  { email: 'anthuan374@gmail.com', name: 'Anthuan', net_id: 'anthuan374' }
+].each do |student|
+  Student.find_or_create_by!(email: student[:email]) do |s|
+    s.name = student[:name]
+    s.net_id = student[:net_id]
+    # valid tracks per Student enum are 'residential' and 'executive'
+    s.track = 'residential'
+    puts "Created student: #{s.email}"
+  end
 end

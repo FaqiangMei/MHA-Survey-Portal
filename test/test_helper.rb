@@ -1,3 +1,32 @@
+# Code coverage setup - must be before requiring Rails
+require 'simplecov'
+
+SimpleCov.start 'rails' do
+  # Exclude files from coverage
+  add_filter '/bin/'
+  add_filter '/db/'
+  add_filter '/spec/'
+  add_filter '/test/'
+  add_filter '/vendor/'
+  add_filter '/config/'
+  add_filter 'app/channels/application_cable/'
+  add_filter 'app/jobs/application_job.rb'
+  add_filter 'app/mailers/application_mailer.rb'
+  
+  # Track specific directories
+  add_group 'Models', 'app/models'
+  add_group 'Controllers', 'app/controllers'
+  add_group 'Helpers', 'app/helpers'
+  add_group 'Mailers', 'app/mailers'
+  add_group 'Jobs', 'app/jobs'
+  
+  # Set minimum coverage
+  minimum_coverage 80
+  
+  # Generate HTML and terminal reports
+  coverage_dir 'coverage'
+end
+
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"

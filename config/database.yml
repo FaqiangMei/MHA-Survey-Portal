@@ -37,3 +37,11 @@ queue_production:
 cable_production:
   adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
+
+# Aliases for production multi-db
+cache:
+  <<: *cache_production
+queue:
+  <<: *queue_production
+cable:
+  <<: *cable_production

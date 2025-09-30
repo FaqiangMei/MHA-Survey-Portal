@@ -1,10 +1,13 @@
 cache_production:
+  adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
 
 queue_production:
+  adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
 
 cable_production:
+  adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
 default: &default
   adapter: postgresql

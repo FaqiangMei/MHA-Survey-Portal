@@ -1,0 +1,25 @@
+<h1>Surveys</h1>
+
+<div class="survey-list">
+  <% @surveys.each do |survey| %>
+    <div class="survey-card">
+      <h2>
+
+        <% survey_name =
+          case survey.id
+          when 1 then "Current Residential and Executive MHA Track Study Survey"
+          when 2 then "Competency Self-Assessment Survey"
+          when 3 then "Final Feedback Survey"
+          else "Survey ##{survey.id}"
+          end
+        %>
+
+        <%= link_to survey_name, survey_path(survey), class: "survey-link" %>
+      </h2>
+    </div>
+  <% end %>
+</div>
+
+<div class="actions">
+  <%= link_to "New survey", new_survey_path, class: "btn btn-primary" %>
+</div>

@@ -1,3 +1,5 @@
+inherit_from: .rubocop_todo.yml
+
 # Omakase Ruby styling for Rails
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
@@ -6,3 +8,31 @@ inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 # # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
 # Layout/SpaceInsideArrayLiteralBrackets:
 #   Enabled: false
+
+AllCops:
+  Exclude:
+    - 'db/**/*'
+    - 'config/**/*'
+    - 'script/**/*'
+    - 'bin/{rails,rake}'
+
+Layout/LineLength:
+  Max: 100
+
+Metrics/BlockLength:
+  Exclude:
+    - config/**/*
+    - spec/**/*
+
+Style/Documentation:
+  Enabled: false
+
+Layout/IndentationWidth:
+  Width: 5
+
+Naming/MethodName:
+  Enabled: true
+  EnforcedStyle: snake_case
+
+Naming/ClassAndModuleCamelCase:
+  Enabled: true

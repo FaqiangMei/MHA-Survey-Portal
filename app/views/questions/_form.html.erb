@@ -1,0 +1,51 @@
+<%= form_with(model: question, local: true) do |form| %>
+  <% if question.errors.any? %>
+    <div style="color: red">
+      <h2><%= pluralize(question.errors.count, "error") %> prohibited this question from being saved:</h2>
+
+      <ul>
+        <% question.errors.each do |error| %>
+          <li><%= error.full_message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div>
+    <%= form.label :question_id, style: "display: block" %>
+    <%= form.number_field :question_id %>
+  </div>
+
+  <div>
+    <%= form.label :competency_id, style: "display: block" %>
+    <%= form.number_field :competency_id %>
+  </div>
+
+  <div>
+    <%= form.label :question, style: "display: block" %>
+    <%= form.text_field :question %>
+  </div>
+
+  <div>
+    <%= form.label :question_order, style: "display: block" %>
+    <%= form.number_field :question_order %>
+  </div>
+
+  <div>
+    <%= form.label :question_type, style: "display: block" %>
+    <%= form.text_field :question_type %>
+  </div>
+
+  <div>
+    <%= form.label :answer_options, "Answer options", style: "display: block" %>
+    <%= form.text_field :answer_options %>
+  </div>
+
+  <div>
+    <% if question.persisted? %>
+      <%= form.submit "Update Question" %>
+    <% else %>
+      <%= form.submit "Create Question" %>
+    <% end %>
+  </div>
+<% end %>

@@ -1,52 +1,38 @@
-  encoding: unicode
-  pool: 5
 
-  <<: *default
-  database: health_app_cache_production
+  default: &default
+    adapter: postgresql
+    encoding: unicode
+    pool: 5
 
-queue:
-  <<: *default
-  database: health_app_queue_production
+  development:
+    <<: *default
+    database: health_app_development
 
-cable:
-  <<: *default
-  database: health_app_cable_production
+  test:
+    <<: *default
+    database: health_app_test
 
-development:
-  <<: *default
-  database: health_app_development
+  production: &production
+    adapter: postgresql
+    url: <%= ENV['DATABASE_URL'] %>
 
-test:
-  <<: *default
-  database: health_app_test
+  cache_production:
+    <<: *production
 
-production:
-  adapter: postgresql
-  url: <%= ENV['DATABASE_URL'] %>
+  queue_production:
+    <<: *production
 
-cache_production:
-  adapter: postgresql
-  url: <%= ENV['DATABASE_URL'] %>
+  cable_production:
+    <<: *production
 
-queue_production:
-  adapter: postgresql
-  url: <%= ENV['DATABASE_URL'] %>
+  cache:
+    <<: *cache_production
 
-cable_production:
-  adapter: postgresql
-  url: <%= ENV['DATABASE_URL'] %>
+  queue:
+    <<: *queue_production
 
-  adapter: postgresql
-  encoding: unicode
-  pool: 5
-
-development:
-  <<: *default
-  database: health_app_development
-
-test:
-  <<: *default
-  database: health_app_test
+  cable:
+    <<: *cable_production
 
 production: &production
   adapter: postgresql

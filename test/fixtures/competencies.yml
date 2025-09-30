@@ -2,12 +2,18 @@
 
 one:
   competency_id: 1
-  survey_id: 1
-  name: MyString
-  description: MyString
+  survey: one
+  name: "Clinical Skills"
+  description: "Assessment of clinical competencies and patient care skills"
 
 two:
-  competency_id: 1
-  survey_id: 1
-  name: MyString
-  description: MyString
+  competency_id: 2
+  survey: one
+  name: "Communication"
+  description: "Evaluation of communication skills with patients and healthcare team"
+
+three:
+  competency_id: 3
+  survey: two
+  name: "Professional Development"
+  description: "Assessment of professional growth and continuous learning"

@@ -2,10 +2,15 @@
 
 one:
   advisor_id: 1
-  name: MyString
-  email: MyString
+  name: "Dr. Smith"
+  email: "smith@tamu.edu"
 
 two:
-  advisor_id: 1
-  name: MyString
-  email: MyString
+  advisor_id: 2
+  name: "Dr. Johnson"
+  email: "johnson@tamu.edu"
+
+three:
+  advisor_id: 3
+  name: "Dr. Williams"
+  email: "williams@tamu.edu"

@@ -2,14 +2,28 @@
 
 one:
   surveyresponse_id: 1
-  student_id: 1
-  advisor_id: 1
-  survey_id: 1
+  student: one
+  advisor: one
+  survey: one
   status: in_progress
 
 two:
-  surveyresponse_id: 1
-  student_id: 1
-  advisor_id: 1
-  survey_id: 1
-  status: in_progress
+  surveyresponse_id: 2
+  student: two
+  advisor: two
+  survey: one
+  status: submitted
+
+three:
+  surveyresponse_id: 3
+  student: one
+  advisor: one
+  survey: two
+  status: not_started
+
+four:
+  surveyresponse_id: 4
+  student: two
+  advisor: two
+  survey: two
+  status: approved

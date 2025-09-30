@@ -1,9 +1,9 @@
 
 
+
 production: &production
   adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
-  # Multi-DB for Rails 8: cache, queue, cable as nested keys
   cache:
     adapter: postgresql
     url: <%= ENV['DATABASE_URL'] %>
@@ -13,6 +13,11 @@ production: &production
   cable:
     adapter: postgresql
     url: <%= ENV['DATABASE_URL'] %>
+
+# Top-level cable config for gems that require it
+cable:
+  adapter: postgresql
+  url: <%= ENV['DATABASE_URL'] %>
 
 default: &default
   adapter: postgresql

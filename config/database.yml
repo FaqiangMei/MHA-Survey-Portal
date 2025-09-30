@@ -18,9 +18,25 @@ test:
   <<: *default
   database: health_app_test
 
+
 production: &production
   adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
+
+# Multi-DB keys for Rails 8 Heroku production
+cache_production:
+  <<: *production
+queue_production:
+  <<: *production
+cable_production:
+  <<: *production
+
+cable:
+  <<: *cable_production
+cache:
+  <<: *cache_production
+queue:
+  <<: *queue_production
 
 cache_production:
   <<: *production

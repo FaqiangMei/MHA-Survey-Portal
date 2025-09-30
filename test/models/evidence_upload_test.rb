@@ -22,7 +22,7 @@ class EvidenceUploadTest < ActiveSupport::TestCase
   test "should validate link presence" do
     evidence_upload = EvidenceUpload.new(link: nil)
     assert_not evidence_upload.valid?
-    assert_includes evidence_upload.errors[:link], "can't be blank" if evidence_upload.errors[:link]
+    assert_includes evidence_upload.errors[:link], "can't be blank"
   end
 
   test "should validate file types" do

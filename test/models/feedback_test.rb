@@ -23,7 +23,7 @@ class FeedbackTest < ActiveSupport::TestCase
   test "should validate comments presence" do
     feedback = Feedback.new(comments: nil)
     assert_not feedback.valid?
-    assert_includes feedback.errors[:comments], "can't be blank" if feedback.errors[:comments]
+    assert_includes feedback.errors[:comments], "can't be blank"
   end
 
   test "should validate rating if present" do

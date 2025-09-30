@@ -44,7 +44,7 @@ class CompetenciesControllerTest < ActionDispatch::IntegrationTest
       post competencies_url, params: {
         competency: {
           competency_id: nil,
-          title: "",
+          name: "",
           description: "",
           survey_id: nil
         }

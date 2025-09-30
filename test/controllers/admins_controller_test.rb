@@ -20,12 +20,12 @@ class AdminsControllerTest < ActionDispatch::IntegrationTest
 
   test "should create admin" do
     assert_difference("Admin.count") do
-      post admins_url, params: { admin: { 
-        full_name: "New Admin", 
-        email: "newadmin@tamu.edu", 
-        uid: "new123456", 
-        avatar_url: "https://example.com/new_avatar.jpg", 
-        role: "admin" 
+      post admins_url, params: { admin: {
+        full_name: "New Admin",
+        email: "newadmin@tamu.edu",
+        uid: "new123456",
+        avatar_url: "https://example.com/new_avatar.jpg",
+        role: "admin"
       } }
     end
 

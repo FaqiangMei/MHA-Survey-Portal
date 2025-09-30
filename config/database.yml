@@ -19,11 +19,23 @@ test:
   database: health_app_test
 
 
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: 5
+
+development:
+  <<: *default
+  database: health_development
+
+test:
+  <<: *default
+  database: health_test
+
 production: &production
   adapter: postgresql
   url: <%= ENV['DATABASE_URL'] %>
 
-# Multi-DB keys for Rails 8 Heroku production
 cache_production:
   <<: *production
 queue_production:
@@ -31,12 +43,12 @@ queue_production:
 cable_production:
   <<: *production
 
-cable:
-  <<: *cable_production
 cache:
   <<: *cache_production
 queue:
   <<: *queue_production
+cable:
+  <<: *cable_production
 
 cache_production:
   <<: *production

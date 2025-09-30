@@ -1,66 +1,7 @@
 
   default: &default
     adapter: postgresql
-    encoding: unicode
-    pool: 5
 
-  development:
-    <<: *default
-    database: health_app_development
-
-  test:
-    <<: *default
-    database: health_app_test
-
-  production: &production
-    adapter: postgresql
-    url: <%= ENV['DATABASE_URL'] %>
-
-  cache_production:
-    <<: *production
-
-  queue_production:
-    <<: *production
-
-  cable_production:
-    <<: *production
-
-  cache:
-    <<: *cache_production
-
-  queue:
-    <<: *queue_production
-
-  cable:
-    <<: *cable_production
-
-production: &production
-  adapter: postgresql
-  url: <%= ENV['DATABASE_URL'] %>
-
-cache_production:
-  <<: *production
-
-queue_production:
-  <<: *production
-
-cable_production:
-  <<: *production
-
-cache:
-  <<: *cache_production
-
-queue:
-  <<: *queue_production
-
-cable:
-  <<: *cable_production
-
-# Aliases for production multi-db
-cache:
-  <<: *cache_production
-queue:
-  <<: *queue_production
 cable:
   <<: *cable_production
 

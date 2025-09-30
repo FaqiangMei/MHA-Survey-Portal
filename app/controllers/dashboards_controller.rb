@@ -82,7 +82,7 @@ class DashboardsController < ApplicationController
   end
 
   def advisor
-    # Advisor dashboard (also used by admins with additional features)
+       # Advisor dashboard (also used by admins with additional features)
   end
 
   def admin

@@ -1,3 +1,42 @@
+production: &production
+  adapter: postgresql
+  url: <%= ENV['DATABASE_URL'] %>
+
+# Top-level cable config for gems that require it
+cable:
+  adapter: postgresql
+  url: <%= ENV['DATABASE_URL'] %>
+
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  # Use DATABASE_URL when present (heroku / docker environments)
+  url: <%= ENV['DATABASE_URL'] if ENV['DATABASE_URL'].present? %>
+  username: <%= ENV['PGUSER'] || ENV['DATABASE_USER'] || ENV['POSTGRES_USER'] %>
+  password: <%= ENV['PGPASSWORD'] || ENV['DATABASE_PASSWORD'] || ENV['POSTGRES_PASSWORD'] %>
+  host: <%= ENV['PGHOST'] || ENV['DATABASE_HOST'] || 'localhost' %>
+  port: <%= ENV['PGPORT'] || ENV['DATABASE_PORT'] || 5432 %>
+  pool: <%= ENV.fetch('RAILS_MAX_THREADS', 5) %>
+
+# Optional named DBs used by some apps
+cache:
+  <<: *default
+  database: health_app_cache_production
+
+queue:
+  <<: *default
+  database: health_app_queue_production
+
+production:
+  <<: *production
+
+development:
+  <<: *default
+  database: health_development
+
+test:
+  <<: *default
+  database: health_test
 
 
 

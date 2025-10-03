@@ -15,12 +15,6 @@ Admin.find_or_create_by(email: 'rainsuds@tamu.edu') do |admin|
   puts "Created admin user: #{admin.email}"
 end
 
-Admin.find_or_create_by(email: 'jcwtexasanm@tamu.edu') do |admin|
-  admin.full_name = 'System Administrator'
-  admin.role = 'admin'
-  puts "Created admin user: #{admin.email}"
-end
-
 Admin.find_or_create_by(email: 'anthuan374@tamu.edu') do |admin|
   admin.full_name = 'System Administrator'
   admin.role = 'admin'

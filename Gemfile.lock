@@ -191,9 +191,7 @@ GEM
       net-protocol
     net-ssh (7.3.0)
     nio4r (2.7.4)
-    nokogiri (1.18.10-aarch64-linux-gnu)
-      racc (~> 1.4)
-    nokogiri (1.18.10-arm64-darwin)
+    nokogiri (1.18.10-x64-mingw-ucrt)
       racc (~> 1.4)
     nokogiri (1.18.10-x86_64-linux-gnu)
       racc (~> 1.4)
@@ -226,8 +224,7 @@ GEM
     parser (3.3.9.0)
       ast (~> 2.4.1)
       racc
-    pg (1.6.2-aarch64-linux)
-    pg (1.6.2-arm64-darwin)
+    pg (1.6.2-x64-mingw-ucrt)
     pg (1.6.2-x86_64-linux)
     pp (0.6.2)
       prettyprint
@@ -373,8 +370,6 @@ GEM
     stringio (3.1.7)
     thor (1.4.0)
     thruster (0.1.15)
-    thruster (0.1.15-aarch64-linux)
-    thruster (0.1.15-arm64-darwin)
     thruster (0.1.15-x86_64-linux)
     timeout (0.4.3)
       actionpack (>= 7.1.0)
@@ -385,6 +380,8 @@ GEM
       railties (>= 7.1.0)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
+    tzinfo-data (1.2025.2)
+      tzinfo (>= 1.0.0)
     unicode-display_width (3.2.0)
       unicode-emoji (~> 4.1)
     unicode-emoji (4.1.0)
@@ -412,8 +409,7 @@ GEM
     zeitwerk (2.7.3)
 
 PLATFORMS
-  aarch64-linux
-  arm64-darwin-24
+  x64-mingw-ucrt
   x86_64-linux
 
 DEPENDENCIES

@@ -8,7 +8,8 @@ class Admin < ApplicationRecord
     # Update attributes for both new and existing records
     admin.uid = uid if admin.uid.blank?
     admin.full_name = full_name  # Always update full_name
-    admin.avatar_url = avatar_url if admin.avatar_url.blank?
+  # Update avatar_url on subsequent logins so OAuth avatar changes are reflected
+  admin.avatar_url = avatar_url if avatar_url.present?
 
     # Always update role if provided and column exists
     if role.present? && admin.respond_to?(:role=)

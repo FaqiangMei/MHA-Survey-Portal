@@ -1,7 +1,6 @@
 # Exclude development and test artifacts from the Heroku slug
 log/
 tmp/
-coverage/
 test/
 spec/
 script/
@@ -11,8 +10,6 @@ script/
 .kamal/
 Dockerfile
 docker-compose.yml
-dev_vs_main.patch
-heroku-installer.exe
 run_tests.rb
 set_heroku_env.ps1
 TEST_DOCUMENTATION.md

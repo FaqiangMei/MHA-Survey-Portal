@@ -8,23 +8,13 @@ class SurveysController < ApplicationController
 
   # GET /surveys/1 or /surveys/1.json
   def show
-    # If a student is signed in (via current_admin), collect existing answers so the
-    # survey form can pre-fill previously submitted responses for editing/resubmission.
+    @survey_response = nil
     @existing_answers = {}
-    if defined?(current_admin) && current_admin.present?
-      student = Student.find_by(email: current_admin.email)
-      if student
-        # Find the survey_response for this student & survey
-        sr = SurveyResponse.find_by(student_id: student.id, survey_id: @survey.id)
-        if sr
-          # Collect question responses only for this survey_response
-          question_ids = @survey.respond_to?(:questions) ? @survey.questions.pluck(:id) : []
-          cr_ids = CompetencyResponse.where(surveyresponse_id: sr.id).pluck(:id)
-          qrs = QuestionResponse.where(question_id: question_ids, competencyresponse_id: cr_ids)
-          qrs.each do |qr|
-            @existing_answers[qr.question_id] = qr.answer
-          end
-        end
+
+    if current_student
+      @survey_response = SurveyResponse.find_by(student_id: current_student.id, survey_id: @survey.id)
+      if @survey_response
+        @existing_answers = @survey_response.question_responses.index_by(&:question_id)
       end
     end
   end
@@ -32,22 +22,17 @@ class SurveysController < ApplicationController
   # GET /surveys/new
   def new
     @survey = Survey.new
-  end
-
-  # GET /surveys/1/edit
-  def edit
-  end
-
+      student = current_student
   # POST /surveys or /surveys.json
   def create
     @survey = Survey.new(survey_params)
 
     respond_to do |format|
       if @survey.save
-        format.html { redirect_to @survey, notice: "Survey was successfully created." }
-        format.json { render :show, status: :created, location: @survey }
+      survey_response = SurveyResponse.find_or_initialize_by(student_id: student.id, survey_id: @survey.id)
+      survey_response.status = SurveyResponse.statuses[:submitted]
       else
-        format.html { render :new, status: :unprocessable_entity }
+      survey_response.completion_date ||= Date.current
         format.json { render json: @survey.errors, status: :unprocessable_entity }
       end
     end
@@ -56,27 +41,13 @@ class SurveysController < ApplicationController
   # PATCH/PUT /surveys/1 or /surveys/1.json
   def update
     respond_to do |format|
-      if @survey.update(survey_params)
+        question = @survey.questions.find_by(question_id: qid)
+        question ||= Question.find_by(question_id: qid)
+        next unless question
         format.html { redirect_to @survey, notice: "Survey was successfully updated.", status: :see_other }
-        format.json { render :show, status: :ok, location: @survey }
-      else
-        format.html { render :edit, status: :unprocessable_entity }
-        format.json { render json: @survey.errors, status: :unprocessable_entity }
-      end
-    end
-  end
-
-  # DELETE /surveys/1 or /surveys/1.json
-  def destroy
-    @survey.destroy!
-
-    respond_to do |format|
-      format.html { redirect_to surveys_path, notice: "Survey was successfully destroyed.", status: :see_other }
-      format.json { head :no_content }
-    end
-  end
-  # POST /surveys/1/submit
-  def submit
+        qr = QuestionResponse.find_or_initialize_by(surveyresponse_id: survey_response.id, question_id: question.question_id)
+        qr.answer = answer_value
+        qr.save!
     # identify the acting student: try to match current_admin (Devise) to Student by email
     student = nil
     if defined?(current_admin) && current_admin.present?
@@ -135,6 +106,6 @@ class SurveysController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def survey_params
-      params.require(:survey).permit(:survey_id, :assigned_date, :completion_date, :approval_date, :title, :semester)
+      params.require(:survey).permit(:title, :semester)
     end
 end

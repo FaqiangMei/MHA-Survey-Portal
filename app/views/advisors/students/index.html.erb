@@ -1,4 +1,3 @@
-<!-- app/views/advisors/students/index.html.erb -->
 <main class="main-content">
   <section class="dashboard-section">
     <div class="section-header">
@@ -8,28 +7,35 @@
 
     <% if @students.present? %>
       <div class="dashboard-grid dashboard-grid-1">
-        <% @students.each do |s| %>
+        <% @students.each do |student| %>
           <div class="feature-item" style="margin-bottom:2em;">
             <div class="feature-icon" aria-hidden="true">🎓</div>
             <div class="feature-title">
-              <%= s.name || s.email %>
+              <%= student.full_name.presence || student.email %>
             </div>
             <div class="feature-description">
-              <%= s.email %>
+              <%= student.email %>
             </div>
-            <% if s.survey_responses.any? %>
+
+            <% if student.track.present? %>
+              <div class="student-track" style="margin-top:0.5em;">
+                Track: <%= student.track.titleize %>
+              </div>
+            <% end %>
+
+            <% if student.survey_responses.any? %>
               <div class="student-surveys" style="margin-top:1em;">
                 <strong>Survey Responses:</strong>
                 <ul>
-                  <% s.survey_responses.each do |sr| %>
-                    <li>
-                      <strong>Survey:</strong> <%= sr.survey&.title || 'N/A' %><br>
-                      <strong>Status:</strong> <%= sr.status %><br>
-                      <% if sr.respond_to?(:answers) && sr.answers.present? %>
+                  <% student.survey_responses.each do |survey_response| %>
+                    <li style="margin-bottom:0.75em;">
+                      <strong>Survey:</strong> <%= survey_response.survey&.title || "N/A" %><br>
+                      <strong>Status:</strong> <%= survey_response.status %><br>
+                      <% if survey_response.answers.present? %>
                         <strong>Answers:</strong>
                         <ul>
-                          <% sr.answers.each do |q, a| %>
-                            <li><%= q %>: <%= a %></li>
+                          <% survey_response.answers.each do |question, answer| %>
+                            <li><%= question %>: <%= answer %></li>
                           <% end %>
                         </ul>
                       <% end %>

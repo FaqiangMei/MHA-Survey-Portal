@@ -56,19 +56,19 @@ class SurveysController < ApplicationController
               # Default rule for non-conditional questions
               if !is_required
                 case qq.question_type
-                when 'multiple_choice'
-                  raw_opts = (qq.answer_options || '').to_s
+                when "multiple_choice"
+                  raw_opts = (qq.answer_options || "").to_s
                   parsed = begin
                     JSON.parse(raw_opts) rescue nil
                   end
                   options = if parsed.is_a?(Array)
                               parsed.map(&:to_s)
-                            else
-                              raw_opts.gsub(/[\[\]"“”]/, '').split(',').map(&:strip).reject(&:empty?)
-                            end
+                  else
+                              raw_opts.gsub(/[\[\]"“”]/, "").split(",").map(&:strip).reject(&:empty?)
+                  end
                   normalized = options.map { |o| o.to_s.strip.downcase }
                   # Yes/No multiple choice are NOT required by default
-                  is_required = !(normalized == ['yes', 'no'] || normalized == ['no', 'yes'])
+                  is_required = !(normalized == [ "yes", "no" ] || normalized == [ "no", "yes" ])
                 else
                   is_required = true
                 end
@@ -133,6 +133,10 @@ class SurveysController < ApplicationController
     student = nil
     if defined?(current_admin) && current_admin.present?
       student = Student.find_by(email: current_admin.email)
+    elsif defined?(current_user) && current_user.present?
+      # tests sign in a User fixture; get the associated Student profile
+      # User has_one :student_profile (Student) via student_profile
+      student = current_user.student_profile
     end
 
     unless student
@@ -144,10 +148,13 @@ class SurveysController < ApplicationController
   survey_response = SurveyResponse.find_or_initialize_by(student_id: student.id, survey_id: @survey.id)
   survey_response.status = SurveyResponse.statuses[:submitted]
   survey_response.advisor_id ||= student.advisor_id
-  survey_response.semester ||= params[:semester]
+  # Some schemas may not have a semester column on SurveyResponse; only set if present
+  if survey_response.respond_to?(:semester)
+    survey_response.semester ||= params[:semester]
+  end
   survey_response.save!
 
-    # Validate and save answers
+  # Validate and save answers
   answers = params[:answers] || {}
   # Support both legacy per-question evidence_links and new per-category grouping
   evidence_links = params[:evidence_links] || {}
@@ -162,19 +169,19 @@ class SurveysController < ApplicationController
         # Default rule: for non-conditional questions, most types are required by default
         if !is_required && q.depends_on_question_id.blank? && q.depends_on_value.blank?
           case q.question_type
-          when 'multiple_choice'
+          when "multiple_choice"
             # If the options are exactly Yes/No (in any order), treat as NOT required by default
-            raw_opts = (q.answer_options || '').to_s
+            raw_opts = (q.answer_options || "").to_s
             parsed = begin
               JSON.parse(raw_opts) rescue nil
             end
             options = if parsed.is_a?(Array)
                         parsed.map(&:to_s)
-                      else
-                        raw_opts.gsub(/[\[\]"“”]/, '').split(',').map(&:strip).reject(&:empty?)
-                      end
+            else
+                        raw_opts.gsub(/[\[\]"“”]/, "").split(",").map(&:strip).reject(&:empty?)
+            end
             normalized = options.map { |o| o.to_s.strip.downcase }
-            if normalized == ['yes', 'no'] || normalized == ['no', 'yes']
+            if normalized == [ "yes", "no" ] || normalized == [ "no", "yes" ]
               is_required = false
             else
               is_required = true
@@ -201,7 +208,7 @@ class SurveysController < ApplicationController
     if missing_required.any?
       flash[:alert] = "Please answer all required questions (marked with *)."
       flash[:missing_required_ids] = missing_required.map(&:id)
-      redirect_to survey_path(@survey, missing: missing_required.map(&:id).join(',')) and return
+      redirect_to survey_path(@survey, missing: missing_required.map(&:id).join(",")) and return
     end
 
     # Persist answers: ensure QuestionResponse links to surveyresponse
@@ -209,7 +216,7 @@ class SurveysController < ApplicationController
       answers.each do |question_id_str, answer_value|
         next unless question_id_str.to_s =~ /^\d+$/
         qid = question_id_str.to_i
-        q = Question.find_by(id: qid)
+  q = Question.find_by(question_id: qid)
         next unless q
         qr = QuestionResponse.find_or_initialize_by(surveyresponse_id: survey_response.id, question_id: qid)
         qr.answer = answer_value
@@ -219,7 +226,7 @@ class SurveysController < ApplicationController
       # Persist evidence answers that were submitted via answers[<question_id>] for evidence-type questions
       @survey.categories.includes(:questions).each do |cat|
         cat.questions.each do |q|
-          next unless q.question_type == 'evidence'
+          next unless q.question_type == "evidence"
           link = answers[q.id.to_s]
           next if link.blank?
 
@@ -242,8 +249,8 @@ class SurveysController < ApplicationController
       evidence_links.each do |question_id_str, link|
         next if link.blank?
         qid = question_id_str.to_i
-        q = Question.find_by(id: qid)
-        next unless q && q.question_type == 'evidence'
+  q = Question.find_by(question_id: qid)
+        next unless q && q.question_type == "evidence"
 
         eu = EvidenceUpload.new(student_id: student.id, link: link, created_by: student.id)
         unless eu.valid?
@@ -267,11 +274,11 @@ class SurveysController < ApplicationController
         next unless cat
 
         # Find or create an evidence-type question in this category (attach to this category even if question missing)
-        eq = cat.questions.find_by(question_type: 'evidence')
+        eq = cat.questions.find_by(question_type: "evidence")
         if eq.nil?
           # create a simple evidence question to record this link
           next_order = (cat.questions.maximum(:question_order) || 0) + 1
-          eq = cat.questions.create!(question: 'Upload evidence', question_type: 'evidence', question_order: next_order)
+          eq = cat.questions.create!(question: "Upload evidence", question_type: "evidence", question_order: next_order)
         end
 
         # Validate

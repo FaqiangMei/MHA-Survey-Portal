@@ -3,18 +3,8 @@ class SurveysController < ApplicationController
 
   # GET /surveys or /surveys.json
   def index
-    # 只显示当前学生 track 对应的 survey
-    if current_student && current_student.track.present?
-      if current_student.track == 'Executive'
-        @surveys = Survey.where(title: 'Executive Survey')
-      elsif current_student.track == 'Residential'
-        @surveys = Survey.where(title: 'Residential Survey')
-      else
-        @surveys = Survey.none
-      end
-    else
-      @surveys = Survey.none
-    end
+    # Show all surveys to the user on the index page
+    @surveys = Survey.all.order(:id)
   end
 
   # GET /surveys/1 or /surveys/1.json
@@ -29,11 +19,62 @@ class SurveysController < ApplicationController
         sr = SurveyResponse.find_by(student_id: student.id, survey_id: @survey.id)
         if sr
           # Collect question responses only for this survey_response
-          question_ids = @survey.respond_to?(:questions) ? @survey.questions.pluck(:id) : []
-          cr_ids = CompetencyResponse.where(surveyresponse_id: sr.id).pluck(:id)
-          qrs = QuestionResponse.where(question_id: question_ids, competencyresponse_id: cr_ids)
+          qrs = QuestionResponse.where(surveyresponse_id: sr.id)
           qrs.each do |qr|
             @existing_answers[qr.question_id] = qr.answer
+          end
+
+          # Load existing evidence uploads for this student and surveyresponse, grouped by category
+          @existing_evidence_by_category = {}
+          eus = EvidenceUpload.includes(question_response: { question: :category }).where(student_id: student.id)
+          # Filter to only those evidence uploads attached to question_responses that belong to this survey_response
+          eus = eus.select { |e| e.question_response&.surveyresponse_id.to_i == sr.id }
+          # Group by category id (if available)
+          eus.group_by { |e| e.question_response&.question&.category_id }.each do |cid, arr|
+            # sort by created_at desc so latest first
+            @existing_evidence_by_category[cid] = arr.sort_by { |x| x.created_at || Time.at(0) }.reverse
+          end
+          # Also group evidence uploads by question id for showing in each question block
+          @existing_evidence_by_question = {}
+          eus.group_by { |e| e.question_response&.question_id }.each do |qid, arr|
+            @existing_evidence_by_question[qid] = arr.sort_by { |x| x.created_at || Time.at(0) }.reverse
+          end
+          # Pre-compute which questions should be marked required in the UI so view logic is simple
+          @computed_required = {}
+          @survey.categories.includes(:questions).each do |cat2|
+            cat2.questions.each do |qq|
+              # If the question has a dependency, it's required only when the dependency is satisfied
+              if qq.depends_on_question_id.present?
+                dep_qid = qq.depends_on_question_id.to_i
+                dep_expected = qq.depends_on_value.to_s
+                dep_actual = @existing_answers[dep_qid]
+                @computed_required[qq.id] = (dep_actual.to_s == dep_expected)
+                next
+              end
+
+              is_required = qq.required
+              # Default rule for non-conditional questions
+              if !is_required
+                case qq.question_type
+                when 'multiple_choice'
+                  raw_opts = (qq.answer_options || '').to_s
+                  parsed = begin
+                    JSON.parse(raw_opts) rescue nil
+                  end
+                  options = if parsed.is_a?(Array)
+                              parsed.map(&:to_s)
+                            else
+                              raw_opts.gsub(/[\[\]"“”]/, '').split(',').map(&:strip).reject(&:empty?)
+                            end
+                  normalized = options.map { |o| o.to_s.strip.downcase }
+                  # Yes/No multiple choice are NOT required by default
+                  is_required = !(normalized == ['yes', 'no'] || normalized == ['no', 'yes'])
+                else
+                  is_required = true
+                end
+              end
+              @computed_required[qq.id] = is_required
+            end
           end
         end
       end
@@ -99,82 +140,155 @@ class SurveysController < ApplicationController
       return
     end
 
-    # Find or create survey_response and mark submitted
-    survey_response = SurveyResponse.find_or_initialize_by(student_id: student.id, survey_id: @survey.id)
-    survey_response.status = SurveyResponse.statuses[:submitted]
-    survey_response.advisor_id ||= student.advisor_id
-    survey_response.semester ||= params[:semester]
-    survey_response.save!
+  # Find or create survey_response and mark submitted
+  survey_response = SurveyResponse.find_or_initialize_by(student_id: student.id, survey_id: @survey.id)
+  survey_response.status = SurveyResponse.statuses[:submitted]
+  survey_response.advisor_id ||= student.advisor_id
+  survey_response.semester ||= params[:semester]
+  survey_response.save!
 
-    # Validate all required questions are answered
-    answers = params[:answers] || {}
-    evidence_links = params[:evidence_links] || {}
+    # Validate and save answers
+  answers = params[:answers] || {}
+  # Support both legacy per-question evidence_links and new per-category grouping
+  evidence_links = params[:evidence_links] || {}
+  evidence_links_by_category = params[:evidence_links_by_category] || {}
 
     missing_required = []
-    @survey.competencies.each do |comp|
-      comp.questions.each do |q|
-        # Make all non-conditional free_response questions required
+    # Iterate survey questions directly (categories -> questions)
+    @survey.categories.includes(:questions).each do |cat|
+      cat.questions.each do |q|
+        # Determine if question is required
         is_required = q.required
-        if q.question_type == 'free_response' && q.depends_on_question_id.blank? && q.depends_on_value.blank?
-          is_required = true
+        # Default rule: for non-conditional questions, most types are required by default
+        if !is_required && q.depends_on_question_id.blank? && q.depends_on_value.blank?
+          case q.question_type
+          when 'multiple_choice'
+            # If the options are exactly Yes/No (in any order), treat as NOT required by default
+            raw_opts = (q.answer_options || '').to_s
+            parsed = begin
+              JSON.parse(raw_opts) rescue nil
+            end
+            options = if parsed.is_a?(Array)
+                        parsed.map(&:to_s)
+                      else
+                        raw_opts.gsub(/[\[\]"“”]/, '').split(',').map(&:strip).reject(&:empty?)
+                      end
+            normalized = options.map { |o| o.to_s.strip.downcase }
+            if normalized == ['yes', 'no'] || normalized == ['no', 'yes']
+              is_required = false
+            else
+              is_required = true
+            end
+          else
+            # all other non-conditional questions default to required unless explicitly set
+            is_required = true
+          end
         end
-        next unless is_required
-        # Conditional required: only check if dependency is met
+
+        # If conditional, check dependency
         if q.depends_on_question_id.present? && q.depends_on_value.present?
           dep_val = answers[q.depends_on_question_id.to_s]
           next unless dep_val.to_s == q.depends_on_value.to_s
         end
-        val = if q.question_type == 'evidence'
-          evidence_links[comp.id.to_s]
-        else
-          answers[q.id.to_s]
-        end
-        if val.blank?
-          missing_required << q
-        end
+
+        # Read submitted value from answers[...] (evidence is now submitted as a free-response)
+        val = answers[q.id.to_s]
+
+        missing_required << q if is_required && val.blank?
       end
     end
 
     if missing_required.any?
-      # Pass missing required question IDs to the view for highlighting
       flash[:alert] = "Please answer all required questions (marked with *)."
       flash[:missing_required_ids] = missing_required.map(&:id)
       redirect_to survey_path(@survey, missing: missing_required.map(&:id).join(',')) and return
     end
 
-    # Save question responses if provided
-    # Save normal answers
-    answers.each do |question_id_str, answer_value|
-      next unless question_id_str.to_s =~ /^\d+$/
-      qid = question_id_str.to_i
-      q = Question.find_by(id: qid)
-      next unless q
-      comp = q.competency
-      comp_resp = nil
-      if comp
-        comp_resp = CompetencyResponse.find_or_create_by!(surveyresponse_id: survey_response.id, competency_id: comp.id)
+    # Persist answers: ensure QuestionResponse links to surveyresponse
+    ActiveRecord::Base.transaction do
+      answers.each do |question_id_str, answer_value|
+        next unless question_id_str.to_s =~ /^\d+$/
+        qid = question_id_str.to_i
+        q = Question.find_by(id: qid)
+        next unless q
+        qr = QuestionResponse.find_or_initialize_by(surveyresponse_id: survey_response.id, question_id: qid)
+        qr.answer = answer_value
+        qr.save!
       end
-      qr = if comp_resp
-             QuestionResponse.find_or_initialize_by(question_id: qid, competencyresponse_id: comp_resp.id)
-           else
-             QuestionResponse.find_or_initialize_by(question_id: qid, competencyresponse_id: nil)
-           end
-      qr.answer = answer_value
-      qr.save!
-    end
 
-    # Save evidence links as answers to 'evidence' questions
-    evidence_links.each do |comp_id_str, link|
-      next if link.blank?
-      comp_id = comp_id_str.to_i
-      comp = Competency.find_by(id: comp_id)
-      next unless comp
-      evidence_q = comp.questions.find_by(question_type: 'evidence')
-      next unless evidence_q
-      comp_resp = CompetencyResponse.find_or_create_by!(surveyresponse_id: survey_response.id, competency_id: comp.id)
-      qr = QuestionResponse.find_or_initialize_by(question_id: evidence_q.id, competencyresponse_id: comp_resp.id)
-      qr.answer = link
-      qr.save!
+      # Persist evidence answers that were submitted via answers[<question_id>] for evidence-type questions
+      @survey.categories.includes(:questions).each do |cat|
+        cat.questions.each do |q|
+          next unless q.question_type == 'evidence'
+          link = answers[q.id.to_s]
+          next if link.blank?
+
+          eu = EvidenceUpload.new(student_id: student.id, link: link, created_by: student.id)
+          unless eu.valid?
+            flash[:alert] = "Invalid evidence link for question #{q.id}: #{eu.errors.full_messages.join(', ')}"
+            redirect_to survey_path(@survey) and return
+          end
+
+          qr = QuestionResponse.find_or_initialize_by(surveyresponse_id: survey_response.id, question_id: q.id)
+          qr.answer = link
+          qr.save!
+
+          eu.questionresponse_id = qr.id
+          eu.save!
+        end
+      end
+
+      # Persist legacy per-question evidence links
+      evidence_links.each do |question_id_str, link|
+        next if link.blank?
+        qid = question_id_str.to_i
+        q = Question.find_by(id: qid)
+        next unless q && q.question_type == 'evidence'
+
+        eu = EvidenceUpload.new(student_id: student.id, link: link, created_by: student.id)
+        unless eu.valid?
+          flash[:alert] = "Invalid evidence link for question #{qid}: #{eu.errors.full_messages.join(', ')}"
+          redirect_to survey_path(@survey) and return
+        end
+
+        qr = QuestionResponse.find_or_initialize_by(surveyresponse_id: survey_response.id, question_id: qid)
+        qr.answer = link
+        qr.save!
+
+        eu.questionresponse_id = qr.id
+        eu.save!
+      end
+
+      # Persist new per-category evidence links: attach provided link(s) to that category's evidence question(s)
+      evidence_links_by_category.each do |category_id_str, link|
+        next if link.blank?
+        cid = category_id_str.to_i
+        cat = Category.find_by(id: cid)
+        next unless cat
+
+        # Find or create an evidence-type question in this category (attach to this category even if question missing)
+        eq = cat.questions.find_by(question_type: 'evidence')
+        if eq.nil?
+          # create a simple evidence question to record this link
+          next_order = (cat.questions.maximum(:question_order) || 0) + 1
+          eq = cat.questions.create!(question: 'Upload evidence', question_type: 'evidence', question_order: next_order)
+        end
+
+        # Validate
+        eu = EvidenceUpload.new(student_id: student.id, link: link, created_by: student.id)
+        unless eu.valid?
+          flash[:alert] = "Invalid evidence link for competency #{cat.name}: #{eu.errors.full_messages.join(', ')}"
+          redirect_to survey_path(@survey) and return
+        end
+
+        # Ensure a QuestionResponse exists for that evidence question and survey_response
+        qr = QuestionResponse.find_or_initialize_by(surveyresponse_id: survey_response.id, question_id: eq.id)
+        qr.answer = link
+        qr.save!
+
+        eu.questionresponse_id = qr.id
+        eu.save!
+      end
     end
 
     redirect_to survey_response_path(survey_response), notice: "Survey submitted successfully!"

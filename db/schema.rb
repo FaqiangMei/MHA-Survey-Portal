@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_03_090000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_05_124500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -31,6 +31,17 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_03_090000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["survey_id"], name: "index_categories_on_survey_id"
+  end
+
+  create_table "evidence_uploads", primary_key: "evidenceupload_id", force: :cascade do |t|
+    t.bigint "student_id", null: false
+    t.bigint "questionresponse_id"
+    t.string "link", null: false
+    t.bigint "created_by"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["questionresponse_id"], name: "index_evidence_uploads_on_questionresponse_id"
+    t.index ["student_id"], name: "index_evidence_uploads_on_student_id"
   end
 
   create_table "feedback", primary_key: "feedback_id", force: :cascade do |t|
@@ -66,8 +77,12 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_03_090000) do
     t.text "answer_options"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "depends_on_question_id"
+    t.string "depends_on_value"
+    t.boolean "required", default: false, null: false
     t.index ["category_id", "question_order"], name: "index_questions_on_category_id_and_question_order", unique: true
     t.index ["category_id"], name: "index_questions_on_category_id"
+    t.index ["depends_on_question_id"], name: "index_questions_on_depends_on_question_id"
   end
 
   create_table "students", primary_key: "student_id", force: :cascade do |t|
@@ -118,12 +133,15 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_03_090000) do
   add_foreign_key "admins", "users", column: "admin_id", primary_key: "user_id", on_delete: :cascade
   add_foreign_key "advisors", "users", column: "advisor_id", primary_key: "user_id", on_delete: :cascade
   add_foreign_key "categories", "surveys"
+  add_foreign_key "evidence_uploads", "question_responses", column: "questionresponse_id", primary_key: "questionresponse_id", on_delete: :cascade
+  add_foreign_key "evidence_uploads", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "feedback", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "feedback", "categories", on_delete: :cascade
   add_foreign_key "feedback", "survey_responses", column: "surveyresponse_id", primary_key: "surveyresponse_id", on_delete: :cascade
   add_foreign_key "question_responses", "questions", primary_key: "question_id", on_delete: :cascade
   add_foreign_key "question_responses", "survey_responses", column: "surveyresponse_id", primary_key: "surveyresponse_id", on_delete: :cascade
   add_foreign_key "questions", "categories"
+  add_foreign_key "questions", "questions", column: "depends_on_question_id", primary_key: "question_id", on_delete: :nullify
   add_foreign_key "students", "advisors", primary_key: "advisor_id", on_delete: :nullify
   add_foreign_key "students", "users", column: "student_id", primary_key: "user_id", on_delete: :cascade
   add_foreign_key "survey_responses", "advisors", primary_key: "advisor_id", on_delete: :nullify

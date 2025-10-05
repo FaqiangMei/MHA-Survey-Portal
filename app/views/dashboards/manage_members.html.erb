@@ -83,7 +83,7 @@
                     <% else %>
                       <div class="role-selector">
                         <%= select_tag "role_updates[#{user.user_id}]", 
-                            options_for_select(User.roles.map { |key, value| [key.titleize, value] }, user.role || 'student'),
+                            options_for_select(User.roles.map { |key, value| [key.titleize, key] }, user.role || 'student'),
                             { 
                               class: 'role-select', 
                               data: { 

@@ -1,43 +1,94 @@
 <% survey_name =
-  case @survey.survey_id
+  case @survey.id
   when 1 then "Current Residential and Executive MHA Track Study Survey"
   when 2 then "Competency Self-Assessment Survey"
   when 3 then "Final Feedback Survey"
-  else "Survey ##{@survey.survey_id}"
+  else "Survey ##{@survey.id}"
   end
 %>
 
 <div class="survey-container">
   <h1 class="survey-title"><%= survey_name %></h1>
   <%= form_with url: submit_survey_path(@survey), local: true, class: "survey-form" do |f| %>
-    <% if @survey.respond_to?(:questions) && @survey.questions.any? %>
-      <% @survey.questions.order(:question_order).each do |q| %>
-        <div class="form-group question-block">
-          <label class="form-label"><%= q.question || "Question #{q.id}" %></label>
-          <% case q.question_type %>
-          <% when 'text' %>
-            <%= text_area_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control', rows: 3 %>
-          <% when 'select' %>
-            <% options = (q.answer_options || '').split(',').map(&:strip) %>
-            <%= select_tag "answers[#{q.id}]", options_for_select(options, @existing_answers[q.id]), include_blank: true, class: 'form-control' %>
-          <% when 'radio' %>
-            <% options = (q.answer_options || '').split(',').map(&:strip) %>
-            <% options.each do |opt| %>
-              <label class="form-check">
-                <%= radio_button_tag "answers[#{q.id}]", opt, (@existing_answers[q.id].to_s == opt.to_s) %> <%= opt %>
-              </label>
-            <% end %>
-          <% when 'checkbox' %>
-            <% options = (q.answer_options || '').split(',').map(&:strip) %>
-            <% selected = Array(@existing_answers[q.id]) %>
-            <% options.each do |opt| %>
-              <label class="form-check">
-                <%= check_box_tag "answers[#{q.id}][]", opt, selected.include?(opt) %> <%= opt %>
-              </label>
+    <% if @survey.respond_to?(:categories) && @survey.categories.any? %>
+      <%# Render questions grouped by category (competency) so evidence fields appear under each competency %>
+      <% @survey.categories.order(:id).each do |cat| %>
+        <div class="category-block">
+          <h3 class="category-title"><%= cat.name %></h3>
+          <% if cat.questions.any? %>
+            <% cat.questions.order(:question_order).each do |q| %>
+              <% depends_on_qid = q.depends_on_question_id %>
+              <% depends_on_val = q.depends_on_value %>
+              <div class="form-group question-block" data-question-id="<%= q.id %>" data-depends-on-question-id="<%= depends_on_qid %>" data-depends-on-value="<%= depends_on_val %>">
+                <label class="form-label">
+                  <%= q.question || "Question #{q.id}" %>
+                  <% if @computed_required && @computed_required[q.id] %>
+                    <span class="required-star" style="color: red">*</span>
+                  <% end %>
+                </label>
+
+                <% case q.question_type %>
+                <% when 'short_answer' %>
+                  <%= text_area_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control', rows: 3 %>
+                <% when 'multiple_choice' %>
+                  <% raw_opts = (q.answer_options || '').to_s %>
+                  <% parsed = begin
+                    JSON.parse(raw_opts) rescue nil
+                  end %>
+                  <% if parsed.is_a?(Array)
+                       options = parsed.map(&:to_s)
+                     else
+                       options = raw_opts.gsub(/[\[\]\"“”]/, '').split(',').map(&:strip)
+                     end %>
+                  <div class="multiple-choice-options btn-group" role="group" aria-label="Options">
+                    <% options.each do |opt| %>
+                      <% checked = (@existing_answers[q.id].to_s == opt.to_s) %>
+                      <label class="mc-btn <%= 'selected' if checked %>" data-value="<%= opt %>" data-qid="<%= q.id %>">
+                        <%= radio_button_tag "answers[#{q.id}]", opt, checked, data: { question_id: q.id }, style: 'display:none;' %>
+                        <span class="mc-circle" aria-hidden="true"></span>
+                        <span class="mc-label"><%= opt %></span>
+                      </label>
+                    <% end %>
+                  </div>
+                <% when 'scale' %>
+                  <% options = (1..5).to_a.map(&:to_s) %>
+                  <%= select_tag "answers[#{q.id}]", options_for_select(options, @existing_answers[q.id]&.to_s), include_blank: true, class: 'form-control' %>
+                <% when 'evidence' %>
+                  <div class="evidence-input">
+                    <%= label_tag "answers[#{q.id}]", 'Google Drive link (file or folder):' %>
+                    <%# prefill with latest existing evidence for this question if present, fallback to stored answer %>
+                    <% latest_q_link = @existing_evidence_by_question && @existing_evidence_by_question[q.id]&.first&.link %>
+                    <%= text_field_tag "answers[#{q.id}]", (latest_q_link || @existing_answers[q.id] || nil), class: 'form-control', placeholder: 'https://drive.google.com/...'%>
+                    <small class="form-text text-muted">Paste a Google Drive file or folder link here. Previous submissions are shown below for audit.</small>
+
+                    <%# Show history attached specifically to this question (if any) %>
+                    <% if @existing_evidence_by_question && @existing_evidence_by_question[q.id] %>
+                      <div class="existing-evidence-list" style="margin-top:0.5rem;">
+                        <strong>Previous submissions for this question:</strong>
+                        <ul>
+                          <% @existing_evidence_by_question[q.id].each do |eu| %>
+                            <li><a href="<%= eu.link %>" target="_blank" rel="noopener noreferrer"><%= eu.link %></a> — <small><%= eu.created_at.strftime('%F %T') rescue eu.created_at %></small></li>
+                          <% end %>
+                        </ul>
+                      </div>
+                    <% end %>
+                  </div>
+                <% else %>
+                  <%= text_field_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control' %>
+                <% end %>
+              </div>
             <% end %>
           <% else %>
-            <%= text_field_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control' %>
+            <div class="form-group"><em>No questions for this competency.</em></div>
           <% end %>
+
+          <!-- Per-category evidence upload (render after questions for the competency) -->
+          <div class="category-evidence-upload" style="margin-top:0.75rem;">
+            <% latest_cat_link = @existing_evidence_by_category && @existing_evidence_by_category[cat.id]&.first&.link %>
+            <%= label_tag "evidence_links_by_category[#{cat.id}]", 'Upload evidence for this competency (Google Drive link):' %>
+            <%= text_field_tag "evidence_links_by_category[#{cat.id}]", (latest_cat_link || ''), class: 'form-control', placeholder: 'https://drive.google.com/...'%>
+            <small class="form-text text-muted">This link will be attached to the competency. If there is an evidence question defined it will be used; otherwise a question will be created to record this upload.</small>
+          </div>
         </div>
       <% end %>
     <% else %>
@@ -54,9 +105,74 @@
   <% end %>
 </div>
 
-<div class="actions">
-  <%= link_to "Edit this survey", edit_survey_path(@survey), class: "btn btn-secondary" %>
-  <%= button_to "Destroy this survey", survey_path(@survey), method: :delete, data: { confirm: "Are you sure?" }, class: "btn btn-danger" %>
-  <%= link_to "Back", surveys_path, class: "btn btn-link" %>
-</div>
+  <script>
+    // Initialize survey UI controls. Works both on full page loads and Turbo visits.
+    function initSurveyControls() {
+      if (window._surveyControlsInitialized) return;
+      window._surveyControlsInitialized = true;
+
+      // Toggle dependent questions visibility
+      function evaluateDependency(qBlock) {
+        var dependsOn = qBlock.dataset.dependsOnQuestionId;
+        var dependsValue = qBlock.dataset.dependsOnValue;
+        if (!dependsOn || dependsOn === "") { qBlock.style.display = ''; return; }
+        var selector = '[name="answers[' + dependsOn + ']"]';
+        var el = document.querySelector(selector);
+        var visible = false;
+        if (!el) {
+          // maybe radio buttons
+          var radios = document.querySelectorAll('input[name="answers['+dependsOn+']"]');
+          radios.forEach(function(r){ if (r.checked && (dependsValue==='' || r.value==dependsValue)) visible = true; });
+        } else {
+          var val = el.value;
+          if (dependsValue === '' || val == dependsValue) visible = true;
+        }
+        qBlock.style.display = visible ? '' : 'none';
+      }
+
+      document.querySelectorAll('.question-block').forEach(function(qb) {
+        evaluateDependency(qb);
+      });
+
+      document.body.addEventListener('change', function(e){
+        if (!e.target.name) return;
+        var m = e.target.name.match(/^answers\[(\d+)\]/);
+        if (!m) return;
+        var changedQid = m[1];
+        document.querySelectorAll('.question-block').forEach(function(qb){
+          if (qb.dataset.dependsOnQuestionId === changedQid) evaluateDependency(qb);
+        });
+      });
+
+      // multiple choice nice buttons: clicking label toggles radio and selected state
+      document.querySelectorAll('.multiple-choice-options').forEach(function(group){
+        group.addEventListener('click', function(e){
+          var target = e.target.closest('.mc-btn');
+          if (!target) return;
+          var qid = target.dataset.qid;
+          var value = target.dataset.value;
+          // unselect siblings
+          group.querySelectorAll('.mc-btn').forEach(function(lb){ lb.classList.remove('selected'); });
+          // select this
+          target.classList.add('selected');
+
+          // Find the matching hidden radio input by name and value (more robust than value-only selector)
+          var radios = group.querySelectorAll('input[type="radio"]');
+          var matched = null;
+          radios.forEach(function(r){
+            if (r.name === 'answers[' + qid + ']' && r.value == value) matched = r;
+          });
+          if (matched) {
+            matched.checked = true;
+            // trigger change event on the radio so other listeners (dependencies) react
+            matched.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', initSurveyControls);
+    document.addEventListener('turbo:load', initSurveyControls);
+  </script>
+
 </div>

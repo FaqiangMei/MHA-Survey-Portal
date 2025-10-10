@@ -21,7 +21,6 @@
               <div class="survey-actions">
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
                   <%= link_to 'Open', survey_path(survey), class: 'btn btn-primary' %>
-                  <%= button_to 'Mark as Submitted', submit_survey_path(survey), method: :post, form: { data: { turbo: false } }, class: 'btn btn-secondary' %>
                 </div>
               </div>
             </div>

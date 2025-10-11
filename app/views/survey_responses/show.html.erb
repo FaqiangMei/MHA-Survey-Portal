@@ -1,10 +1,15 @@
 <p style="color: green"><%= notice %></p>
 
+<div class="survey-response-actions" style="margin-bottom: 1rem;">
+  <%= link_to "← Back", student_dashboard_path, class: "btn btn-secondary" %>
+  &nbsp;
+  <%= link_to "Download as PDF", download_survey_response_path(@survey_response, token: @survey_response.signed_download_token, format: :pdf), class: "btn btn-primary", target: "_blank" %>
+</div>
+
 <%= render @survey_response %>
 
-<div>
-  <%= link_to "Edit this survey response", edit_survey_response_path(@survey_response) %> |
-  <%= link_to "Back to survey responses", survey_responses_path %>
-
-  <%= button_to "Destroy this survey response", @survey_response, method: :delete %>
+<div class="survey-response-actions" style="margin-top: 1rem;">
+  <%= link_to "← Back", student_dashboard_path, class: "btn btn-secondary" %>
+  &nbsp;
+  <%= link_to "Download as PDF", download_survey_response_path(@survey_response, token: @survey_response.signed_download_token, format: :pdf), class: "btn btn-primary", target: "_blank" %>
 </div>

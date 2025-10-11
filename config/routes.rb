@@ -49,6 +49,7 @@ Rails.application.routes.draw do
   resources :survey_responses do
     member do
       patch :reopen
+      get :download, to: 'survey_responses#download'
     end
   end
 

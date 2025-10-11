@@ -53,8 +53,15 @@ class QuestionResponse < ApplicationRecord
     end
   end
 
-  # Simple Google Drive link validator; accepts common file/folder URL patterns
-  DRIVE_URL_REGEX = %r{\Ahttps?://(?:drive\.google\.com|docs\.google\.com)/(?:file/d/|open\?|drive/folders/).+}i
+  # Google Drive / Docs / Sheets / Forms link validator; accepts common file/folder/document URL patterns
+  # Examples matched:
+  # - https://drive.google.com/file/d/ID/view
+  # - https://drive.google.com/drive/folders/ID
+  # - https://docs.google.com/document/d/ID/edit
+  # - https://docs.google.com/spreadsheets/d/ID/edit
+  # - https://docs.google.com/forms/d/ID/edit
+  # - https://docs.google.com/open?id=ID
+  DRIVE_URL_REGEX = %r{\Ahttps?://(?:drive\.google\.com|docs\.google\.com)/(?:file/d/|drive/folders/|document/d/|spreadsheets/d/|forms/d/|open\?).+}i
 
   def validate_evidence_link
     val = read_attribute(:answer)

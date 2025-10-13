@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Custom component styles for the Health MHA application
+ * Built with Tailwind CSS
+ */
+
+@layer components {
+  /* Texas A&M brand colors */
+  .btn-primary {
+    @apply bg-tamu-maroon hover:bg-tamu-maroon-light text-white font-medium py-2 px-4 rounded transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-100 text-tamu-maroon border border-tamu-maroon font-medium py-2 px-4 rounded transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6 border border-gray-200;
+  }
+  
+  .card-interactive {
+    @apply card hover:border-tamu-maroon hover:shadow-lg transition-all duration-200 cursor-pointer;
+  }
+  
+  /* Dashboard specific styles */
+  .dashboard-header {
+    @apply bg-tamu-maroon text-white p-4 flex items-center justify-between shadow-md;
+  }
+  
+  .dashboard-card {
+    @apply card mb-6;
+  }
+  
+  .feature-item {
+    @apply card-interactive;
+  }
+  
+  /* Form styles */
+  .form-label {
+    @apply block font-semibold mb-2 text-gray-700;
+  }
+  
+  .form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-tamu-maroon focus:border-transparent;
+  }
+  
+  .form-select {
+    @apply form-input;
+  }
+  
+  .form-textarea {
+    @apply form-input;
+  }
+  
+  .form-checkbox {
+    @apply mr-2 text-tamu-maroon focus:ring-tamu-maroon;
+  }
+  
+  /* Flash messages */
+  .flash {
+    @apply p-4 mb-4 rounded-md;
+  }
+  
+  .flash__notice {
+    @apply bg-green-100 text-green-800 border border-green-200;
+  }
+  
+  .flash__alert {
+    @apply bg-red-100 text-red-800 border border-red-200;
+  }
+  
+  .flash__error {
+    @apply bg-red-100 text-red-800 border border-red-200;
+  }
+  
+  .flash__warning {
+    @apply bg-yellow-100 text-yellow-800 border border-yellow-200;
+  }
+  
+  /* Survey styles */
+  .survey-container {
+    @apply max-w-2xl mx-auto my-8 p-8 bg-white rounded-lg shadow-md;
+  }
+  
+  .survey-title {
+    @apply text-center mb-6 text-3xl font-bold text-tamu-maroon;
+  }
+  
+  .multiple-choice-options {
+    @apply flex gap-2 flex-wrap mt-2;
+  }
+  
+  .mc-btn {
+    @apply px-3 py-2 border border-gray-300 rounded-full cursor-pointer bg-white inline-flex items-center gap-2 hover:bg-blue-50 transition-colors;
+  }
+  
+  .mc-btn.selected {
+    @apply bg-blue-600 text-white border-blue-600;
+  }
+  
+  .mc-circle {
+    @apply w-4 h-4 rounded-full border-2 border-gray-500 inline-block;
+  }
+  
+  .mc-btn.selected .mc-circle {
+    @apply bg-white border-white;
+  }
+}

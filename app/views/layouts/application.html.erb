@@ -16,8 +16,8 @@
   <%= favicon_link_tag "tamu-logo.png", rel: "icon", type: "image/png" %>
   <%= favicon_link_tag "tamu-logo.png", rel: "apple-touch-icon", type: "image/png" %>
 
-    <%# Includes all consolidated stylesheet %>
-    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%# Tailwind CSS %>
+    <%= stylesheet_link_tag "application.tailwind", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
   </head>
 

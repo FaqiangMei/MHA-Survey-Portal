@@ -21,13 +21,13 @@ class SurveyResponsesController < ApplicationController
       direct_user_match = current_user && (@survey_response.student_id == current_user.id)
       profile_match = current_user && (@survey_response.student_id == student_profile_id)
       unless current_user && (current_user.admin? || current_user.advisor? || direct_user_match || profile_match)
-        logger.warn "Authorization failed for print user=#{current_user&.id}";
+        logger.warn "Authorization failed for print user=#{current_user&.id}"
         head :unauthorized and return
       end
     end
 
     @question_responses = @survey_response.question_responses.includes(:question)
-    render :print, layout: 'print'
+  render :print, layout: "print"
   end
 
   # GET /survey_responses/:id/download?token=...

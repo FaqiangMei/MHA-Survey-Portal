@@ -50,6 +50,7 @@ Rails.application.routes.draw do
     member do
       patch :reopen
       get :download, to: 'survey_responses#download'
+      get :print, to: 'survey_responses#print'
     end
   end
 

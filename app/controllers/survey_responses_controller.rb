@@ -1,7 +1,34 @@
 class SurveyResponsesController < ApplicationController
-  skip_before_action :authenticate_user!, only: %i[ download ]
-  before_action :set_survey_response, only: %i[ show edit update destroy reopen download ]
-  before_action :authorize_student_view!, only: %i[ show edit update destroy ]
+  skip_before_action :authenticate_user!, only: %i[ download print ]
+  before_action :set_survey_response, only: %i[ show edit update destroy reopen download print ]
+  before_action :authorize_student_view!, only: %i[ show edit update destroy print ]
+
+  # GET /survey_responses/:id/print?token=...
+  def print
+    token = params[:token]
+    logger.info "Print requested for SurveyResponse=#{@survey_response&.id} by user_id=#{current_user&.id || 'anon'} token_present=#{token.present?}"
+    if token.present?
+      found = SurveyResponse.find_by_signed_download_token(token)
+      if found && found.id == @survey_response.id
+        logger.info "Print authorized via token for SurveyResponse=#{@survey_response.id}"
+      else
+        logger.warn "Print token invalid or not matching: token_present=true found_id=#{found&.id}"
+        head :unauthorized and return
+      end
+    else
+      # Reuse same session authorization as download
+      student_profile_id = current_user&.student_profile&.id
+      direct_user_match = current_user && (@survey_response.student_id == current_user.id)
+      profile_match = current_user && (@survey_response.student_id == student_profile_id)
+      unless current_user && (current_user.admin? || current_user.advisor? || direct_user_match || profile_match)
+        logger.warn "Authorization failed for print user=#{current_user&.id}";
+        head :unauthorized and return
+      end
+    end
+
+    @question_responses = @survey_response.question_responses.includes(:question)
+    render :print, layout: 'print'
+  end
 
   # GET /survey_responses/:id/download?token=...
   def download

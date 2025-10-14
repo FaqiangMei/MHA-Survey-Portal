@@ -57,9 +57,36 @@ class SurveyResponsesController < ApplicationController
         logger.error "PDF generation returned non-PDF payload for SurveyResponse=#{@survey_response&.id}: first bytes: #{snippet.inspect}"
         # Also log a helpful reminder about wkhtmltopdf path
         logger.error "WickedPdf config exe_path: #{WickedPdf.config[:exe_path].inspect}"
+        begin
+          exe = WickedPdf.config[:exe_path]
+          if exe && File.exist?(exe)
+            stat = File.stat(exe)
+            logger.error "wkhtmltopdf exists at #{exe} (mode: #{sprintf('%o', stat.mode)}, size: #{stat.size})"
+          else
+            logger.error "wkhtmltopdf binary not found at #{exe.inspect}"
+          end
+        rescue => inner_e
+          logger.error "Error while inspecting wkhtmltopdf path: #{inner_e.class} - #{inner_e.message}"
+        end
         head :internal_server_error and return
       end
-      send_data pdf_data, filename: "survey_response_#{@survey_response.surveyresponse_id || @survey_response.id}.pdf", disposition: "attachment", type: "application/pdf"
+      # Log helpful metadata about the generated PDF
+      begin
+        size = pdf_data.bytesize
+        snippet_bytes = pdf_data.byteslice(0, 32)
+        hex_snippet = snippet_bytes.bytes.map { |b| sprintf('%02x', b) }.join
+        logger.info "Generated PDF for SurveyResponse=#{@survey_response.id}: size=#{size} bytes, first_bytes_hex=#{hex_snippet}"
+      rescue => inner_e
+        logger.warn "Could not compute PDF metadata: #{inner_e.class} - #{inner_e.message}"
+      end
+
+      # Set explicit response headers to avoid intermediaries changing content-type/disposition
+      filename = "survey_response_#{@survey_response.surveyresponse_id || @survey_response.id}.pdf"
+      response.headers['Content-Type'] = 'application/pdf'
+      response.headers['Content-Disposition'] = %(attachment; filename="#{filename}")
+      response.headers['Content-Length'] = pdf_data.bytesize.to_s
+
+      send_data pdf_data, filename: filename, disposition: "attachment", type: "application/pdf"
     rescue => e
       logger.error "Download PDF failed for SurveyResponse #{ @survey_response&.surveyresponse_id }: #{e.class} - #{e.message}\n#{e.backtrace.join("\n") }"
       head :internal_server_error

@@ -13,20 +13,20 @@ class SurveyResponsesController < ApplicationController
       if found && found.id == @survey_response.id
         logger.info "Download authorized via token for SurveyResponse=#{@survey_response.id}"
       else
-        logger.warn "Download token invalid or not matching: token_present=true found_id=#{found&.id}" 
+        logger.warn "Download token invalid or not matching: token_present=true found_id=#{found&.id}"
         head :unauthorized and return
       end
     else
       # No token provided: require authentication and authorization as usual
       user_role = if current_user.nil?
-                    'none'
-                  elsif current_user.admin?
-                    'admin'
-                  elsif current_user.advisor?
-                    'advisor'
-                  else
-                    'student'
-                  end
+                    "none"
+      elsif current_user.admin?
+                    "admin"
+      elsif current_user.advisor?
+                    "advisor"
+      else
+                    "student"
+      end
       logger.info "No token provided; authorizing via current_user=#{current_user&.id} role=#{user_role}"
 
       # Allow if admin or advisor, or if the current_user matches the survey_response student.

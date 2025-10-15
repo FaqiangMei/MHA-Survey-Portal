@@ -80,7 +80,7 @@ class SurveyResponsesController < ApplicationController
     html = render_to_string(
       template: "survey_responses/show.pdf",
       layout: "pdf",
-      formats: [:html],
+      formats: [ :html ],
       encoding: "UTF-8",
       locals: { survey_response: @survey_response }
     )

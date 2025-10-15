@@ -62,12 +62,11 @@
           </div>
         <% end %>
 
-        <% latest_evidence = (@existing_evidence_by_category[category.id] || []).first %>
         <% history = (@existing_evidence_by_category[category.id] || []) %>
+        <% latest_evidence = history.first %>
         <div class="category-evidence-block space-y-2 border-t border-dashed border-slate-200 pt-4" data-category-id="<%= category.id %>">
           <label class="block text-sm font-semibold text-slate-900">Evidence for this category</label>
           <%= text_field_tag "category_evidence[#{category.id}]", latest_evidence&.answer, placeholder: "https://drive.google.com/...", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
-          <p class="text-xs text-slate-500">Paste a Google Drive file or folder link. Previous submissions, if any, are shown below.</p>
 
           <% if history.size > 1 %>
             <details class="text-sm text-slate-600">
@@ -84,9 +83,9 @@
               </ul>
             </details>
           <% elsif latest_evidence&.answer.present? %>
-            <div class="text-sm">
+            <div class="text-sm space-y-1">
               <a href="<%= latest_evidence.answer %>" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline hover:text-blue-500"><%= latest_evidence.answer %></a>
-              <% if latest_evidence.updated_at.present? %>
+              <% if latest_evidence&.updated_at.present? %>
                 <span class="ml-2 text-xs text-slate-500">Updated <%= latest_evidence.updated_at.strftime("%Y-%m-%d %H:%M") %></span>
               <% end %>
             </div>

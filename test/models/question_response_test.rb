@@ -9,10 +9,10 @@ class StudentQuestionTest < ActiveSupport::TestCase
 
   test "answer serialization preserves arrays" do
     sq = StudentQuestion.new(student: @student, advisor: @advisor, question: @question)
-    sq.answer = ["Option A", "Option B"]
+    sq.answer = [ "Option A", "Option B" ]
 
-    assert_equal ["Option A", "Option B"], sq.answer
-    assert_equal ["Option A", "Option B"].to_json, sq.read_attribute(:response_value)
+    assert_equal [ "Option A", "Option B" ], sq.answer
+    assert_equal [ "Option A", "Option B" ].to_json, sq.read_attribute(:response_value)
   end
 
   test "answer accepts strings" do

@@ -129,13 +129,16 @@ class SurveysController < ApplicationController
       next unless category
 
       question = find_category_evidence_question(category)
+      normalized_link_value = link_value.to_s.strip
 
-      if link_value.present?
+      if normalized_link_value.present?
         question ||= ensure_category_evidence_question(category)
-        answers[question.id.to_s] = link_value
+        question_key = question.id.to_s
+        answers[question_key] = normalized_link_value
         allowed_question_ids << question.id unless allowed_question_ids.include?(question.id)
       elsif question
-        answers[question.id.to_s] = ""
+        question_key = question.id.to_s
+        answers[question_key] = ""
         allowed_question_ids << question.id unless allowed_question_ids.include?(question.id)
       end
     end
@@ -175,7 +178,7 @@ class SurveysController < ApplicationController
 
     if invalid_links.any?
       names = invalid_links.map { |q| "Question #{q.question_order}: #{q.question}" }
-      redirect_to survey_path(@survey), alert: "One or more upload links are invalid: #{names.join('; ')}"
+      redirect_to survey_path(@survey), alert: "One or more evidence links are invalid: #{names.join('; ')}"
       return
     end
 
@@ -188,12 +191,14 @@ class SurveysController < ApplicationController
         record = StudentQuestion.find_or_initialize_by(student_id: student.id, question_id: question_id)
         record.advisor_id ||= student.advisor_id
 
-        if answer_value.blank?
+        should_keep_record = answer_value.present?
+
+        unless should_keep_record
           record.destroy! if record.persisted?
           next
         end
 
-        record.answer = answer_value
+        record.answer = answer_value.presence
         record.save!
       end
     end

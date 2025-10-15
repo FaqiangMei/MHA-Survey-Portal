@@ -30,7 +30,7 @@ class SurveyResponseTest < ActiveSupport::TestCase
     survey_response = SurveyResponse.build(student: @student, survey: @survey)
 
     question_ids = survey_response.question_responses.pluck(:question_id)
-    assert_equal [@question.id], question_ids
+    assert_equal [ @question.id ], question_ids
   end
 
   test "advisor delegates to student advisor" do

@@ -50,11 +50,10 @@
                       <% survey_block[:rows].each_with_index do |row, idx| %>
                         <% student = row[:student] %>
                         <% advisor = row[:advisor] %>
-                        <% response = row[:response] %>
-                        <% status_text = response&.status || SurveyResponse.statuses[:not_started] %>
-                        <% completion_date = response&.completion_date %>
-                        <% survey_link_path = response ? survey_response_path(response) : survey_path(survey) %>
-                        <% survey_link_label = response ? "View Response" : "View Survey" %>
+                        <% status_text = row[:status] %>
+                        <% completion_date = row[:completed_at] %>
+                        <% survey_link_path = survey_path(row[:survey]) %>
+                        <% survey_link_label = status_text == "Completed" ? "Review" : "Open" %>
 
                         <tr class="transition hover:bg-slate-50">
                           <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#500000]"><%= idx + 1 %></td>

@@ -63,15 +63,11 @@ module ApplicationHelper
   def survey_status_badge_classes(status)
     base = "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide"
 
-    variant = case status.to_s
-    when SurveyResponse.statuses[:submitted]
-      "border-[#500000] bg-[#f9f2f2] text-[#500000]"
-    when SurveyResponse.statuses[:approved]
+    variant = case status.to_s.downcase
+    when "completed"
       "border-emerald-200 bg-emerald-50 text-emerald-700"
-    when SurveyResponse.statuses[:in_progress]
+    when "pending"
       "border-amber-200 bg-amber-50 text-amber-700"
-    when SurveyResponse.statuses[:under_review]
-      "border-blue-200 bg-blue-50 text-blue-700"
     else
       "border-slate-200 bg-slate-100 text-slate-600"
     end

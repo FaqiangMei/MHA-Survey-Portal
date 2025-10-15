@@ -1,3 +1,5 @@
+require "set"
+
 class DashboardsController < ApplicationController
   before_action :ensure_profile_present, only: %i[student advisor]
   before_action :ensure_role_switch_allowed, only: :switch_role
@@ -16,12 +18,63 @@ class DashboardsController < ApplicationController
   end
 
   def student
-  @student = current_student
-  responses = @student.survey_responses.includes(:survey)
-  @pending_survey_responses = responses.pending
-  @completed_survey_responses = responses.completed
-  @pending_surveys = Survey.where(id: @pending_survey_responses.pluck(:survey_id))
-  @completed_surveys = Survey.where(id: @completed_survey_responses.pluck(:survey_id))
+    @student = current_student
+
+    unless @student
+      redirect_to dashboard_path, alert: "Student profile not found." and return
+    end
+
+    surveys = Survey.includes(:questions).ordered
+
+    student_responses = StudentQuestion
+                          .joins(question: :survey_questions)
+                          .where(student_id: @student.student_id)
+                          .select(
+                            "survey_questions.survey_id AS survey_id",
+                            "student_questions.question_id",
+                            "student_questions.updated_at"
+                          )
+
+    responses_matrix = Hash.new { |hash, key| hash[key] = [] }
+    student_responses.each do |entry|
+      responses_matrix[entry.survey_id] << { question_id: entry.question_id, updated_at: entry.updated_at }
+    end
+
+    @completed_surveys = []
+    @pending_surveys = []
+
+    surveys.each do |survey|
+      required_ids = survey.questions.select { |question| required_question?(question) }.map(&:id)
+      responses = responses_matrix[survey.id]
+      answered_ids = responses.map { |entry| entry[:question_id] }.uniq
+      answered_count = answered_ids.size
+      total_count = required_ids.present? ? required_ids.size : survey.questions.count
+      completed_at = responses.map { |entry| entry[:updated_at] }.compact.max
+
+      survey_summary = {
+        survey: survey,
+        answered_count: answered_count,
+        total_count: total_count,
+        completed_at: completed_at,
+        required: required_ids.present?
+      }
+
+      if required_ids.present?
+        answered_set = answered_ids.to_set
+        if required_ids.all? { |id| answered_set.include?(id) }
+          @completed_surveys << survey_summary.merge(status: "Completed")
+        else
+          @pending_surveys << survey_summary.merge(status: "Pending")
+        end
+      else
+        # Surveys without required questions are considered pending until at least one answer is provided
+        if answered_count.positive?
+          @completed_surveys << survey_summary.merge(status: "Completed")
+        else
+          @pending_surveys << survey_summary.merge(status: "Pending")
+        end
+      end
+    end
   end
 
   def advisor
@@ -30,13 +83,13 @@ class DashboardsController < ApplicationController
 
     if admin_impersonating_advisor
       @advisees = Student.left_joins(:user).includes(:advisor).order(Arel.sql("LOWER(users.name) ASC"))
-      @recent_feedback = Feedback.order(created_at: :desc).limit(5).includes(:category, :survey_response)
-      @pending_notifications_count = SurveyResponse.pending.count
+      @recent_feedback = Feedback.includes(:category, :survey, :student).order(created_at: :desc).limit(5)
+      @pending_notifications_count = Notification.unread.count
     else
       @advisees = @advisor&.advisees&.includes(:user) || []
-      @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id).order(created_at: :desc).limit(5).includes(:category, :survey_response)
+      @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
       @pending_notifications_count = if @advisor
-        SurveyResponse.where(advisor_id: @advisor.advisor_id).pending.count
+        Notification.unread.where(notifiable: @advisor).count
       else
         0
       end
@@ -54,7 +107,7 @@ class DashboardsController < ApplicationController
     }
 
     @total_surveys = Survey.count
-    @total_responses = SurveyResponse.count
+    @total_responses = StudentQuestion.count
     @recent_logins = User.order(updated_at: :desc).limit(5)
   end
 
@@ -83,7 +136,7 @@ class DashboardsController < ApplicationController
 
     ActiveRecord::Base.transaction do
       role_updates.each do |user_id, new_role|
-        user = User.find_by(user_id: user_id)
+        user = User.find_by(id: user_id)
         unless user
           failed_updates << "User ID #{user_id}: not found"
           next
@@ -126,7 +179,7 @@ class DashboardsController < ApplicationController
 
     users = User.order(:name).map do |user|
       {
-        id: user.user_id,
+  id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
@@ -186,62 +239,6 @@ class DashboardsController < ApplicationController
     false
   end
 
-  def ensure_demo_surveys_for(student)
-    return unless student
-
-    sample_surveys.each do |survey_attrs|
-      survey = Survey.find_or_create_by!(survey_attrs.slice(:title, :semester))
-      category = survey.categories.find_or_create_by!(name: survey_attrs[:category_name]) do |cat|
-        cat.description = survey_attrs[:category_description]
-      end
-
-      ensure_questions_for(category, survey_attrs[:questions])
-
-      SurveyResponse.find_or_create_by!(student_id: student.id, survey_id: survey.id) do |response|
-        response.advisor_id = student.advisor_id
-        response.status = SurveyResponse.statuses[:not_started]
-      end
-    end
-  end
-
-  def sample_surveys
-    [
-      {
-        title: "Health & Wellness Survey",
-        semester: "Fall 2025",
-        category_name: "Wellness",
-        category_description: "Student health and wellbeing",
-        questions: [
-          { order: 1, type: :multiple_choice, text: "How would you rate your current stress level?", options: "Low,Moderate,High" },
-          { order: 2, type: :scale, text: "On a scale from 1-5, how satisfied are you with your work-life balance?", options: "1,2,3,4,5" },
-          { order: 3, type: :short_answer, text: "Describe one strategy you use to maintain your wellbeing." },
-          { order: 4, type: :evidence, text: "Upload evidence supporting your wellness activities." }
-        ]
-      },
-      {
-        title: "Career Goals Survey",
-        semester: "Fall 2025",
-        category_name: "Professional Development",
-        category_description: "Goals and milestones toward career objectives",
-        questions: [
-          { order: 1, type: :multiple_choice, text: "Which industry are you targeting after graduation?", options: "Finance,Technology,Consulting,Other" },
-          { order: 2, type: :short_answer, text: "What is your top career goal for the next six months?" },
-          { order: 3, type: :scale, text: "Rate your confidence in achieving this goal.", options: "1,2,3,4,5" }
-        ]
-      }
-    ]
-  end
-
-  def ensure_questions_for(category, questions)
-    questions.each do |question_attrs|
-  question = category.questions.find_or_initialize_by(question_order: question_attrs[:order])
-  question.question = question_attrs[:text]
-  question.question_type = question_attrs[:type]
-  question.answer_options = question_attrs[:options]
-  question.save!
-    end
-  end
-
   def ensure_role_switch_allowed
     return if Rails.env.development? || Rails.env.test?
 
@@ -259,5 +256,16 @@ class DashboardsController < ApplicationController
     else
       dashboard_path
     end
+  end
+
+  def required_question?(question)
+    return false unless question
+
+    return true if question.required?
+
+    return false unless question.question_type_multiple_choice?
+
+    options = question.answer_options_list.map(&:strip).map(&:downcase)
+    !(options == %w[yes no] || options == %w[no yes])
   end
 end

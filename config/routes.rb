@@ -41,17 +41,15 @@ Rails.application.routes.draw do
   resources :categories
   resources :feedbacks
   resources :questions
-  resources :question_responses
 
   resources :surveys do
     post :submit, on: :member
   end
 
-  resources :survey_responses do
+  resources :survey_responses, only: :show do
     member do
-      patch :reopen
-      get :download, to: 'survey_responses#download'
-      get :print, to: 'survey_responses#print'
+      get :print
+      get :download
     end
   end
 

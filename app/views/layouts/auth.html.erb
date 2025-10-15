@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "MHA Program Portal" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <%= favicon_link_tag "tamu-logo.png", rel: "icon", type: "image/png" %>
+    <%= favicon_link_tag "tamu-logo.png", rel: "apple-touch-icon", type: "image/png" %>
+
+    <%= tailwind_stylesheet_tag %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body class="min-h-screen bg-slate-100 text-slate-800 antialiased">
+    <div class="flex min-h-screen flex-col">
+      <% if content_for?(:header) %>
+        <header class="w-full">
+          <%= yield :header %>
+        </header>
+      <% end %>
+
+      <main class="flex flex-1 flex-col items-center justify-center px-4 py-16">
+        <%= yield %>
+      </main>
+    </div>
+  </body>
+</html>

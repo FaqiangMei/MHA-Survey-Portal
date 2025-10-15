@@ -1,27 +1,144 @@
-<div id="<%= dom_id survey_response %>">
-  <p>
-    <strong>Surveyresponse:</strong>
-    <%= survey_response.surveyresponse_id %>
-  </p>
+<%# Render a read-only survey layout similar to app/views/surveys/show.html.erb %>
+<%# Make this partial robust: prefer a local `survey_response` if provided, then @survey_response. %>
+<% sr = local_assigns[:survey_response] || (defined?(@survey_response) && @survey_response) || (defined?(survey_response) ? survey_response : nil) %>
+<% survey = sr&.survey %>
+<div class="survey-container">
+  <% survey_name =
+    case survey&.id
+    when 1 then "Current Residential and Executive MHA Track Study Survey"
+    when 2 then "Competency Self-Assessment Survey"
+    when 3 then "Final Feedback Survey"
+    else survey&.title || "Survey ##{survey&.id}"
+    end %>
 
-  <p>
-    <strong>Student:</strong>
-    <%= survey_response.student_id %>
-  </p>
+  <h1 class="survey-title"><%= survey_name %></h1>
+  <div class="user-info" style="margin-top:6px;">
+    <div class="col">
+      <div class="label">Student</div>
+      <div class="value"><%= sr&.student&.user&.name || "Student ##{sr&.student_id}" %></div>
+    </div>
+    <div class="col">
+      <div class="label">Advisor</div>
+      <div class="value"><%= sr&.advisor&.user&.name || (sr&.advisor_id ? "Advisor ##{sr.advisor_id}" : '—') %></div>
+    </div>
+    <div class="col">
+      <div class="label">Survey</div>
+      <div class="value"><%= survey_name %></div>
+    </div>
+    <div class="col">
+      <div class="label">Status</div>
+      <div class="value"><%= sr&.status.to_s.humanize %></div>
+    </div>
+    <div class="col">
+      <div class="label">Submitted</div>
+      <div class="value"><%= sr&.completion_date ? sr.completion_date.strftime('%Y-%m-%d') : '—' %></div>
+    </div>
+  </div>
 
-  <p>
-    <strong>Advisor:</strong>
-    <%= survey_response.advisor_id %>
-  </p>
+  <% existing_answers = sr&.question_responses&.index_by(&:question_id)&.transform_values(&:answer) || {} %>
 
-  <p>
-    <strong>Survey:</strong>
-    <%= survey_response.survey_id %>
-  </p>
+  <% if survey.respond_to?(:categories) && survey.categories.any? %>
+    <% q_number = 0 %>
+    <% survey.categories.order(:id).each do |cat| %>
+      <div class="category-block">
+        <h3 class="category-title"><%= cat.name %></h3>
+        <% if cat.questions.any? %>
+          <% cat.questions.order(:question_order).each do |q| %>
+            <% depends_on_qid = q.depends_on_question_id %>
+            <% dependent_by_text = q.question.to_s.strip.match?(/^
+\s*If\s+(yes|no)/i) rescue false %>
+            <% numbered = depends_on_qid.blank? && !dependent_by_text %>
+            <% if numbered %>
+              <% q_number += 1 %>
+            <% end %>
 
-  <p>
-    <strong>Status:</strong>
-    <%= survey_response.status %>
-  </p>
+            <div class="form-group question-block" data-question-id="<%= q.id %>" data-numbered="<%= numbered %>" style="margin-bottom:0.75rem;">
+              <label class="form-label">
+                <div class="question-text">
+                  <% if numbered %>
+                    <span class="question-number"><%= q_number %>.&nbsp;</span>
+                  <% end %>
+                  <span class="question-body"><%= q.question || "Question #{q.id}" %></span>
+                  <% if numbered %>
+                    <span class="required-star" style="color:#e3342f; font-weight:600; margin-left:.5rem;">*</span>
+                  <% end %>
+                </div>
+              </label>
 
+              <% answer = existing_answers[q.id] %>
+              <% display = answer.is_a?(Array) ? answer.join(', ') : answer %>
+
+              <% case q.question_type %>
+              <% when 'short_answer' %>
+                <%= text_area_tag nil, (display || ''), class: 'form-control w-full max-w-full break-words p-2 border rounded', rows: 3, style: 'resize: none; overflow:auto;', disabled: true %>
+              <% when 'multiple_choice' %>
+                <% raw_opts = (q.answer_options || '').to_s %>
+                <% parsed = begin
+                  JSON.parse(raw_opts) rescue nil
+                end %>
+                <% if parsed.is_a?(Array)
+                     options = parsed.map(&:to_s)
+                   else
+                     options = raw_opts.gsub(/[\[\]\"“”]/, '').split(',').map(&:strip)
+                   end %>
+                <%# Determine selected values: support both single-string and array answers %>
+                <% selected_vals = if display.is_a?(Array)
+                                     display.map(&:to_s)
+                                   else
+                                     [display.to_s]
+                                   end %>
+                <div class="multiple-choice-options" role="group" aria-label="Options">
+                  <% options.each do |opt| %>
+                    <% checked = selected_vals.include?(opt.to_s) %>
+                    <div class="mc-option<%= ' selected' if checked %>" aria-disabled="true">
+                      <span class="mc-marker"><%= checked ? '◉' : '○' %></span>
+                      <span class="mc-label"><%= opt %></span>
+                    </div>
+                  <% end %>
+                </div>
+              <% when 'scale' %>
+                <% options = (1..5).to_a.map(&:to_s) %>
+                <%= select_tag nil, options_for_select(options, display&.to_s), include_blank: true, class: 'form-control w-full max-w-xs p-2 border rounded', disabled: true %>
+              <% when 'evidence' %>
+                <div class="evidence-input">
+                  <label class="form-label">Google Drive link (file or folder):</label>
+                  <% value = display || '' %>
+                  <%= text_field_tag nil, value, class: 'form-control w-full max-w-full p-2 border rounded', placeholder: 'https://drive.google.com/...', disabled: true %>
+                  <% if value.present? && value.to_s =~ %r{\Ahttps?://}i %>
+                    <div style="margin-top:0.5rem;"><a href="<%= value %>" target="_blank" rel="noopener noreferrer"><%= value %></a></div>
+                  <% end %>
+                </div>
+              <% else %>
+                <%= text_field_tag nil, (display || ''), class: 'form-control', disabled: true %>
+              <% end %>
+
+            </div>
+          <% end %>
+        <% else %>
+          <div class="form-group"><em>No questions for this competency.</em></div>
+        <% end %>
+
+        <%# Per-category evidence (show last link if present in this response's answers) %>
+        <% latest_cat_link = nil %>
+        <%# Attempt to find a question in this category of type evidence that has an answer in this response %>
+        <% cat.questions.each do |cq| %>
+          <% if cq.question_type == 'evidence' && existing_answers[cq.id].present? %>
+            <% latest_cat_link = existing_answers[cq.id]; break %>
+          <% end %>
+        <% end %>
+        <div class="category-evidence-upload" style="margin-top:0.75rem;">
+          <label>Evidence for this competency (if any):</label>
+          <%= text_field_tag nil, (latest_cat_link || ''), class: 'form-control w-full max-w-full p-2 border rounded', disabled: true %>
+          <% if latest_cat_link.present? %>
+            <div style="margin-top:0.5rem;"><a href="<%= latest_cat_link %>" target="_blank" rel="noopener noreferrer"><%= latest_cat_link %></a></div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  <% else %>
+      <div class="form-group">
+      <label class="form-label">Sample free text</label>
+      <%= text_area_tag nil, (sr&.question_responses&.first&.answer || ''), class: 'form-control', style: 'resize: none; overflow:auto;', disabled: true %>
+    </div>
+  <% end %>
 </div>

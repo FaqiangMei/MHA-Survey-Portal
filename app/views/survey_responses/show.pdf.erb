@@ -1,20 +1,8 @@
-<%# PDF export view for Survey Response %>
-<h1 style="text-align:center;">Survey Response Report</h1>
-<table style="width:100%;margin-bottom:1.5em;border-collapse:collapse;">
-  <tr><th align="left">Survey</th><td><%= @survey_response.survey_id %></td></tr>
-  <tr><th align="left">Student ID</th><td><%= @survey_response.student_id %></td></tr>
-  <tr><th align="left">Advisor ID</th><td><%= @survey_response.advisor_id %></td></tr>
-  <tr><th align="left">Semester</th><td><%= @survey_response.semester %></td></tr>
-  <tr><th align="left">Status</th><td><%= @survey_response.status %></td></tr>
-</table>
-<h2>Answers</h2>
-<table style="width:100%;border-collapse:collapse;">
-  <tr style="background:#f0f0f0;"><th align="left">Question</th><th align="left">Answer</th></tr>
-  <% @question_responses.each do |qr| %>
-    <% q = Question.find_by(id: qr.question_id) %>
-    <tr>
-      <td style="vertical-align:top;"><%= q&.question || "Question #{qr.question_id}" %></td>
-      <td><%= qr.answer.is_a?(Array) ? qr.answer.join(', ') : qr.answer %></td>
-    </tr>
-  <% end %>
-</table>
+<%# Render the same read-only survey response content used by the HTML show page so the PDF
+   matches the "View response" output. The controller already sets @survey_response and
+   @question_responses when rendering the show action. %>
+
+<div class="survey-pdf">
+  <%# Render the HTML partial explicitly so Rails doesn't look for a PDF-specific partial. %>
+  <%= render partial: 'survey_responses/survey_response', formats: [:html], locals: { survey_response: @survey_response } %>
+</div>

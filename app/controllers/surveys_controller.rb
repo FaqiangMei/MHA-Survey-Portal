@@ -166,39 +166,19 @@ class SurveysController < ApplicationController
     # Iterate survey questions directly (categories -> questions)
     @survey.categories.includes(:questions).each do |cat|
       cat.questions.each do |q|
-        # Determine if question is required
-        is_required = q.required
-        # Default rule: for non-conditional questions, most types are required by default
-        if !is_required && q.depends_on_question_id.blank? && q.depends_on_value.blank?
-          case q.question_type
-          when "multiple_choice"
-            # If the options are exactly Yes/No (in any order), treat as NOT required by default
-            raw_opts = (q.answer_options || "").to_s
-            parsed = begin
-              JSON.parse(raw_opts) rescue nil
-            end
-            options = if parsed.is_a?(Array)
-                        parsed.map(&:to_s)
-            else
-                        raw_opts.gsub(/[\[\]"“”]/, "").split(",").map(&:strip).reject(&:empty?)
-            end
-            normalized = options.map { |o| o.to_s.strip.downcase }
-            if normalized == [ "yes", "no" ] || normalized == [ "no", "yes" ]
-              is_required = false
-            else
-              is_required = true
-            end
-          else
-            # all other non-conditional questions default to required unless explicitly set
-            is_required = true
-          end
-        end
+        # Determine if question is a dependent-by-text (starts with If yes/If no)
+        dependent_by_text = q.question.to_s.strip.match?(/^\s*If\s+(yes|no)/i) rescue false
+        # Numbered questions: no depends_on and not dependent-by-text
+        numbered = q.depends_on_question_id.blank? && !dependent_by_text
 
-        # If conditional, check dependency
+        # If the question itself is conditional on another question's value, skip unless satisfied
         if q.depends_on_question_id.present? && q.depends_on_value.present?
           dep_val = answers[q.depends_on_question_id.to_s]
           next unless dep_val.to_s == q.depends_on_value.to_s
         end
+
+        # For server-side rule: any numbered question is required
+        is_required = numbered
 
         # Read submitted value from answers[...] (evidence is now submitted as a free-response)
         val = answers[q.id.to_s]
@@ -211,6 +191,37 @@ class SurveysController < ApplicationController
       flash[:alert] = "Please answer all required questions (marked with *)."
       flash[:missing_required_ids] = missing_required.map(&:id)
       redirect_to survey_path(@survey, missing: missing_required.map(&:id).join(",")) and return
+    end
+
+    # Server-side validation for evidence links (both per-question evidence answers and per-category evidence fields)
+    invalid_links = []
+    drive_regex = QuestionResponse.const_defined?(:DRIVE_URL_REGEX) ? QuestionResponse::DRIVE_URL_REGEX : %r{\Ahttps?://(?:drive\.google\.com|docs\.google\.com)/(?:file/d/|open\?|drive/folders/).+}i
+
+    # Validate per-question evidence answers
+    @survey.categories.includes(:questions).each do |cat|
+      cat.questions.each do |q|
+        next unless q.question_type == "evidence"
+        val = answers[q.id.to_s]
+        next if val.blank?
+        val_str = val.is_a?(String) ? val : val.to_s
+        unless val_str =~ drive_regex
+          invalid_links << "Question #{q.id}: #{q.question}" unless invalid_links.any? { |s| s.include?("Question #{q.id}:") }
+        end
+      end
+    end
+
+    # Validate per-category evidence links if supplied
+    (evidence_links_by_category || {}).each do |cat_id_str, link_val|
+      next if link_val.blank?
+      link_str = link_val.is_a?(String) ? link_val : link_val.to_s
+      unless link_str =~ drive_regex
+        invalid_links << "Category #{cat_id_str}: invalid upload link"
+      end
+    end
+
+    if invalid_links.any?
+      flash[:alert] = "One or more upload links are invalid: " + invalid_links.join("; ")
+      redirect_to survey_path(@survey) and return
     end
 
     # Persist answers: ensure QuestionResponse links to surveyresponse

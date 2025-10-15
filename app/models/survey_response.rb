@@ -34,4 +34,17 @@ class SurveyResponse < ApplicationRecord
       [ question_text, answer_text ]
     end.compact.to_h
   end
+
+  # Generate a signed, time-limited token for download links.
+  # Uses Rails' message verifier via signed_id with purpose.
+  def signed_download_token(expires_in: 1.hour)
+    signed_id(purpose: :download_survey_response, expires_in: expires_in)
+  end
+
+  # Verify a signed token and return the SurveyResponse if valid
+  def self.find_by_signed_download_token(token)
+    find_signed!(token, purpose: :download_survey_response)
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveSupport::MessageVerifier::InvalidMessage, ActiveSupport::MessageVerifier::SignatureExpired => _e
+    nil
+  end
 end

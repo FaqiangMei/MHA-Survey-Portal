@@ -5,13 +5,15 @@
 
   <div class="flex flex-wrap items-center gap-3">
     <%= link_to "← Back", student_dashboard_path, class: tailwind_button_classes(:secondary) %>
-    <%= link_to "Download as PDF", download_survey_response_path(@survey_response, token: @survey_response.signed_download_token, format: :pdf), class: tailwind_button_classes(:primary), target: "_blank" %>
+    <%= link_to "Download as PDF", print_survey_response_path(@survey_response, token: @survey_response.signed_download_token, download: true), class: tailwind_button_classes(:primary), target: "_blank" %>
+    <%= link_to "Print", print_survey_response_path(@survey_response, token: @survey_response.signed_download_token), class: tailwind_button_classes(:subtle), target: "_blank" %>
   </div>
 
   <%= render @survey_response %>
 
   <div class="flex flex-wrap items-center gap-3">
     <%= link_to "← Back", student_dashboard_path, class: tailwind_button_classes(:secondary) %>
-    <%= link_to "Download as PDF", download_survey_response_path(@survey_response, token: @survey_response.signed_download_token, format: :pdf), class: tailwind_button_classes(:primary), target: "_blank" %>
+    <%= link_to "Download as PDF", print_survey_response_path(@survey_response, token: @survey_response.signed_download_token, download: true), class: tailwind_button_classes(:primary), target: "_blank" %>
+    <%= link_to "Print", print_survey_response_path(@survey_response, token: @survey_response.signed_download_token), class: tailwind_button_classes(:subtle), target: "_blank" %>
   </div>
 </div>

@@ -1,0 +1,56 @@
+<main class="main-content">
+  <section class="dashboard-section">
+    <div class="section-header">
+      <div>
+        <h1 class="section-title"><%= @survey.title %></h1>
+        <p class="section-subtitle">Preview how advisors will experience this survey.</p>
+      </div>
+      <div class="section-actions">
+        <%= link_to "Back to Surveys", admin_surveys_path, class: "btn" %>
+      </div>
+    </div>
+
+    <div class="survey-preview-meta">
+      <div class="meta-card">
+        <span class="meta-label">Semester</span>
+        <span class="meta-value"><%= @survey.semester %></span>
+      </div>
+      <div class="meta-card">
+        <span class="meta-label">Track</span>
+        <span class="meta-value"><%= @survey.track.presence || "Unassigned" %></span>
+      </div>
+      <div class="meta-card">
+        <span class="meta-label">Advisors</span>
+        <span class="meta-value"><%= @advisor_names.presence&.join(", ") || "Hidden" %></span>
+      </div>
+      <div class="meta-card">
+        <span class="meta-label">Competency Categories</span>
+        <span class="meta-value"><%= @category_names.presence&.join(", ") || "None" %></span>
+      </div>
+    </div>
+
+    <div class="survey-preview-questions">
+      <% @questions.each_with_index do |question, index| %>
+        <article class="question-card">
+          <header class="question-header">
+            <h2>Question <%= index + 1 %></h2>
+            <span class="question-type"><%= question.question_type.humanize %></span>
+          </header>
+          <p class="question-body"><%= question.question %></p>
+          <% if question.categories.any? %>
+            <p class="question-categories">Categories: <%= question.categories.map(&:name).join(", ") %></p>
+          <% end %>
+        </article>
+      <% end %>
+
+      <% if @questions.empty? %>
+        <p class="empty-state">No questions are currently assigned to this survey.</p>
+      <% end %>
+    </div>
+
+    <div class="preview-actions">
+      <%= link_to "Edit Survey", edit_admin_survey_path(@survey), class: "btn btn-secondary" %>
+      <%= link_to "Manage Surveys", admin_surveys_path, class: "btn btn-primary" %>
+    </div>
+  </section>
+</main>

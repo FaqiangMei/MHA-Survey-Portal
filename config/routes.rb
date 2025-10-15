@@ -38,6 +38,18 @@ Rails.application.routes.draw do
   patch "update_roles", to: "dashboards#update_roles", as: :update_roles
   get "debug_users", to: "dashboards#debug_users", as: :debug_users
 
+  namespace :admin do
+    resources :surveys do
+      collection do
+        patch :bulk_update
+      end
+
+      member do
+        get :preview
+      end
+    end
+  end
+
   resources :categories
   resources :feedbacks
   resources :questions

@@ -1,0 +1,191 @@
+<main class="main-content">
+  <section class="dashboard-section">
+    <div class="section-header">
+      <div>
+        <h1 class="section-title">Survey Management</h1>
+        <p class="section-subtitle">Create, organize, and monitor surveys before they reach advisors.</p>
+      </div>
+      <div class="section-actions">
+        <%= link_to "Create New Survey", new_admin_survey_path, class: "btn btn-primary" %>
+      </div>
+    </div>
+
+    <div class="survey-toolbar">
+      <%= form_with url: admin_surveys_path, method: :get, local: true, class: "survey-filter-form" do |form| %>
+        <div class="filter-grid">
+          <div class="filter-field">
+            <%= form.label :q, "Search", class: "filter-label" %>
+            <%= form.search_field :q, value: @query, placeholder: "Search by title", class: "input" %>
+          </div>
+
+          <div class="filter-field">
+            <%= form.label :semester, "Semester", class: "filter-label" %>
+            <%= form.select :semester, options_for_select(@semester_options, @selected_semester), include_blank: "All semesters", class: "input" %>
+          </div>
+
+          <div class="filter-field">
+            <%= form.label :track, "Track", class: "filter-label" %>
+            <%= form.select :track, options_for_select(@track_options, @selected_track), include_blank: "All tracks", class: "input" %>
+          </div>
+
+          <div class="filter-field">
+            <%= form.label :group_by, "Group By", class: "filter-label" %>
+            <%= form.select :group_by,
+              options_for_select([
+                ["Track", "track"],
+                ["Advisor", "advisor"],
+                ["Category", "category"],
+                ["Semester", "semester"]
+              ], @group_by),
+              {},
+              class: "input" %>
+          </div>
+
+          <div class="filter-actions">
+            <%= form.submit "Apply Filters", class: "btn btn-secondary" %>
+            <%= link_to "Reset", admin_surveys_path, class: "btn" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="dashboard-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Surveys (<%= @total_surveys %>)</h2>
+        <p class="section-subtitle">Select surveys to update groupings or open them to review details.</p>
+      </div>
+    </div>
+
+    <%= form_with url: bulk_update_admin_surveys_path, method: :patch, local: true, html: { class: "survey-bulk-form", data: { controller: "survey-bulk" } } do %>
+      <div class="bulk-select-all">
+        <label class="select-all">
+          <%= check_box_tag "bulk_select_all", "1", false, name: nil, data: { action: "change->survey-bulk#toggleAll", "survey-bulk-target": "selectAll" } %>
+          Select all listed surveys
+        </label>
+      </div>
+
+      <% if @grouped_surveys.blank? %>
+        <p class="empty-state">No surveys match the current filters.</p>
+      <% else %>
+        <div class="survey-groups">
+          <% @grouped_surveys.each do |group_name, surveys| %>
+            <details class="survey-group" open>
+              <summary>
+                <span class="group-title"><%= group_name %></span>
+                <span class="group-count"><%= pluralize(surveys.size, "survey") %></span>
+              </summary>
+
+              <div class="survey-group-body">
+                <% surveys.each do |survey| %>
+                  <article class="survey-row">
+                    <div class="survey-select-cell">
+                      <%= check_box_tag "survey_ids[]", survey.id, false,
+                        class: "survey-select",
+                        data: {
+                          action: "change->survey-bulk#markChanged",
+                          "survey-bulk-target": "checkbox",
+                          "survey-bulk-survey-id": survey.id
+                        } %>
+                    </div>
+                    <div class="survey-info">
+                      <h3 class="survey-name"><%= survey.title %></h3>
+                      <div class="survey-meta">
+                        <span><strong>Semester:</strong> <%= survey.semester %></span>
+                        <span><strong>Track:</strong> <%= survey.track.presence || "Unassigned" %></span>
+                        <span><strong>Categories:</strong> <%= ((survey.tagged_categories.presence || survey.categories).map(&:name).uniq.presence || ["None"]).join(", ") %></span>
+                        <span><strong>Advisors:</strong> <%= (survey.assigned_advisors.map(&:display_name).presence || ["Hidden"]).join(", ") %></span>
+                      </div>
+                    </div>
+                    <div class="survey-actions">
+                      <%= link_to "Preview", preview_admin_survey_path(survey), class: "btn" %>
+                      <%= link_to "Edit", edit_admin_survey_path(survey), class: "btn btn-secondary" %>
+                      <%= link_to "Delete", admin_survey_path(survey),
+                        data: { turbo_method: :delete, turbo_confirm: "Delete '#{survey.title}'? This cannot be undone." },
+                        class: "btn btn-danger" %>
+                    </div>
+                  </article>
+                <% end %>
+              </div>
+            </details>
+          <% end %>
+        </div>
+      <% end %>
+
+      <div class="bulk-actions">
+        <h3 class="bulk-title">Group Selected Surveys</h3>
+        <div class="bulk-grid">
+          <div class="bulk-field">
+            <label for="bulk-track">Track</label>
+            <input id="bulk-track" name="track" list="bulk-track-options" placeholder="Leave blank to keep track unchanged" class="input" />
+            <datalist id="bulk-track-options">
+              <% @track_options.each do |track_option| %>
+                <option value="<%= track_option %>"></option>
+              <% end %>
+            </datalist>
+          </div>
+
+          <div class="bulk-field">
+            <label for="bulk-advisors">Advisors</label>
+            <select id="bulk-advisors" name="assigned_advisor_ids[]" multiple size="6" class="multi-select">
+              <% @advisors.each do |advisor| %>
+                <option value="<%= advisor.advisor_id %>"><%= advisor.display_name %></option>
+              <% end %>
+            </select>
+            <p class="field-hint">Leave unselected to keep current advisor visibility.</p>
+          </div>
+
+          <div class="bulk-field">
+            <label for="bulk-categories">Competency Categories</label>
+            <select id="bulk-categories" name="tagged_category_ids[]" multiple size="6" class="multi-select">
+              <% @categories.each do |category| %>
+                <option value="<%= category.id %>"><%= category.name %></option>
+              <% end %>
+            </select>
+            <p class="field-hint">Leave unselected to keep existing tags.</p>
+          </div>
+        </div>
+
+        <div class="bulk-actions-footer">
+          <button type="submit" class="btn btn-primary" data-survey-bulk-target="submit" disabled>Apply Grouping</button>
+        </div>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="dashboard-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Recent Survey Activity</h2>
+        <p class="section-subtitle">Audit log of survey changes for accountability.</p>
+      </div>
+    </div>
+
+    <div class="audit-log-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Survey</th>
+            <th>Details</th>
+            <th>Performed By</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @audit_logs.each do |log| %>
+            <% metadata = log.metadata.with_indifferent_access %>
+            <tr>
+              <td><%= log.action.titleize %></td>
+              <td><%= log.survey&.title || "Survey ##{log.survey_id}" %></td>
+              <td><%= summarize_survey_audit_metadata(metadata) %></td>
+              <td><%= log.admin&.name || metadata[:performed_by] %></td>
+              <td><%= l(log.created_at, format: :long) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>

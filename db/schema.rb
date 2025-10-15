@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_15_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -103,6 +103,35 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.index ["uin"], name: "index_students_on_uin", unique: true, where: "(uin IS NOT NULL)"
   end
 
+  create_table "survey_assignments", force: :cascade do |t|
+    t.bigint "survey_id", null: false
+    t.bigint "advisor_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["survey_id", "advisor_id"], name: "index_survey_assignments_on_survey_id_and_advisor_id", unique: true
+    t.index ["survey_id"], name: "index_survey_assignments_on_survey_id"
+  end
+
+  create_table "survey_audit_logs", force: :cascade do |t|
+    t.bigint "survey_id"
+    t.bigint "admin_id", null: false
+    t.string "action", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["action"], name: "index_survey_audit_logs_on_action"
+    t.index ["created_at"], name: "index_survey_audit_logs_on_created_at"
+  end
+
+  create_table "survey_category_tags", force: :cascade do |t|
+    t.bigint "survey_id", null: false
+    t.bigint "category_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["survey_id", "category_id"], name: "index_survey_category_tags_on_survey_id_and_category_id", unique: true
+    t.index ["survey_id"], name: "index_survey_category_tags_on_survey_id"
+  end
+
   create_table "survey_questions", force: :cascade do |t|
     t.bigint "survey_id", null: false
     t.bigint "question_id", null: false
@@ -118,6 +147,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.string "semester", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "track"
+    t.index ["track"], name: "index_surveys_on_track"
   end
 
   create_table "users", force: :cascade do |t|
@@ -146,6 +177,12 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
   add_foreign_key "student_questions", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "students", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "students", "users", column: "student_id", on_delete: :cascade
+  add_foreign_key "survey_assignments", "advisors", primary_key: "advisor_id", on_delete: :cascade
+  add_foreign_key "survey_assignments", "surveys", on_delete: :cascade
+  add_foreign_key "survey_audit_logs", "admins", primary_key: "admin_id", on_delete: :cascade
+  add_foreign_key "survey_audit_logs", "surveys", on_delete: :nullify
+  add_foreign_key "survey_category_tags", "categories", on_delete: :cascade
+  add_foreign_key "survey_category_tags", "surveys", on_delete: :cascade
   add_foreign_key "survey_questions", "questions", on_delete: :cascade
   add_foreign_key "survey_questions", "surveys", on_delete: :cascade
 end

@@ -74,4 +74,54 @@ module ApplicationHelper
 
     "#{base} #{variant}"
   end
+
+  def summarize_survey_audit_metadata(metadata)
+    data = metadata.with_indifferent_access
+    fragments = []
+
+    fragments << data[:note].to_s if data[:note].present?
+
+    if data[:attributes].is_a?(Hash)
+      data[:attributes].each do |attribute, change|
+        change = change.with_indifferent_access
+        before = humanize_audit_value(change[:before])
+        after = humanize_audit_value(change[:after])
+        next if before == after
+
+        fragments << "#{attribute.to_s.titleize}: #{before} -> #{after}"
+      end
+    end
+
+    if data[:associations].is_a?(Hash)
+      data[:associations].each do |name, change|
+        change = change.with_indifferent_access
+        before = humanize_audit_list(change[:before])
+        after = humanize_audit_list(change[:after])
+        next if before == after
+
+        fragments << "#{name.to_s.titleize}: #{before} -> #{after}"
+      end
+    end
+
+    fragments = fragments.compact
+    fragments = ["No recorded changes"] if fragments.empty?
+    fragments.first(3).join(" | ")
+  end
+
+  private
+
+  def humanize_audit_value(value)
+    return "none" if value.nil?
+    return humanize_audit_list(value) if value.is_a?(Array)
+
+    string = value.to_s.strip
+    string.present? ? string : "none"
+  end
+
+  def humanize_audit_list(values)
+    items = Array(values).map { |item| item.to_s.strip }.reject(&:blank?)
+    return "none" if items.empty?
+
+    items.join(", ")
+  end
 end

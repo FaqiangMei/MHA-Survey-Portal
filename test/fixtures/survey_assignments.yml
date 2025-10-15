@@ -1,0 +1,5 @@
+fall_assignment:
+  survey: fall_2025
+  advisor: advisor
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

@@ -1,0 +1,80 @@
+<%= form_with(model: [:admin, survey], local: true, class: "survey-form") do |form| %>
+  <% if survey.errors.any? %>
+    <div class="form-errors">
+      <h2><%= pluralize(survey.errors.count, "error") %> prevented this survey from being saved:</h2>
+      <ul>
+        <% survey.errors.each do |error| %>
+          <li><%= error.full_message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="form-grid">
+    <div class="form-field">
+      <%= form.label :title, "Survey Title" %>
+      <%= form.text_field :title, required: true, class: "input" %>
+    </div>
+
+    <div class="form-field">
+      <%= form.label :semester, "Semester" %>
+      <%= form.text_field :semester, required: true, placeholder: "Fall 2025", class: "input" %>
+    </div>
+
+    <div class="form-field">
+      <%= form.label :track, "Program Track" %>
+      <%= form.text_field :track, list: "survey-track-options", placeholder: "Residential", class: "input" %>
+      <datalist id="survey-track-options">
+        <% @track_options.each do |track_option| %>
+          <option value="<%= track_option %>"></option>
+        <% end %>
+      </datalist>
+      <p class="field-hint">Tracks help advisors find the right surveys for their students.</p>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <h2 class="section-heading">Advisor Visibility</h2>
+    <p class="field-hint">Select which advisors can distribute this survey. Leave empty to keep it hidden until later.</p>
+    <%= form.select :assigned_advisor_ids,
+      options_from_collection_for_select(@advisors, :advisor_id, :display_name, survey.assigned_advisor_ids),
+      { include_hidden: false },
+      multiple: true,
+      size: 6,
+      class: "multi-select" %>
+  </div>
+
+  <div class="form-section">
+    <h2 class="section-heading">Competency Categories</h2>
+    <p class="field-hint">Tag the survey with competency categories so it appears in the correct groupings.</p>
+    <%= form.select :tagged_category_ids,
+      options_from_collection_for_select(@categories, :id, :name, survey.tagged_category_ids),
+      { include_hidden: false },
+      multiple: true,
+      size: 6,
+      class: "multi-select" %>
+  </div>
+
+  <div class="form-section">
+    <h2 class="section-heading">Questions</h2>
+    <p class="field-hint">Choose which questions will appear in this survey. Questions keep their original order.</p>
+    <div class="question-selection">
+      <% @questions.each do |question| %>
+        <% checkbox_id = "survey-question-#{question.id}" %>
+        <label class="question-option" for="<%= checkbox_id %>">
+          <%= check_box_tag "survey[question_ids][]", question.id, survey.question_ids.include?(question.id), id: checkbox_id %>
+          <span class="question-text"><%= question.question %></span>
+          <span class="question-meta"><%= question.question_type.humanize %></span>
+          <% if question.categories.any? %>
+            <span class="question-categories"><%= question.categories.map(&:name).join(", ") %></span>
+          <% end %>
+        </label>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <%= form.submit(survey.persisted? ? "Update Survey" : "Create Survey", class: "btn btn-primary") %>
+    <%= link_to "Cancel", admin_surveys_path, class: "btn btn-secondary" %>
+  </div>
+<% end %>

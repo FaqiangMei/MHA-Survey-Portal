@@ -19,9 +19,11 @@
 
       <!-- Surveys -->
       <div class="feature-item">
-        <div class="feature-icon">📄</div>
-        <div class="feature-title">Surveys</div>
-        <div class="feature-description"><%= @total_surveys || 0 %> active</div>
+        <%= link_to admin_surveys_path, class: "feature-link", style: "display:block; text-decoration:none; color:inherit;" do %>
+          <div class="feature-icon">📄</div>
+          <div class="feature-title">Surveys</div>
+          <div class="feature-description"><%= @total_surveys || 0 %> active</div>
+        <% end %>
       </div>
 
       <!-- Survey Responses -->

@@ -1,5 +1,6 @@
 class SurveysController < ApplicationController
   before_action :set_survey, only: %i[ show edit update destroy submit ]
+  before_action :require_admin_for_management, only: %i[new create edit update destroy]
 
   # GET /surveys or /surveys.json
   def index
@@ -246,5 +247,11 @@ class SurveysController < ApplicationController
       end
 
       @category_evidence_question_cache[category.id] = question
+    end
+
+    def require_admin_for_management
+      return if current_user&.role_admin?
+
+      redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
     end
 end

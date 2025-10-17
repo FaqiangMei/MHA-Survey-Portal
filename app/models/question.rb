@@ -13,6 +13,7 @@ class Question < ApplicationRecord
   has_many :students, through: :student_questions
 
   alias_attribute :question, :question_text
+  alias_attribute :required, :is_required
 
   validates :category, presence: true
   validates :question_text, presence: true
@@ -22,6 +23,10 @@ class Question < ApplicationRecord
   scope :ordered, -> { order(:question_order) }
 
   before_validation :ensure_question_order
+
+  def required?
+    is_required?
+  end
 
   def answer_options_list
     raw = answer_options.to_s

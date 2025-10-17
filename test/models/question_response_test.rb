@@ -5,6 +5,7 @@ class StudentQuestionTest < ActiveSupport::TestCase
     @student = students(:student)
     @advisor = advisors(:advisor)
     @question = questions(:fall_q1)
+    @category = categories(:clinical_skills)
   end
 
   test "answer serialization preserves arrays" do
@@ -22,11 +23,11 @@ class StudentQuestionTest < ActiveSupport::TestCase
   end
 
   test "evidence questions require Google Drive link" do
-    evidence_question = Question.create!(
-      question: "Provide evidence",
+    evidence_question = @category.questions.create!(
+      question_text: "Provide evidence",
       question_order: 2,
       question_type: "evidence",
-      required: true
+      is_required: true
     )
 
     sq = StudentQuestion.new(student: @student, advisor: @advisor, question: evidence_question)
@@ -37,11 +38,11 @@ class StudentQuestionTest < ActiveSupport::TestCase
   end
 
   test "valid Google Drive links are accepted for evidence questions" do
-    evidence_question = Question.create!(
-      question: "Upload proof",
+    evidence_question = @category.questions.create!(
+      question_text: "Upload proof",
       question_order: 3,
       question_type: "evidence",
-      required: true
+      is_required: true
     )
 
     sq = StudentQuestion.new(student: @student, advisor: @advisor, question: evidence_question)

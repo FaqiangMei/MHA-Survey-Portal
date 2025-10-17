@@ -208,10 +208,10 @@ class Admin::SurveysController < Admin::BaseController
     current = Time.zone.today
     year = current.year
     season = case current.month
-             when 1..4 then "Spring"
-             when 5..7 then "Summer"
-             else "Fall"
-             end
+    when 1..4 then "Spring"
+    when 5..7 then "Summer"
+    else "Fall"
+    end
     "#{season} #{year}"
   end
 

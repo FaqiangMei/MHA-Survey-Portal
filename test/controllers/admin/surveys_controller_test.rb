@@ -5,9 +5,6 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     @admin_user = users(:admin)
     @advisor_user = users(:advisor)
     @survey = surveys(:fall_2025)
-    @advisor = advisors(:advisor)
-    @category = categories(:clinical_skills)
-    @question = questions(:fall_q1)
     sign_in @admin_user
   end
 
@@ -19,19 +16,34 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to dashboard_path
   end
 
-  test "creates survey with assignments, tags, and audit log" do
+  test "creates survey with tracks and logs change" do
     params = {
       survey: {
         title: "Capstone Survey",
+        description: "Capstone overview",
         semester: "Fall 2026",
-        track: "Residential",
-        question_ids: [ @question.id ],
-        assigned_advisor_ids: [ @advisor.advisor_id ],
-        tagged_category_ids: [ @category.id ]
+        is_active: true,
+        track_list: [ "Residential" ],
+        categories_attributes: {
+          "0" => {
+            name: "Leadership",
+            description: "Leadership competencies",
+            questions_attributes: {
+              "0" => {
+                question_text: "Describe your leadership style",
+                question_type: "short_answer",
+                question_order: 1,
+                is_required: true,
+                has_evidence_field: false,
+                answer_options: ""
+              }
+            }
+          }
+        }
       }
     }
 
-    assert_difference ["Survey.count", "SurveyAuditLog.count"] do
+    assert_difference [ "Survey.count", "SurveyAssignment.count", "SurveyChangeLog.count" ] do
       post admin_surveys_path, params: params
     end
 
@@ -39,65 +51,94 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
 
     survey = Survey.order(:created_at).last
     assert_equal "Capstone Survey", survey.title
-    assert_equal "Residential", survey.track
-    assert_includes survey.question_ids, @question.id
-    assert_includes survey.assigned_advisor_ids, @advisor.advisor_id
-    assert_includes survey.tagged_category_ids, @category.id
+    assert_equal [ "Residential" ], survey.track_list
+    assert_equal 1, survey.categories.count
+    assert_equal 1, survey.questions.count
 
-    log = SurveyAuditLog.order(:created_at).last
+    log = SurveyChangeLog.order(:created_at).last
     assert_equal "create", log.action
-    assert_equal survey.id, log.survey_id
-    assert_equal "Capstone Survey", log.metadata.dig("attributes", "title", "after")
+    assert_equal survey, log.survey
+    assert_equal @admin_user, log.admin
+    assert_equal "Survey created with 1 track(s)", log.description
   end
 
-  test "updates survey and records audit trail" do
-    survey = surveys(:spring_2025)
+  test "updates survey and records change summary" do
+    survey = surveys(:fall_2025)
 
-    patch admin_survey_path(survey), params: {
-      survey: {
-        title: "Updated Survey Title",
-        semester: survey.semester,
-        track: "Hybrid",
-        question_ids: [ @question.id ],
-        assigned_advisor_ids: [ @advisor.advisor_id ],
-        tagged_category_ids: [ @category.id ]
+    assert_difference "SurveyChangeLog.count" do
+      patch admin_survey_path(survey), params: {
+        survey: {
+          title: "Updated Survey Title",
+          description: "Updated details",
+          track_list: [ "Hybrid" ]
+        }
       }
-    }
+    end
+
+    assert_redirected_to admin_surveys_path
+
+  survey.reload
+  assert_equal "Updated Survey Title", survey.title
+  assert_equal [ "Hybrid" ], survey.track_list
+
+    log = SurveyChangeLog.order(:created_at).last
+    assert_equal "update", log.action
+    assert_equal survey, log.survey
+    assert_equal @admin_user, log.admin
+    assert_includes log.description, "Tracks updated to Hybrid"
+    assert_includes log.description, "Title changed from"
+  end
+
+  test "archives survey and removes track assignments" do
+    assert @survey.is_active?
+    assert @survey.track_list.any?
+
+    prior_assignment_count = SurveyAssignment.count
+    prior_tracks = @survey.track_list.size
+
+    assert_difference "SurveyChangeLog.count" do
+      patch archive_admin_survey_path(@survey)
+    end
+
+    assert_redirected_to admin_surveys_path
+
+    @survey.reload
+    refute @survey.is_active?
+    assert_empty @survey.track_list
+    assert_equal prior_assignment_count - prior_tracks, SurveyAssignment.count
+
+    log = SurveyChangeLog.order(:created_at).last
+    assert_equal "archive", log.action
+    assert_equal @survey, log.survey
+  end
+
+  test "activates survey and logs change" do
+    survey = surveys(:fall_2025)
+    survey.update!(is_active: false)
+
+    assert_difference "SurveyChangeLog.count" do
+      patch activate_admin_survey_path(survey)
+    end
 
     assert_redirected_to admin_surveys_path
 
     survey.reload
-    assert_equal "Updated Survey Title", survey.title
-    assert_equal "Hybrid", survey.track
-    assert_equal [ @question.id ], survey.question_ids.sort
+    assert survey.is_active?
 
-    log = SurveyAuditLog.order(:created_at).last
-    assert_equal "update", log.action
-    assert_equal survey.id, log.survey_id
-    assert_equal "Hybrid", log.metadata.dig("attributes", "track", "after")
-    assert_equal [ @advisor.display_name ], log.metadata.dig("associations", "advisors", "after")
+    log = SurveyChangeLog.order(:created_at).last
+    assert_equal "activate", log.action
+    assert_equal survey, log.survey
   end
 
-  test "bulk update applies grouping preferences" do
-    survey_ids = [ surveys(:fall_2025).id, surveys(:spring_2025).id ]
-
-    patch bulk_update_admin_surveys_path, params: {
-      survey_ids: survey_ids,
-      track: "Executive",
-      assigned_advisor_ids: [ @advisor.advisor_id ],
-      tagged_category_ids: [ @category.id ]
-    }
-
-    assert_redirected_to admin_surveys_path
-
-    Survey.where(id: survey_ids).each do |survey|
-      assert_equal "Executive", survey.track
-      assert_includes survey.assigned_advisor_ids, @advisor.advisor_id
-      assert_includes survey.tagged_category_ids, @category.id
+  test "preview renders successfully and logs preview" do
+    assert_difference "SurveyChangeLog.count" do
+      get preview_admin_survey_path(@survey)
     end
 
-    log = SurveyAuditLog.order(:created_at).last
-    assert_equal "group_update", log.action
-    assert_includes survey_ids, log.survey_id
+    assert_response :success
+
+    log = SurveyChangeLog.order(:created_at).last
+    assert_equal "preview", log.action
+    assert_equal @survey, log.survey
   end
 end

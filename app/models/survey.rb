@@ -19,7 +19,7 @@ class Survey < ApplicationRecord
 
   validates :title, presence: true
   validates :semester, presence: true
-  validates :is_active, inclusion: { in: [true, false] }
+  validates :is_active, inclusion: { in: [ true, false ] }
   validate :validate_category_structure
 
   scope :ordered, -> { order(created_at: :desc) }

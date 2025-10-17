@@ -105,7 +105,7 @@ module ApplicationHelper
     end
 
     fragments = fragments.compact
-    fragments = ["No recorded changes"] if fragments.empty?
+    fragments = [ "No recorded changes" ] if fragments.empty?
     fragments.first(3).join(" | ")
   end
 
@@ -124,7 +124,7 @@ module ApplicationHelper
     indicator = if active
       content_tag(:span, "(#{@sort_direction})", class: "text-[0.65rem] font-medium text-indigo-600")
     end
-    label_content = indicator ? safe_join([label, indicator], " ") : label
+    label_content = indicator ? safe_join([ label, indicator ], " ") : label
 
     link_to label_content, admin_surveys_path(target_params), class: classes.join(" ")
   end

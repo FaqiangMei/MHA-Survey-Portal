@@ -8,7 +8,6 @@ class SurveyResponseTest < ActiveSupport::TestCase
 
     @survey = surveys(:fall_2025)
     @question = questions(:fall_q1)
-    SurveyQuestion.find_or_create_by!(survey: @survey, question: @question)
   end
 
   test "answers returns student responses keyed by question id" do
@@ -20,9 +19,15 @@ class SurveyResponseTest < ActiveSupport::TestCase
   end
 
   test "question responses scope to survey" do
-    other_survey = Survey.create!(title: "Other", semester: "Fall 2025")
-    other_question = Question.create!(question: "Other?", question_order: 2, question_type: "short_answer", required: false)
-    SurveyQuestion.create!(survey: other_survey, question: other_question)
+    other_survey = Survey.new(title: "Other", semester: "Fall 2025")
+    other_category = other_survey.categories.build(name: "Other", description: "Other category")
+    other_question = other_category.questions.build(
+      question_text: "Other?",
+      question_order: 2,
+      question_type: "short_answer",
+      is_required: false
+    )
+    other_survey.save!
 
     StudentQuestion.create!(student_id: @student.student_id, advisor: @advisor, question: @question, response_value: "Very satisfied")
     StudentQuestion.create!(student_id: @student.student_id, advisor: @advisor, question: other_question, response_value: "Different")

@@ -15,7 +15,14 @@ require "minitest/mock"
 
 class ActiveSupport::TestCase
   parallelize(workers: 1)
-  fixtures :all
+  fixtures :admins,
+           :advisors,
+           :categories,
+           :questions,
+           :students,
+           :surveys,
+           :survey_assignments,
+           :users
 end
 
 class ActionDispatch::IntegrationTest

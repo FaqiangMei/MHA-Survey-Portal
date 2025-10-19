@@ -93,7 +93,7 @@
               </div>
               <div class="survey-actions">
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
-                  <%= link_to 'Review', survey_path(survey), class: tailwind_button_classes(:secondary) %>
+                  <%= link_to 'Review', survey_response_path(survey_response), class: tailwind_button_classes(:secondary) %>
                   <%= link_to 'Download PDF', download_survey_response_path(survey_response, token: download_token), class: tailwind_button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
                 </div>
               </div>

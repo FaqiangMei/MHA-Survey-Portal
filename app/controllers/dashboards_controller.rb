@@ -252,6 +252,8 @@ class DashboardsController < ApplicationController
     redirect_to dashboard_path_for_role(new_role)
   end
 
+  # switch_back removed: switching now freely allowed between roles when enabled via ENV
+
   # Lists students and advisors for assignment management.
   #
   # @return [void]
@@ -301,9 +303,17 @@ class DashboardsController < ApplicationController
   #
   # @return [void]
   def ensure_role_switch_allowed
+    # Always allow in development and test
     return if Rails.env.development? || Rails.env.test?
 
-    redirect_to dashboard_path, alert: "Role switching is only available in development and test environments."
+    # When ENABLE_ROLE_SWITCH=="1" the feature is explicitly enabled for this deployment.
+    # In that mode, allow any signed-in user to use the switcher (useful for testing impersonation
+    # flows across roles). If the flag is not set, deny access in production.
+    if ENV["ENABLE_ROLE_SWITCH"] == "1" && current_user.present?
+      return
+    end
+
+    redirect_to dashboard_path, alert: "Role switching is only available in development/test or when ENABLE_ROLE_SWITCH is enabled."
   end
 
   # Resolves the dashboard path for a given role value.

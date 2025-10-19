@@ -69,7 +69,7 @@
       window.addEventListener('load', function(){
         setTimeout(function(){
           if (isDownloadMode()) {
-            var fname = 'survey_response_<%= @survey_response&.surveyresponse_id || @survey_response&.id %>.pdf';
+            var fname = 'survey_response_<%= @survey_response&.id %>.pdf';
             autoDownloadPdf(fname);
           } else {
             triggerPrint();

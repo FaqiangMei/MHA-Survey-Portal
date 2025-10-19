@@ -11,17 +11,6 @@ class SurveyResponsesController < ApplicationController
     @question_responses = preload_question_responses
   end
 
-  # Renders the print-friendly layout for a survey response.
-  #
-  # @return [void]
-  def print
-    @question_responses = preload_question_responses
-
-    respond_to do |format|
-      format.html { render :print, layout: "print" }
-    end
-  end
-
   # Streams a PDF version of the survey response when WickedPdf is available.
   # Falls back with an error when server-side rendering is disabled.
   #
@@ -77,7 +66,7 @@ class SurveyResponsesController < ApplicationController
     return if params[:token].present? # signed token grants access without session
 
     current = current_user
-    if current&.admin? || current&.advisor?
+    if current&.role_admin? || current&.role_advisor?
       return
     end
 

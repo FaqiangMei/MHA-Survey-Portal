@@ -8,7 +8,7 @@
     </p>
   </header>
 
-  <%= form_with url: submit_survey_path(@survey), method: :post, local: true, class: "space-y-6 survey-form" do |form| %>
+  <%= form_with url: submit_survey_path(@survey), method: :post, local: true, data: { turbo: false }, class: "space-y-6 survey-form" do |form| %>
     <% @category_groups.each do |category| %>
       <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <header>
@@ -20,7 +20,7 @@
 
         <% category.questions.ordered.each_with_index do |question, index| %>
           <% field_name = "answers[#{question.id}]" %>
-          <% current_value = @existing_answers[question.id] %>
+          <% current_value = @existing_answers[question.id.to_s] %>
           <% required = @computed_required[question.id] %>
 
           <article class="space-y-2 question-block" data-question-id="<%= question.id %>">
@@ -35,6 +35,9 @@
             <% case question.question_type %>
             <% when "short_answer" %>
               <%= text_area_tag field_name, current_value, rows: 3, id: "question-#{question.id}", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
             <% when "multiple_choice" %>
               <% options = question.answer_options_list.presence || [] %>
               <div class="flex flex-col gap-2" role="radiogroup">
@@ -45,16 +48,30 @@
                   </label>
                 <% end %>
               </div>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
             <% when "scale" %>
               <div class="flex items-center gap-3">
                 <span class="text-xs text-slate-500">Low</span>
                 <%= range_field_tag field_name, current_value || 3, in: 1..5, step: 1, id: "question-#{question.id}", class: "w-full" %>
                 <span class="text-xs text-slate-500">High</span>
               </div>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
             <% when "evidence" %>
               <%= text_field_tag field_name, current_value, id: "question-#{question.id}", placeholder: "https://drive.google.com/...", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% elsif current_value.present? && Array(@invalid_evidence).map(&:to_s).include?(question.id.to_s) %>
+                <div class="text-xs text-red-600 mt-1">Invalid Google Drive link</div>
+              <% end %>
             <% else %>
               <%= text_field_tag field_name, current_value, id: "question-#{question.id}", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
             <% end %>
 
           </article>

@@ -40,14 +40,23 @@ Rails.application.routes.draw do
   patch "update_roles", to: "dashboards#update_roles", as: :update_roles
   get "debug_users", to: "dashboards#debug_users", as: :debug_users
 
+  namespace :admin do
+    resources :surveys do
+      member do
+        get :preview
+        patch :archive
+        patch :activate
+      end
+    end
+    resources :survey_change_logs, only: :index
+  end
+
   resources :categories
   resources :feedbacks
   resources :questions
 
-  resources :students, only: [:index, :update]
-  patch '/students/:id/update_advisor', to: 'dashboards#update_student_advisor', as: 'update_student_advisor'
-
-
+  resources :students, only: %i[index update]
+  patch "students/:id/update_advisor", to: "dashboards#update_student_advisor", as: :update_student_advisor
 
   resources :surveys do
     post :submit, on: :member

@@ -1,11 +1,15 @@
 fall_2025:
   title: Fall 2025 Health Assessment
   semester: Fall 2025
+  description: Baseline residential survey
+  is_active: true
   created_at: <%= Time.zone.now %>
   updated_at: <%= Time.zone.now %>
 
 spring_2025:
   title: Spring 2025 Health Assessment
   semester: Spring 2025
+  description: Executive program check-in
+  is_active: true
   created_at: <%= Time.zone.now %>
   updated_at: <%= Time.zone.now %>

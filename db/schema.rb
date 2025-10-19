@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_16_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -29,18 +29,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.string "description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-  end
-
-  create_table "category_questions", force: :cascade do |t|
-    t.bigint "category_id", null: false
-    t.bigint "question_id", null: false
-    t.string "display_label"
-    t.string "description"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["category_id", "question_id"], name: "index_category_questions_on_category_id_and_question_id", unique: true
-    t.index ["category_id"], name: "index_category_questions_on_category_id"
-    t.index ["question_id"], name: "index_category_questions_on_question_id"
+    t.bigint "survey_id"
+    t.index ["survey_id"], name: "index_categories_on_survey_id"
   end
 
   create_table "feedback", force: :cascade do |t|
@@ -70,13 +60,18 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
   end
 
   create_table "questions", force: :cascade do |t|
-    t.string "question", null: false
+    t.string "question_text", null: false
     t.integer "question_order", null: false
-    t.boolean "required", default: false, null: false
+    t.boolean "is_required", default: false, null: false
     t.string "question_type", null: false
     t.text "answer_options"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "category_id"
+    t.boolean "has_evidence_field", default: false, null: false
+    t.jsonb "configuration", default: {}, null: false
+    t.index ["category_id", "question_order"], name: "index_questions_on_category_id_and_question_order"
+    t.index ["category_id"], name: "index_questions_on_category_id"
     t.index ["question_order"], name: "index_questions_on_question_order"
   end
 
@@ -103,14 +98,24 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.index ["uin"], name: "index_students_on_uin", unique: true, where: "(uin IS NOT NULL)"
   end
 
-  create_table "survey_questions", force: :cascade do |t|
+  create_table "survey_assignments", force: :cascade do |t|
     t.bigint "survey_id", null: false
-    t.bigint "question_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["question_id"], name: "index_survey_questions_on_question_id"
-    t.index ["survey_id", "question_id"], name: "index_survey_questions_on_survey_id_and_question_id", unique: true
-    t.index ["survey_id"], name: "index_survey_questions_on_survey_id"
+    t.string "track", null: false
+    t.index ["survey_id", "track"], name: "index_survey_assignments_on_survey_id_and_track", unique: true
+    t.index ["survey_id"], name: "index_survey_assignments_on_survey_id"
+  end
+
+  create_table "survey_change_logs", force: :cascade do |t|
+    t.bigint "survey_id"
+    t.bigint "admin_id", null: false
+    t.string "action", null: false
+    t.text "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["admin_id"], name: "index_survey_change_logs_on_admin_id"
+    t.index ["survey_id"], name: "index_survey_change_logs_on_survey_id"
   end
 
   create_table "surveys", force: :cascade do |t|
@@ -118,6 +123,13 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.string "semester", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "track"
+    t.text "description"
+    t.boolean "is_active", default: true, null: false
+    t.bigint "created_by_id"
+    t.index ["created_by_id"], name: "index_surveys_on_created_by_id"
+    t.index ["is_active"], name: "index_surveys_on_is_active"
+    t.index ["track"], name: "index_surveys_on_track"
   end
 
   create_table "users", force: :cascade do |t|
@@ -135,17 +147,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
 
   add_foreign_key "admins", "users", column: "admin_id", on_delete: :cascade
   add_foreign_key "advisors", "users", column: "advisor_id", on_delete: :cascade
-  add_foreign_key "category_questions", "categories", on_delete: :cascade
-  add_foreign_key "category_questions", "questions", on_delete: :cascade
+  add_foreign_key "categories", "surveys"
   add_foreign_key "feedback", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "feedback", "categories", on_delete: :cascade
   add_foreign_key "feedback", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "feedback", "surveys", on_delete: :cascade
+  add_foreign_key "questions", "categories"
   add_foreign_key "student_questions", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "student_questions", "questions", on_delete: :cascade
   add_foreign_key "student_questions", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "students", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "students", "users", column: "student_id", on_delete: :cascade
-  add_foreign_key "survey_questions", "questions", on_delete: :cascade
-  add_foreign_key "survey_questions", "surveys", on_delete: :cascade
+  add_foreign_key "survey_assignments", "surveys", on_delete: :cascade
+  add_foreign_key "survey_change_logs", "surveys", on_delete: :nullify
+  add_foreign_key "survey_change_logs", "users", column: "admin_id"
+  add_foreign_key "surveys", "users", column: "created_by_id"
 end

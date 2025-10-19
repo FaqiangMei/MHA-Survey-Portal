@@ -28,6 +28,9 @@
 !/tmp/storage/
 !/tmp/storage/.keep
 
+# Additional tmp artifacts created by tests or tooling.
+/tmp/cache
+/tmp/screenshots/
 
 # Rails asset pipeline output (generated during deployment)
 /public/assets
@@ -37,36 +40,28 @@
 /slugignore.generated
 
 # Local bundler installs (should not be committed)
-/vendor
-/vendor/bundle
-/vendor/cache
+/vendor/bundle/
+/vendor/cache/
 
 # Front-end build outputs
-/node_modules
-/app/assets/builds
-/app/javascript/packs
+/app/assets/builds/
+!/app/assets/builds/.keep
+/app/javascript/packs/
+/node_modules/
 
 # Build pack / deployment helpers
 /.apt
-/tmp/cache
 
 # Ignore master key for decrypting credentials and more.
 /config/master.key
 
 # Ignore test coverage reports
 /coverage/
-
-# Ignore vendored gems and caches
-/vendor/bundle/
-/vendor/cache/
-
-# JavaScript dependencies (if present)
-/node_modules/
+doc/
+.yardoc/
 
 # Editor and OS cruft
 .DS_Store
 /.idea/
 /.vscode/
 /.byebug_history
-/app/assets/builds/*
-!/app/assets/builds/.keep

@@ -1,0 +1,5 @@
+fall_tag:
+  survey: fall_2025
+  category: clinical_skills
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

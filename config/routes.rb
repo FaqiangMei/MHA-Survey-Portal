@@ -64,7 +64,6 @@ Rails.application.routes.draw do
 
   resources :survey_responses, only: :show do
     member do
-      get :print
       get :download
     end
   end

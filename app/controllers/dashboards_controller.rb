@@ -323,14 +323,17 @@ class DashboardsController < ApplicationController
   #
   # @return [void]
   def ensure_role_switch_allowed
+    # Always allow in development and test
     return if Rails.env.development? || Rails.env.test?
 
-    # Allow in production only when explicitly enabled and the current user is an admin
-    if ENV["ENABLE_ROLE_SWITCH"] == "1" && current_user&.role_admin?
+    # When ENABLE_ROLE_SWITCH=="1" the feature is explicitly enabled for this deployment.
+    # In that mode, allow any signed-in user to use the switcher (useful for testing impersonation
+    # flows across roles). If the flag is not set, deny access in production.
+    if ENV["ENABLE_ROLE_SWITCH"] == "1" && current_user.present?
       return
     end
 
-    redirect_to dashboard_path, alert: "Role switching is only available in development, test, or when enabled for admins via ENABLE_ROLE_SWITCH."
+    redirect_to dashboard_path, alert: "Role switching is only available in development/test or when ENABLE_ROLE_SWITCH is enabled."
   end
 
   # Resolves the dashboard path for a given role value.

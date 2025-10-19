@@ -304,7 +304,7 @@ class DashboardsController < ApplicationController
     return if Rails.env.development? || Rails.env.test?
 
     # Allow in production only when explicitly enabled and the current user is an admin
-    if ENV['ENABLE_ROLE_SWITCH'] == '1' && current_user&.role_admin?
+    if ENV["ENABLE_ROLE_SWITCH"] == "1" && current_user&.role_admin?
       return
     end
 

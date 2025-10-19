@@ -10,6 +10,7 @@ if ENV["SKIP_TAILWIND_BUILD"].blank? && !File.exist?(tailwind_build)
 end
 
 require_relative "../config/environment"
+Rails.application.load_seed if Rails.env.test?
 require "rails/test_help"
 require "minitest/mock"
 

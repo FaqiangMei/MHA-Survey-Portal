@@ -13,6 +13,7 @@ class SurveysController < ApplicationController
   #
   # @return [void]
   def show
+  Rails.logger.info "[EVIDENCE DEBUG] show: session[:invalid_evidence]=#{session[:invalid_evidence].inspect}" # debug session evidence
     @category_groups = @survey.categories.includes(:questions).order(:id)
     @existing_answers = {}
     @computed_required = {}
@@ -40,6 +41,9 @@ class SurveysController < ApplicationController
         @computed_required[question.id] = required
       end
     end
+
+
+    @invalid_evidence ||= nil
   end
 
   # Processes survey submissions, validating required answers and evidence
@@ -47,6 +51,7 @@ class SurveysController < ApplicationController
   #
   # @return [void]
   def submit
+  Rails.logger.info "[EVIDENCE DEBUG] SurveysController#submit called"
     student = current_student
 
     unless student
@@ -68,22 +73,36 @@ class SurveysController < ApplicationController
         missing_required << question
       end
 
-      if (question.question_type_evidence? || question.has_evidence_field?) && submitted_value.present?
+      # Debug evidence question type and value
+      if submitted_value.present?
+        Rails.logger.info "[EVIDENCE DEBUG] QID: #{question.id}, TYPE: #{question.question_type.inspect}, VALUE: #{submitted_value.inspect}"
+      end
+      # Only validate evidence questions for Google Drive link
+      if question.question_type == "evidence" && submitted_value.present?
         value_str = submitted_value.is_a?(String) ? submitted_value : submitted_value.to_s
-        invalid_links << question unless value_str =~ StudentQuestion::DRIVE_URL_REGEX
+        unless value_str =~ StudentQuestion::DRIVE_URL_REGEX
+          Rails.logger.info "[EVIDENCE DEBUG] INVALID evidence for QID: #{question.id} VALUE: #{value_str.inspect}"
+          invalid_links << question
+        end
       end
     end
 
-    if missing_required.any?
-      flash[:alert] = "Please answer all required questions (marked with *)."
-      flash[:missing_required_ids] = missing_required.map(&:id)
-      redirect_to survey_path(@survey) and return
-    end
-
-    if invalid_links.any?
-      names = invalid_links.map { |q| "Question #{q.question_order}: #{q.question_text}" }
-      redirect_to survey_path(@survey), alert: "One or more evidence links are invalid: #{names.join('; ')}"
-      return
+    if missing_required.any? || invalid_links.any?
+      @category_groups = @survey.categories.includes(:questions).order(:id)
+      @existing_answers = answers
+      @computed_required = {}
+      @invalid_evidence = invalid_links.map(&:id)
+      @category_groups.each do |category|
+        category.questions.each do |question|
+          required = question.is_required?
+          if !required && question.question_type_multiple_choice?
+            options = question.answer_options_list.map(&:strip).map(&:downcase)
+            required = !(options == %w[yes no] || options == %w[no yes])
+          end
+          @computed_required[question.id] = required
+        end
+      end
+      render :show, status: :unprocessable_entity and return
     end
 
     ActiveRecord::Base.transaction do

@@ -36,7 +36,7 @@ class QuestionTest < ActiveSupport::TestCase
     survey = Survey.find_by(title: "Residential Survey", semester: "Fall 2025")
     assert_not_nil survey, "Residential Survey (Fall 2025) should exist"
 
-    expected_categories = ["Health Care Environment and Community", "Leadership Skills", "Management Skills", "Analytic and Technical Skills"]
+    expected_categories = [ "Health Care Environment and Community", "Leadership Skills", "Management Skills", "Analytic and Technical Skills" ]
     actual_names = survey.categories.pluck(:name)
     expected_categories.each do |name|
       assert_includes actual_names, name, "Residential Survey should include category '#{name}'"
@@ -75,6 +75,5 @@ class QuestionTest < ActiveSupport::TestCase
 
     ratio = (required_count.to_f / total) * 100
     assert ratio >= 75, "Expected at least 75% of non-evidence questions to be required, got #{ratio.round(2)}%"
-    end
-
+  end
 end

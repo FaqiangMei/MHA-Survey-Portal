@@ -55,7 +55,19 @@ class FeedbacksController < ApplicationController
     if params[:ratings].present?
       # ratings is expected to be a hash like:
       # { "<category_id>" => { "id" => "<feedback_id optional>", "average_score" => "4", "comments" => "..." }, ... }
-      ratings = params.require(:ratings).permit!.to_h
+      # Expect a hash of category_id => { id?, average_score, comments }
+      raw_ratings = params.require(:ratings)
+      ratings = raw_ratings.to_unsafe_h.each_with_object({}) do |(cat_id, values), memo|
+        # Only allow specific keys from each category value to prevent mass assignment
+        allowed = {}
+        if values.respond_to?(:permit)
+          allowed = values.permit(:id, :average_score, :comments).to_h
+        else
+          # If it's already a plain hash (e.g., JSON body), whitelist keys manually
+          allowed = values.to_h.slice("id", "average_score", "comments")
+        end
+        memo[cat_id] = allowed
+      end
 
       Rails.logger.info "[FeedbacksController#create] received ratings keys=#{ratings.keys.inspect} payload_sample=#{ratings.values.first.inspect}"
 

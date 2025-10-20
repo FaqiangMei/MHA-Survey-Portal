@@ -16,7 +16,8 @@ class FeedbacksControllerTest < ActionController::TestCase
   @survey.save!
   @cat1, @cat2 = @survey.categories
 
-    sign_in @adv_user
+  # Explicitly provide the Devise scope to avoid mapping lookup issues in tests
+  sign_in :user, @adv_user
   end
 
   test "batch create creates feedback records and redirects" do

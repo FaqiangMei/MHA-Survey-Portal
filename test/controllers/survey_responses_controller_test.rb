@@ -60,7 +60,11 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
     # If fixture missing, build a minimal SurveyResponse for token tests
     unless @survey_response
       survey = surveys(:fall_2025)
-      student = students(:one) rescue nil
+      student = begin
+        students(:one)
+      rescue ActiveRecord::RecordNotFound
+        nil
+      end
       @survey_response = SurveyResponse.build(student: student || Student.first, survey: survey)
     end
   end

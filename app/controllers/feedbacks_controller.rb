@@ -74,9 +74,9 @@ class FeedbacksController < ApplicationController
 
           fb = if attrs["id"].present?
                  Feedback.find_by(id: attrs["id"])
-               else
+          else
                  Feedback.find_or_initialize_by(student_id: @student.student_id, survey_id: @survey.id, category_id: cat_id, advisor_id: @advisor&.advisor_id)
-               end
+          end
 
           fb.average_score = attrs["average_score"].presence
           fb.comments = attrs["comments"].presence
@@ -131,7 +131,7 @@ class FeedbacksController < ApplicationController
       return
     end
 
-    
+
 
     respond_to do |format|
       if @feedback.save

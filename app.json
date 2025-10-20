@@ -19,6 +19,14 @@
       "as": "DATABASE"
     }
   ],
+  "buildpacks": [
+    {
+      "url": "https://github.com/dscout/wkhtmltopdf-buildpack"
+    },
+    {
+      "url": "heroku/ruby"
+    }
+  ],
   "environments": {
     "test": {
       "env": {

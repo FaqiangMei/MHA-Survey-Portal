@@ -34,5 +34,13 @@
     <div style="margin-top: 1rem;">
       <%= link_to "← Back to Surveys", advisors_surveys_path %>
     </div>
+
+    <div style="margin-top: 1rem;" class="flex justify-end">
+      <%= button_to "Assign to all in this track",
+                    assign_all_advisors_survey_path(@survey),
+                    method: :post,
+                    data: { confirm: "Assign this survey to all students in this track?" },
+                    class: "btn" %>
+    </div>
   </section>
 </main>

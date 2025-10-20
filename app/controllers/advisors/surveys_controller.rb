@@ -2,27 +2,35 @@ module Advisors
   # Provides advisors with read access to survey definitions and lets them
   # assign surveys to students in their cohort.
   class SurveysController < BaseController
-    before_action :set_survey, only: %i[show assign]
+    before_action :set_survey, only: %i[show assign assign_all]
 
     # Lists surveys with their categories and questions for advisor review.
-    #
-    # @return [void]
     def index
       @surveys = Survey.includes(:categories, :questions).order(:created_at)
     end
 
     # Shows survey metadata and the list of students eligible for assignment.
-    #
-    # @return [void]
     def show
-      @survey_number = Survey.order(:created_at).pluck(:id).index(@survey.id)&.next || 1
+      # Use the same source of truth used by `assign`
       @students = assignable_students
+
+      # Determine the survey's track (prefer attribute; fall back to title cue)
+      track_key =
+        if @survey.respond_to?(:track) && @survey.track.present?
+          @survey.track.to_s.downcase # "residential" / "executive"
+        else
+          t = @survey.title.to_s.downcase
+          t.include?("executive") ? "executive" : (t.include?("residential") ? "residential" : nil)
+        end
+
+      # Filter students to the matching track
+      if track_key.present? && Student.tracks.key?(track_key)
+        @students = @students.where(track: Student.tracks[track_key]) # "Residential" / "Executive"
+      end
     end
 
-    # Assigns the selected survey to a student by pre-creating question
+    # Assigns the selected survey to a single student by pre-creating question
     # records and notifying the student.
-    #
-    # @return [void]
     def assign
       student = assignable_students.find_by!(student_id: params[:student_id])
 
@@ -45,23 +53,76 @@ module Advisors
       redirect_to advisors_survey_path(@survey), alert: e.record.errors.full_messages.to_sentence
     end
 
+    # Assigns the survey to all eligible students in the survey's track.
+    def assign_all
+      students = eligible_students_for_track
+
+      if students.blank?
+        redirect_to advisors_survey_path(@survey),
+                    alert: "No students available in the #{survey_track_key&.titleize || 'selected'} track."
+        return
+      end
+
+      created_count = 0
+
+      ActiveRecord::Base.transaction do
+        students.find_each do |student|
+          @survey.questions.find_each do |question|
+            StudentQuestion.find_or_create_by!(student_id: student.student_id, question_id: question.id) do |record|
+              record.advisor_id = current_advisor_profile&.advisor_id
+            end
+          end
+
+          Notification.create!(
+            notifiable: student,
+            title: "New survey assigned",
+            message: "#{current_user.name} assigned '#{@survey.title}' to you."
+          )
+
+          created_count += 1
+        end
+      end
+
+      redirect_to advisors_surveys_path,
+                  notice: "Assigned '#{@survey.title}' to #{created_count} student#{'s' unless created_count == 1} in the #{survey_track_key.titleize} track."
+    rescue ActiveRecord::RecordInvalid => e
+      redirect_to advisors_survey_path(@survey), alert: e.record.errors.full_messages.to_sentence
+    end
+
     private
 
     # Looks up the survey referenced by params.
-    #
-    # @return [void]
     def set_survey
       @survey = Survey.find(params[:id])
     end
 
     # Determines which students the current advisor can assign surveys to.
-    #
-    # @return [ActiveRecord::Relation<Student>]
     def assignable_students
       if current_user.role_admin?
         Student.includes(:user)
       else
         (current_advisor_profile&.advisees || Student.none).includes(:user)
+      end
+    end
+
+    # Returns an AR::Relation of advisees filtered to the survey's track.
+    def eligible_students_for_track
+      scope = assignable_students
+      key   = survey_track_key
+      return scope.none unless key.present? && Student.tracks.key?(key)
+
+      scope.where(track: Student.tracks[key])
+    end
+
+    # "residential" / "executive" inferred from attribute or title.
+    def survey_track_key
+      @survey_track_key ||= begin
+        if @survey.respond_to?(:track) && @survey.track.present?
+          @survey.track.to_s.downcase
+        else
+          t = @survey.title.to_s.downcase
+          t.include?("executive") ? "executive" : (t.include?("residential") ? "residential" : nil)
+        end
       end
     end
   end

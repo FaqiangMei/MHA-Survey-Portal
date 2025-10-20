@@ -1,10 +1,5 @@
 module Advisors
-  # Legacy controller maintained temporarily to ensure any stale links
-  # or bookmarks redirect to the new shared student records page.
   class StudentsController < BaseController
-    # Redirects legacy routes to the consolidated student records dashboard.
-    #
-    # @return [void]
     def index
       redirect_to student_records_path
     end
@@ -15,12 +10,27 @@ module Advisors
 
     def update
       @student = Student.find(params[:id])
-      if @student.update(student_params)
-        redirect_to advisors_student_path(@student), notice: "Track updated to #{@student.track.titleize}."
-      else
-        flash.now[:alert] = @student.errors.full_messages.to_sentence
-        render :show, status: :unprocessable_entity
+
+      incoming = params.dig(:student, :track).to_s.presence
+      valid_keys = Student.tracks.keys # => ["residential", "executive"]
+
+      unless incoming && valid_keys.include?(incoming)
+        redirect_back fallback_location: student_records_path,
+                      alert: "Unable to change track: the student's track is missing or cannot be determined."
+        return
       end
+
+      if @student.update(track: incoming)
+        timestamp = I18n.l(Time.zone.now, format: :long) rescue Time.zone.now.to_s(:long)
+        redirect_to advisors_student_path(@student),
+                    notice: %(Track changed to "#{@student.track.titleize}" at #{timestamp}.)
+      else
+        redirect_back fallback_location: advisors_student_path(@student),
+                      alert: @student.errors.full_messages.to_sentence
+      end
+    rescue ActiveRecord::RecordNotFound
+      redirect_back fallback_location: student_records_path,
+                    alert: "Student not found."
     end
 
     private

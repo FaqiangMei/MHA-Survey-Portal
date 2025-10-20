@@ -1,5 +1,5 @@
 <main class="flex justify-center px-4 py-8">
-  <div class="w-full max-w-5xl space-y-8">
+  <div class="w-full max-w-5xl space-y-6">
     <header class="space-y-2">
       <h1 class="text-3xl font-semibold text-[#500000]">Student Records</h1>
       <p class="text-sm text-slate-600">Browse survey progress by semester for your assigned students.</p>
@@ -30,7 +30,7 @@
 
                 <% survey_track_key =
                      if survey.respond_to?(:track) && survey.track.present?
-                       survey.track.to_s.downcase # e.g., "Residential" -> "residential"
+                       survey.track.to_s.downcase
                      else
                        t = survey.title.to_s.downcase
                        if t.include?("executive")
@@ -48,7 +48,7 @@
                          r[:student].track.to_s.downcase == survey_track_key
                        end
                      else
-                       survey_block[:rows] # fallback: show all
+                       survey_block[:rows]
                      end %>
 
                 <details class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50" open>
@@ -132,7 +132,8 @@
                                         selected: student.track
                                       ),
                                       class: "rounded-md border border-slate-300 px-2 py-1",
-                                      onchange: "this.form.requestSubmit();" %>
+                                      data: { current: student.track },
+                                      onchange: "if(confirm(\"Are you sure you want to change this student's track?\")){ this.form.requestSubmit(); } else { this.value = this.dataset.current; }" %>
                                   <% end %>
                                 </div>
                                 <div class="mt-1 text-xs text-slate-500">Cohort <%= student.created_at&.year || "—" %></div>
@@ -166,5 +167,10 @@
         <% end %>
       </div>
     <% end %>
+
+    <div class="mt-6 flex justify-end">
+      <%= link_to "See changes", request.fullpath,
+          class: "inline-flex items-center rounded-lg bg-[#500000] px-4 py-2 text-white hover:opacity-90" %>
+    </div>
   </div>
 </main>

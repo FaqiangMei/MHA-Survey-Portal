@@ -71,6 +71,7 @@ Rails.application.routes.draw do
   namespace :advisors do
     resources :surveys, only: %i[index show] do
       post :assign, on: :member
+      post :assign_all, on: :member
     end
     resources :students, only: %i[show update]
   end

@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-require 'json'
+require "json"
 path = File.join(__dir__, '..', 'coverage', '.resultset.json')
 unless File.exist?(path)
   STDERR.puts "coverage/.resultset.json not found"

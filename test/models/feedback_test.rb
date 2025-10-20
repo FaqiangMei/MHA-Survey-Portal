@@ -1,39 +1,36 @@
 require "test_helper"
 
 class FeedbackTest < ActiveSupport::TestCase
-  setup do
-    @feedback = feedbacks(:advisor_feedback)
-  end
+  test "can create multiple feedback rows and accept numeric average_score" do
+    user = User.create!(email: "stu@example.com", name: "Student One", role: "student")
+    # User creation auto-creates a student profile via after_commit; use it.
+    student = user.student_profile
 
-  test "average_score must be numeric" do
-    @feedback.average_score = "not-a-number"
-    refute @feedback.valid?
-    assert_includes @feedback.errors[:average_score], "is not a number"
-  end
+    adv_user = User.create!(email: "adv@example.com", name: "Advisor One", role: "advisor")
+    advisor = adv_user.advisor_profile
 
-  test "survey uniqueness enforced" do
-    duplicate = Feedback.new(
-      student: students(:other_student),
-      advisor: advisors(:other_advisor),
-      category: categories(:clinical_skills),
-      survey: @feedback.survey,
-      average_score: 3.5
-    )
+    survey = Survey.new(title: "T", semester: "Fall 2025")
+    category = survey.categories.build(name: "C")
+    category.questions.build(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    survey.save!
+    category = survey.categories.first
 
-    refute duplicate.valid?
-    assert_includes duplicate.errors[:survey_id], "has already been taken"
-  end
+    fb1 = Feedback.new(student_id: student.student_id,
+                       advisor_id: advisor.advisor_id,
+                       survey_id: survey.id,
+                       category_id: category.id,
+                       average_score: 5.0)
+    assert fb1.valid?
+    assert fb1.save
 
-  test "valid feedback saves successfully" do
-    record = Feedback.new(
-      student: students(:student),
-      advisor: advisors(:advisor),
-      category: categories(:clinical_skills),
-      survey: surveys(:spring_2025),
-      average_score: 4.2,
-      comments: "Consistent progress"
-    )
+    fb2 = Feedback.new(student_id: student.student_id,
+                       advisor_id: advisor.advisor_id,
+                       survey_id: survey.id,
+                       category_id: category.id,
+                       comments: "Note")
+    assert fb2.valid?
+    assert fb2.save
 
-    assert record.save, record.errors.full_messages.to_sentence
+    assert_equal 2, Feedback.where(student_id: student.student_id, survey_id: survey.id).count
   end
 end

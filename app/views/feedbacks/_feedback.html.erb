@@ -1,12 +1,7 @@
 <div id="<%= dom_id feedback %>">
   <p>
-  <strong>Student:</strong>
-  <%= feedback.student&.full_name || feedback.student_id %>
-  </p>
-
-  <p>
     <strong>Advisor:</strong>
-    <%= feedback.advisor&.display_name || feedback.advisor_id %>
+    <%= feedback.advisor&.user&.name || "Advisor ##{feedback.advisor_id}" %>
   </p>
 
   <p>
@@ -15,13 +10,13 @@
   </p>
 
   <p>
-    <strong>Survey:</strong>
-    <%= feedback.survey&.title || feedback.survey_id %>
+    <strong>Score:</strong>
+    <%= feedback.average_score %>
   </p>
 
   <p>
-    <strong>Average score:</strong>
-    <%= feedback.average_score %>
+    <strong>Survey:</strong>
+    <%= feedback.survey&.title || "Survey ##{feedback.survey_id}" %>
   </p>
 
   <p>

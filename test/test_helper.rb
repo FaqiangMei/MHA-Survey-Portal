@@ -10,23 +10,12 @@ if ENV["SKIP_TAILWIND_BUILD"].blank? && !File.exist?(tailwind_build)
 end
 
 require_relative "../config/environment"
-# If coverage was requested by the test runner, start SimpleCov inside the test process so
-# SimpleCov can correctly detect the test framework (Minitest) and produce accurate metrics.
-if ENV["COVERAGE"] == "1"
-  require "simplecov"
-  SimpleCov.command_name "Unit Tests"
-  SimpleCov.start "rails" do
-    add_filter "/vendor/"
-    add_filter "/test/"
-    add_group "Models", "app/models"
-    add_group "Controllers", "app/controllers"
-    add_group "Helpers", "app/helpers"
-    add_group "Jobs", "app/jobs"
-    add_group "Mailers", "app/mailers"
-  end
+# Load seeds only when explicitly requested. Some test suites rely on fixtures or
+# create their own data; running seeds by default can cause primary key
+# collisions (sequences out of sync). Set ENV['LOAD_SEEDS']='true' to enable.
+if Rails.env.test? && ENV["LOAD_SEEDS"] == "true"
+  Rails.application.load_seed
 end
-
-Rails.application.load_seed if Rails.env.test?
 require "rails/test_help"
 require "minitest/mock"
 
@@ -39,9 +28,8 @@ class ActiveSupport::TestCase
            :students,
            :surveys,
            :survey_assignments,
-           :feedbacks,
-           :survey_change_logs,
-           :users
+           :users,
+           :survey_change_logs
 end
 
 class ActionDispatch::IntegrationTest

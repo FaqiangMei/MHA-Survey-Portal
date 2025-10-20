@@ -3,7 +3,7 @@ require "test_helper"
 class SurveysControllerTest < ActionDispatch::IntegrationTest
   setup do
     @student_user = users(:student)
-    @student = students(:one) rescue Student.first
+    @student = students(:one) || Student.first
     @survey = surveys(:fall_2025)
   end
 

@@ -153,7 +153,7 @@ module Advisors
     # Localized timestamp for flash messages
     def timestamp_str
       I18n.l(Time.current, format: :long)
-    rescue
+    rescue I18n::MissingTranslationData, I18n::InvalidLocale
       Time.current.to_s(:long)
     end
   end

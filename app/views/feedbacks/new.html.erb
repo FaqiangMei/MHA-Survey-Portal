@@ -1,11 +1,68 @@
-<% content_for :title, "New feedback" %>
+<h2>Feedback for <%= @student.user.name %> – <%= @survey.title %></h2>
 
-<h1>New feedback</h1>
-
-<%= render "form", feedback: @feedback %>
-
-<br>
-
-<div>
-  <%= link_to "Back to feedbacks", feedbacks_path %>
+<h3>Student Responses</h3>
+<div class="mb-6">
+  <%# Prefer rendering the SurveyResponse PORO (same layout students see). If it has
+      no question_responses (or the PORO is nil), fall back to the @responses table. %>
+  <% if defined?(@survey_response) && @survey_response %>
+    <%= render partial: 'survey_responses/survey_response', locals: { survey_response: @survey_response } %>
+  <% elsif @responses.present? %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>Response</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @responses.each do |r| %>
+          <tr>
+            <td><%= r.question.try(:question_text) || r.question.try(:content) || "Q#{r.question_id}" %></td>
+            <td><%= r.response_value %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% else %>
+    <p class="text-sm text-slate-600">No student responses found for this survey.</p>
+  <% end %>
 </div>
+
+<hr>
+
+<h3>Advisor Feedback (per-category)</h3>
+
+<div class="space-y-4">
+  <% @survey.categories.order(:id).each do |category| %>
+    <section class="p-4 border rounded">
+      <h4 class="font-semibold"><%= category.name %></h4>
+
+      <%= form_with model: Feedback.new, url: feedbacks_path(survey_id: @survey.id, student_id: @student.id), local: true do |cf| %>
+        <%= cf.hidden_field :category_id, value: category.id %>
+        <%= cf.hidden_field :advisor_id, value: @advisor&.advisor_id %>
+        <%= cf.hidden_field :survey_id, value: @survey.id %>
+        <%= cf.hidden_field :student_id, value: @student.student_id %>
+
+        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+          <div>
+            <%= cf.label :average_score, "Score (1-5)" %>
+            <%= cf.number_field :average_score, in: 1..5, step: 1, class: "w-full border rounded px-2 py-1" %>
+          </div>
+          <div class="md:col-span-2">
+            <%= cf.label :comments, "Comment (optional)" %>
+            <%= cf.text_field :comments, class: "w-full border rounded px-2 py-1" %>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <%= cf.submit "Save this category", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </section>
+  <% end %>
+</div>
+
+<hr class="my-6">
+
+<h3>Legacy single-score feedback</h3>
+<%= render partial: 'form', locals: { feedback: @feedback } %>

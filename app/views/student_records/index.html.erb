@@ -86,7 +86,7 @@
                             <% completion_date = row[:completed_at] %>
                             <% survey_response = row[:survey_response] %>
                             <% download_token  = row[:download_token] %>
-                            <% survey_link     = survey_path(row[:survey]) %>
+                            <% survey_link     = new_feedback_path(survey_id: survey.id, student_id: student.id) %>
                             <% survey_label    = status_text == "Completed" ? "Review" : "Open" %>
 
                             <tr class="transition hover:bg-slate-50">

@@ -1,0 +1,170 @@
+<% content_for :title, "About the Portal" %>
+
+<%= render "shared/login_navbar" %>
+
+<main class="flex justify-center px-4 py-12">
+  <div class="w-full max-w-5xl space-y-8">
+    <!-- Page header -->
+    <section class="rounded-3xl bg-white px-8 py-10 shadow-sm ring-1 ring-slate-200">
+      <h1 class="text-3xl font-semibold text-[#500000]">About the Portal</h1>
+
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-6 leading-relaxed">
+        <p class="text-slate-700">
+          <span class="text-lg font-semibold">🧭 About the Portal</span><br>
+          Welcome to the MHA Program Portal — a centralized platform designed to simplify
+          survey management, feedback exchange, and role-based coordination between students,
+          advisors, and administrators. This guide will help you understand how to navigate
+          the portal based on your user role.
+        </p>
+      </div>
+    </section>
+
+    <!-- Student View -->
+    <section class="rounded-3xl bg-white px-8 py-8 shadow-sm ring-1 ring-slate-200">
+      <h2 class="text-2xl font-semibold text-slate-800">🎓 Student View</h2>
+      <p class="mt-2 text-slate-700">
+        The Student View allows students to manage and track their survey progress while receiving feedback from advisors.
+      </p>
+
+      <div class="mt-4 space-y-4">
+        <h3 class="font-semibold text-slate-900">Key Features:</h3>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Pending Surveys:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>View any surveys that are assigned but not yet completed.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Completed Surveys:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>Once a survey is completed, it automatically moves into this section.</li>
+            <li>Students can review their previous responses at any time.</li>
+            <li>If an advisor has submitted feedback, it will appear at the bottom of the survey.</li>
+            <li>Surveys can be downloaded as PDFs for record-keeping.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Notifications:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>Displays recent updates or reminders related to surveys and feedback.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Advisor View -->
+    <section class="rounded-3xl bg-white px-8 py-8 shadow-sm ring-1 ring-slate-200">
+      <h2 class="text-2xl font-semibold text-slate-800">🧑‍🏫 Advisor View</h2>
+      <p class="mt-2 text-slate-700">
+        The Advisor View provides tools for monitoring student progress, giving feedback, and managing student assignments.
+      </p>
+
+      <div class="mt-4 space-y-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Student Records:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>View all students and their associated tracks.</li>
+            <li>Click “Review” to give initial feedback on a student’s completed survey.</li>
+            <li>Once feedback is submitted, the button changes to “Edit Feedback.”</li>
+            <li>Advisors can also download surveys and feedback for documentation.</li>
+            <li>Submitted feedback becomes visible to students in their Completed Surveys section.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Surveys:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>Assign specific surveys to individual students (useful for late joiners or advisor swaps).</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Notifications:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>View updates related to assigned surveys or feedback deadlines.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Manage Students:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>Reassign students to a different advisor when necessary.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin View -->
+    <section class="rounded-3xl bg-white px-8 py-8 shadow-sm ring-1 ring-slate-200">
+      <h2 class="text-2xl font-semibold text-slate-800">🛠️ Admin View</h2>
+      <p class="mt-2 text-slate-700">
+        The Admin View includes all Advisor features, plus additional administrative tools for managing surveys and user roles.
+      </p>
+
+      <div class="mt-4 space-y-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Student Records:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>Identical to the Advisor View — review surveys, feedback, and student data.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Surveys:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li><span class="italic">Different than the Advisor View:</span> Create, edit, and manage all surveys distributed across the platform.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="font-medium text-slate-900">Member Management:</p>
+          <ul class="mt-2 list-disc pl-5 text-slate-700">
+            <li>Assign or change user roles between Student, Advisor, and Admin.</li>
+            <li>Each role has a distinct level of access and responsibility.</li>
+            <li>The total number of users in each role is displayed at the top of the screen.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- Hidden SSO forms to allow top nav "Students" / "Advisors" to act like the main page buttons -->
+<%= form_with url: user_google_oauth2_omniauth_authorize_path,
+              method: :post,
+              data: { turbo: "false" },
+              id: "hidden-student-signin",
+              html: { style: "display:none" } do |f| %>
+  <%= f.hidden_field :role, value: "student" %>
+<% end %>
+
+<%= form_with url: user_google_oauth2_omniauth_authorize_path,
+              method: :post,
+              data: { turbo: "false" },
+              id: "hidden-advisor-signin",
+              html: { style: "display:none" } do |f| %>
+  <%= f.hidden_field :role, value: "advisor" %>
+<% end %>
+
+<script>
+  (function () {
+    const studentTab = document.querySelector('[data-signin-role="student"]');
+    const advisorTab = document.querySelector('[data-signin-role="advisor"]');
+    const studentForm = document.getElementById('hidden-student-signin');
+    const advisorForm = document.getElementById('hidden-advisor-signin');
+
+    function wire(link, form) {
+      if (!link || !form) return;
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        form.submit();
+      });
+    }
+
+    wire(studentTab, studentForm);
+    wire(advisorTab, advisorForm);
+  })();
+</script>

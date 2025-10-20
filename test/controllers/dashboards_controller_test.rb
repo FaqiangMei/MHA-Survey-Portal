@@ -86,7 +86,7 @@ class DashboardsIntegrationTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert flash[:alert].present? or flash[:notice].present?
 
-    # Now submit a valid update for another user
+  # Now submit a valid update for another user
   user = users(:other_student) || users(:student)
     patch update_roles_path, params: { role_updates: { user.id => "advisor" } }
     assert_redirected_to manage_members_path

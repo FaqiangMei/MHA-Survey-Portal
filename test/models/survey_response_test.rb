@@ -1,6 +1,44 @@
 require "test_helper"
 
 class SurveyResponseTest < ActiveSupport::TestCase
+  test "answers returns map of question id to answer when question_responses provided" do
+    student = students(:student)
+    survey = surveys(:fall_2025)
+    sr = SurveyResponse.new(student: student, survey: survey)
+
+    # provide a fake question_responses array for the PORO
+    qr1 = OpenStruct.new(question_id: questions(:fall_q1).id, answer: "Yes")
+    qr2 = OpenStruct.new(question_id: questions(:fall_q1).id + 1, answer: "No")
+    sr.instance_variable_set(:@question_responses, [qr1, qr2])
+
+    map = sr.answers
+    assert_kind_of Hash, map
+    assert_equal "Yes", map[questions(:fall_q1).id]
+  end
+
+  test "id composes student id and survey id" do
+    student = students(:student)
+    survey = surveys(:fall_2025)
+    sr = SurveyResponse.new(student: student, survey: survey)
+    assert_match /#{student.student_id}-#{survey.id}/, sr.id
+  end
+end
+require "test_helper"
+
+class SurveyResponseTest < ActiveSupport::TestCase
+  test "build creates a SurveyResponse and associates records" do
+    survey = surveys(:fall_2025)
+    student = students(:one) rescue Student.first
+    sr = SurveyResponse.build(student: student, survey: survey)
+    # SurveyResponse is a PORO (ActiveModel), not persisted ActiveRecord
+    assert_instance_of SurveyResponse, sr
+    assert_equal "#{student.student_id}-#{survey.id}", sr.id
+    assert_equal "#{student.student_id}-#{survey.id}", sr.to_param
+  end
+end
+require "test_helper"
+
+class SurveyResponseTest < ActiveSupport::TestCase
   setup do
     @student = students(:student)
     @advisor = advisors(:advisor)

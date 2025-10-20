@@ -58,27 +58,21 @@ class TestRunner
     # Set test environment
     ENV['RAILS_ENV'] = 'test'
 
-    # Set database connection parameters for Docker PostgreSQL
-    ENV['PGHOST'] = 'localhost'
-    ENV['PGPORT'] = '5433'
-    ENV['PGUSER'] = 'dev_user'
-    ENV['PGPASSWORD'] = 'dev_pass'
+  # Set database connection parameters for Docker PostgreSQL if not already set
+  # When running inside docker-compose the service provides correct PGHOST/PORT.
+  ENV['PGHOST'] ||= 'localhost'
+  ENV['PGPORT'] ||= '5433'
+  ENV['PGUSER'] ||= 'dev_user'
+  ENV['PGPASSWORD'] ||= 'dev_pass'
 
     puts "🔗 Database connection configured for Docker PostgreSQL (localhost:5433)"
 
     # Add coverage tracking if requested
     if @options[:coverage]
       puts "📊 Coverage tracking enabled"
-      require 'simplecov'
-      SimpleCov.start 'rails' do
-        add_filter '/vendor/'
-        add_filter '/test/'
-        add_group 'Models', 'app/models'
-        add_group 'Controllers', 'app/controllers'
-        add_group 'Helpers', 'app/helpers'
-        add_group 'Jobs', 'app/jobs'
-        add_group 'Mailers', 'app/mailers'
-      end
+      # Coverage will be started inside the test process (test/test_helper.rb).
+      # Export a flag so the test process knows to start SimpleCov.
+      ENV['COVERAGE'] = '1'
     end
 
     puts "✅ Environment ready"

@@ -10,6 +10,22 @@ if ENV["SKIP_TAILWIND_BUILD"].blank? && !File.exist?(tailwind_build)
 end
 
 require_relative "../config/environment"
+# If coverage was requested by the test runner, start SimpleCov inside the test process so
+# SimpleCov can correctly detect the test framework (Minitest) and produce accurate metrics.
+if ENV['COVERAGE'] == '1'
+  require 'simplecov'
+  SimpleCov.command_name 'Unit Tests'
+  SimpleCov.start 'rails' do
+    add_filter '/vendor/'
+    add_filter '/test/'
+    add_group 'Models', 'app/models'
+    add_group 'Controllers', 'app/controllers'
+    add_group 'Helpers', 'app/helpers'
+    add_group 'Jobs', 'app/jobs'
+    add_group 'Mailers', 'app/mailers'
+  end
+end
+
 Rails.application.load_seed if Rails.env.test?
 require "rails/test_help"
 require "minitest/mock"

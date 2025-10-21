@@ -28,7 +28,8 @@ class ActiveSupport::TestCase
            :students,
            :surveys,
            :survey_assignments,
-           :users
+           :users,
+           :survey_change_logs
 end
 
 class ActionDispatch::IntegrationTest

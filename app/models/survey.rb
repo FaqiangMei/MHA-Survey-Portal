@@ -4,9 +4,7 @@ class Survey < ApplicationRecord
   # Predefined track labels administrators can assign.
   TRACK_OPTIONS = [
     "Residential",
-    "Executive",
-    "Online",
-    "Hybrid"
+    "Executive"
   ].freeze
 
   belongs_to :creator, class_name: "User", foreign_key: :created_by_id, optional: true

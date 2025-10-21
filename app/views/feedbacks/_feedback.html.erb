@@ -1,7 +1,7 @@
 <div id="<%= dom_id feedback %>">
   <p>
     <strong>Advisor:</strong>
-    <%= feedback.advisor_id %>
+    <%= feedback.advisor&.user&.name || "Advisor ##{feedback.advisor_id}" %>
   </p>
 
   <p>
@@ -15,8 +15,8 @@
   </p>
 
   <p>
-    <strong>Survey Response:</strong>
-    <%= feedback.surveyresponse_id %>
+    <strong>Survey:</strong>
+    <%= feedback.survey&.title || "Survey ##{feedback.survey_id}" %>
   </p>
 
   <p>

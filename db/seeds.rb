@@ -33,8 +33,8 @@ end
 
 puts "• Creating advisor accounts"
 advisor_users = [
-  seed_user.call(email: "advisor.one@tamu.edu", name: "Advisor One", role: :advisor),
-  seed_user.call(email: "advisor.two@tamu.edu", name: "Advisor Two", role: :advisor)
+  seed_user.call(email: "anthuan374@tamu.edu", name: "Marcos Morales", role: :advisor),
+  seed_user.call(email: "jonah.belew@tamu.edu", name: "Jonah Belew", role: :advisor)
 ]
 
 advisors = advisor_users.map(&:advisor_profile)

@@ -14,9 +14,14 @@
     <div id="student-login" class="flex flex-1 flex-col items-center justify-center px-4">
       <h2 class="text-2xl font-semibold text-slate-800">Student Login</h2>
       <p class="mt-4 max-w-sm text-sm text-slate-600">Access your surveys, track requirements, and stay informed on program updates.</p>
-      <%= form_with url: user_google_oauth2_omniauth_authorize_path, method: :post, data: { turbo: "false" }, class: "mt-6 w-full max-w-xs" do |form| %>
+      <%= form_with url: user_google_oauth2_omniauth_authorize_path,
+                    method: :post,
+                    data: { turbo: "false" },
+                    html: { id: "student-login-form" },
+                    class: "mt-6 w-full max-w-xs" do |form| %>
         <%= form.hidden_field :role, value: 'student' %>
-        <%= form.submit "Sign in with Google", class: "w-full rounded-md bg-[#500000] py-3 text-sm font-semibold text-white transition hover:bg-[#400000] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#500000]" %>
+        <%= form.submit "Sign in with Google",
+                        class: "w-full rounded-md bg-[#500000] py-3 text-sm font-semibold text-white transition hover:bg-[#400000] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#500000]" %>
       <% end %>
     </div>
 
@@ -26,10 +31,51 @@
     <div id="advisor-login" class="flex flex-1 flex-col items-center justify-center px-4">
       <h2 class="text-2xl font-semibold text-slate-800">Advisor Login</h2>
       <p class="mt-4 max-w-sm text-sm text-slate-600">Manage student rosters, review feedback, and monitor survey responses.</p>
-      <%= form_with url: user_google_oauth2_omniauth_authorize_path, method: :post, data: { turbo: "false" }, class: "mt-6 w-full max-w-xs" do |form| %>
+      <%= form_with url: user_google_oauth2_omniauth_authorize_path,
+                    method: :post,
+                    data: { turbo: "false" },
+                    html: { id: "advisor-login-form" },
+                    class: "mt-6 w-full max-w-xs" do |form| %>
         <%= form.hidden_field :role, value: 'advisor' %>
-        <%= form.submit "Sign in with Google", class: "w-full rounded-md bg-[#500000] py-3 text-sm font-semibold text-white transition hover:bg-[#400000] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#500000]" %>
+        <%= form.submit "Sign in with Google",
+                        class: "w-full rounded-md bg-[#500000] py-3 text-sm font-semibold text-white transition hover:bg-[#400000] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#500000]" %>
       <% end %>
     </div>
   </div>
 </section>
+
+<script>
+(function () {
+  function wireLoginTabShortcuts() {
+    try {
+      var studentForm = document.getElementById("student-login-form");
+      var advisorForm = document.getElementById("advisor-login-form");
+
+      // Only intercept links that point to the in-page anchors
+      var studentTabLinks = document.querySelectorAll('a[href$="#student-login"]');
+      var advisorTabLinks = document.querySelectorAll('a[href$="#advisor-login"]');
+
+      studentTabLinks.forEach(function (link) {
+        link.addEventListener("click", function (e) {
+          if (studentForm) {
+            e.preventDefault();
+            studentForm.requestSubmit();
+          }
+        }, { passive: false });
+      });
+
+      advisorTabLinks.forEach(function (link) {
+        link.addEventListener("click", function (e) {
+          if (advisorForm) {
+            e.preventDefault();
+            advisorForm.requestSubmit();
+          }
+        }, { passive: false });
+      });
+    } catch (_) {}
+  }
+
+  document.addEventListener("turbo:load", wireLoginTabShortcuts);
+  document.addEventListener("DOMContentLoaded", wireLoginTabShortcuts);
+})();
+</script>

@@ -11,9 +11,17 @@
       </div>
 
       <nav class="nav-links">
-        <a href="#student-login" class="nav-link">Students</a>
-        <a href="#advisor-login" class="nav-link">Advisors</a>
-        <a href="#login-sections" class="nav-link">About the Portal</a>
+        <!-- Clicking these will submit a POST to the Google OAuth path with role=student/advisor -->
+        <a href="#"
+           class="nav-link"
+           data-login-role="student">Students</a>
+
+        <a href="#"
+           class="nav-link"
+           data-login-role="advisor">Advisors</a>
+
+        <!-- About page (documentation landing) -->
+        <%= link_to "About the Portal", about_path, class: "nav-link" %>
       </nav>
     </div>
 
@@ -21,9 +29,58 @@
       <a href="https://public-health.tamu.edu/degrees/hpm/mha/index.html" class="btn btn-secondary">Program Overview</a>
       <button type="button"
               class="btn btn-primary"
-              onclick="document.querySelector('#login-sections').scrollIntoView({ behavior: 'smooth' })">
+              onclick="(function(){
+                var target = document.querySelector('#login-sections');
+                if (target) { target.scrollIntoView({ behavior: 'smooth' }); }
+              })()">
         Sign In
       </button>
     </div>
   </div>
 </header>
+
+<script>
+  (function () {
+    // Make top-bar "Students" / "Advisors" behave like their respective Google sign-in buttons.
+    var links = document.querySelectorAll('[data-login-role]');
+    if (!links.length) return;
+
+    function submitRoleLogin(role) {
+      try {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '<%= user_google_oauth2_omniauth_authorize_path %>';
+        form.style.display = 'none';
+
+        // CSRF token
+        var token = document.querySelector('meta[name="csrf-token"]');
+        if (token && token.content) {
+          var csrf = document.createElement('input');
+          csrf.type = 'hidden';
+          csrf.name = 'authenticity_token';
+          csrf.value = token.content;
+          form.appendChild(csrf);
+        }
+
+        var roleField = document.createElement('input');
+        roleField.type = 'hidden';
+        roleField.name = 'role';
+        roleField.value = role; // "student" or "advisor"
+        form.appendChild(roleField);
+
+        document.body.appendChild(form);
+        form.submit();
+      } catch (e) {
+        console.error('Role login submit failed:', e);
+      }
+    }
+
+    links.forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        var role = a.getAttribute('data-login-role');
+        if (role) submitRoleLogin(role);
+      });
+    });
+  })();
+</script>

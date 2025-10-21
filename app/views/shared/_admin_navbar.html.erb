@@ -13,8 +13,9 @@
       <nav class="nav-links">
         <a href="<%= admin_dashboard_path %>" class="nav-link <%= 'active' if local_assigns[:active_page] == 'home' %>">Home</a>
         <%= link_to "Student Records", student_records_path,
-        class: "nav-link #{'active' if local_assigns[:active_page] == 'students'}" %>
-        <a href="#" class="nav-link">Surveys</a>
+          class: "nav-link #{'active' if local_assigns[:active_page] == 'students'}" %>
+        <%= link_to "Surveys", admin_surveys_path,
+          class: "nav-link #{'active' if local_assigns[:active_page] == 'surveys'}" %>
         <a href="#" class="nav-link">Reports</a>
       </nav>
     </div>

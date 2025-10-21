@@ -1,52 +1,41 @@
 require "test_helper"
 
 class SurveysControllerTest < ActionDispatch::IntegrationTest
-  include Devise::Test::IntegrationHelpers
-
   setup do
-    @survey = surveys(:one)
-    @admin = admins(:one)
-    sign_in @admin
+    @student_user = users(:student)
+    @student = students(:student) || Student.first
+    @survey = surveys(:fall_2025)
   end
 
-  test "should get index" do
-    get surveys_url
-    assert_response :success
+  test "submit redirects when student missing" do
+    # no signed in user -> Devise redirects to sign_in
+    post submit_survey_path(@survey), params: { answers: {} }
+    assert_redirected_to new_user_session_path
   end
 
-  test "should get new" do
-    get new_survey_url
-    assert_response :success
+  test "submit shows errors for missing required answers" do
+    sign_in @student_user
+    # Force a required question by marking first question required in test
+    q = @survey.questions.first
+    q.update!(is_required: true) if q
+
+    post submit_survey_path(@survey), params: { answers: {} }
+    assert_response :unprocessable_entity
+    assert_select "form"
   end
 
-  test "should create survey" do
-    assert_difference("Survey.count") do
-      post surveys_url, params: { survey: { title: @survey.title, semester: @survey.semester, approval_date: @survey.approval_date, assigned_date: @survey.assigned_date, completion_date: @survey.completion_date, survey_id: @survey.survey_id } }
+  test "submit persists answers and redirects on success" do
+    sign_in @student_user
+    answers = {}
+    @survey.questions.limit(2).each do |q|
+      answers[q.id.to_s] = "Sample answer #{q.id}"
     end
-
-    assert_redirected_to survey_url(Survey.last)
-  end
-
-  test "should show survey" do
-    get survey_url(@survey)
-    assert_response :success
-  end
-
-  test "should get edit" do
-    get edit_survey_url(@survey)
-    assert_response :success
-  end
-
-  test "should update survey" do
-    patch survey_url(@survey), params: { survey: { title: @survey.title, semester: @survey.semester, approval_date: @survey.approval_date, assigned_date: @survey.assigned_date, completion_date: @survey.completion_date, survey_id: @survey.survey_id } }
-    assert_redirected_to survey_url(@survey)
-  end
-
-  test "should destroy survey" do
-    assert_difference("Survey.count", -1) do
-      delete survey_url(@survey)
-    end
-
-    assert_redirected_to surveys_url
+    post submit_survey_path(@survey), params: { answers: answers }
+    # SurveyResponse.build returns a PORO; ensure redirect goes to a survey_response id path
+    assert response.redirect?
+    location = response.location || headers["Location"]
+    assert_match %r{/survey_responses/\d+-\d+}, location
+    follow_redirect!
+    assert_match /Survey submitted successfully!/, response.body
   end
 end

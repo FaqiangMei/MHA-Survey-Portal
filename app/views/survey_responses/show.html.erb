@@ -1,10 +1,17 @@
-<p style="color: green"><%= notice %></p>
+<div class="mx-auto flex max-w-5xl flex-col gap-6">
+  <% if notice.present? %>
+    <p class="text-sm font-medium text-emerald-700"><%= notice %></p>
+  <% end %>
 
-<%= render @survey_response %>
+  <div class="flex flex-wrap items-center gap-3">
+    <%= link_to "← Back", student_dashboard_path, class: tailwind_button_classes(:secondary) %>
+  <%= link_to "Download as PDF", download_survey_response_path(@survey_response, token: @survey_response.signed_download_token), class: tailwind_button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
+  </div>
 
-<div>
-  <%= link_to "Edit this survey response", edit_survey_response_path(@survey_response) %> |
-  <%= link_to "Back to survey responses", survey_responses_path %>
+  <%= render @survey_response %>
 
-  <%= button_to "Destroy this survey response", @survey_response, method: :delete %>
+  <div class="flex flex-wrap items-center gap-3">
+    <%= link_to "← Back", student_dashboard_path, class: tailwind_button_classes(:secondary) %>
+  <%= link_to "Download as PDF", download_survey_response_path(@survey_response, token: @survey_response.signed_download_token), class: tailwind_button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
+  </div>
 </div>

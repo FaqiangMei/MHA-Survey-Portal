@@ -1,40 +1,87 @@
 <%= form_with(model: survey_response, local: true) do |form| %>
-  <% if survey_response.errors.any? %>
-    <div style="color: red">
-      <h2><%= pluralize(survey_response.errors.count, "error") %> prohibited this survey_response from being saved:</h2>
 
-      <ul>
-        <% survey_response.errors.each do |error| %>
-          <li><%= error.full_message %></li>
-        <% end %>
-      </ul>
-    </div>
-  <% end %>
-
-  <div>
-    <%= form.label :surveyresponse_id, style: "display: block" %>
-    <%= form.number_field :surveyresponse_id %>
-  </div>
-
+  <!-- Survey meta fields -->
   <div>
     <%= form.label :student_id, style: "display: block" %>
     <%= form.number_field :student_id %>
   </div>
-
   <div>
     <%= form.label :advisor_id, style: "display: block" %>
     <%= form.number_field :advisor_id %>
   </div>
-
   <div>
     <%= form.label :survey_id, style: "display: block" %>
     <%= form.number_field :survey_id %>
   </div>
-
+  <div>
+    <%= form.label :completion_date, style: "display: block" %>
+    <%= form.date_field :completion_date %>
+  </div>
+  <div>
+    <%= form.label :approval_date, style: "display: block" %>
+    <%= form.date_field :approval_date %>
+  </div>
   <div>
     <%= form.label :status, style: "display: block" %>
-    <%= form.text_field :status %>
+    <%= form.select :status, SurveyResponse.statuses.values.map { |value| [value, value] }, include_blank: true %>
   </div>
+
+  <!-- Survey questions -->
+  <% if survey_response.survey && survey_response.survey.categories.any? %>
+    <% survey_response.survey.categories.includes(:questions).order(:id).each do |category| %>
+      <section class="mb-6 p-4 border rounded">
+        <h3 class="font-semibold mb-2"><%= category.name %></h3>
+        <% category.questions.ordered.each_with_index do |question, idx| %>
+          <% qr = survey_response.question_responses.find { |r| r.question_id == question.id } || survey_response.question_responses.build(question: question) %>
+          <div class="mb-4">
+            <label class="block font-medium"><%= "Q#{idx+1}. #{question.question_text}" %>
+              <% if question.is_required? %>
+                <span class="text-rose-600">*</span>
+              <% end %>
+            </label>
+            <% case question.question_type %>
+            <% when "short_answer" %>
+              <%= form.fields_for :question_responses, qr do |qr_form| %>
+                <%= qr_form.text_area :response_value, rows: 2, class: "w-full border rounded px-2 py-1" %>
+              <% end %>
+            <% when "multiple_choice" %>
+              <%= form.fields_for :question_responses, qr do |qr_form| %>
+                <%= qr_form.select :response_value, question.answer_options_list, { include_blank: true }, class: "w-full border rounded px-2 py-1" %>
+              <% end %>
+            <% when "scale" %>
+              <%= form.fields_for :question_responses, qr do |qr_form| %>
+                <%= qr_form.select :response_value, (1..5).to_a, { include_blank: true }, class: "w-full border rounded px-2 py-1" %>
+              <% end %>
+            <% when "evidence" %>
+              <%= form.fields_for :question_responses, qr do |qr_form| %>
+                <%= qr_form.text_field :response_value, class: "w-full border rounded px-2 py-1" %>
+              <% end %>
+              <% if question.is_required? %>
+                <span class="text-rose-600">*</span>
+              <% end %>
+              <%# Evidence error message, same style as required %>
+              <% if qr.errors[:response_value].any? %>
+                <div class="text-xs text-rose-600 mt-1">Invalid Google Drive link</div>
+              <% end %>
+            <% else %>
+              <%= form.fields_for :question_responses, qr do |qr_form| %>
+                <%= qr_form.text_field :response_value, class: "w-full border rounded px-2 py-1" %>
+                <% if qr.errors[:response_value].any? %>
+                  <div class="text-xs text-rose-600 mt-1">
+                    <%= qr.errors[:response_value].join(', ') %>
+                  </div>
+                <% end %>
+              <% end %>
+            <% end %>
+            <%# 必填题未填写时提示 %>
+            <% if question.is_required? && (qr.response_value.blank? || qr.response_value.nil?) && survey_response.errors.any? %>
+              <div class="text-xs text-rose-600 mt-1">此题为必填</div>
+            <% end %>
+          </div>
+        <% end %>
+      </section>
+    <% end %>
+  <% end %>
 
   <div>
     <%= form.submit %>

@@ -1,17 +1,10 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
-one:
-  question_id: 1
-  competency_id: 1
-  question: MyString
+fall_q1:
+  category: clinical_skills
+  question_text: How do you rate your clinical skills?
   question_order: 1
-  question_type: MyString
-  answer_options: ["Yes", "No"]
-
-two:
-  question_id: 1
-  competency_id: 1
-  question: MyString
-  question_order: 1
-  question_type: MyString
-  answer_options: ["Yes", "No"]
+  question_type: short_answer
+  is_required: true
+  has_evidence_field: false
+  answer_options:
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

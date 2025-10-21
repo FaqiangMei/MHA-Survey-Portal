@@ -1,9 +1,16 @@
-class DashboardsController < ApplicationController
-  before_action :authenticate_admin!
+require "set"
 
+# Presents role-aware dashboards and administrative utilities for students,
+# advisors, and administrators within the main application.
+class DashboardsController < ApplicationController
+  before_action :ensure_profile_present, only: %i[student advisor]
+  before_action :ensure_role_switch_allowed, only: :switch_role
+
+  # Redirects the signed-in user to their primary role dashboard.
+  #
+  # @return [void]
   def show
-    # Default dashboard - redirect based on role
-    case current_admin.role
+    case current_user.role
     when "student"
       redirect_to student_dashboard_path
     when "advisor"
@@ -11,187 +18,201 @@ class DashboardsController < ApplicationController
     when "admin"
       redirect_to admin_dashboard_path
     else
-      # Fallback - if no role is set, redirect to student for now
       redirect_to student_dashboard_path
     end
+
+       # ...existing code...
   end
 
+  # Renders the student dashboard with survey completion summaries and
+  # download links.
+  #
+  # @return [void]
   def student
-    # Student dashboard
-    # Try to map the signed-in admin to a Student record by email
-    @student = nil
-    if defined?(current_admin) && current_admin.present?
-      @student = Student.find_by(email: current_admin.email)
+    @student = current_student
 
-    @pending_surveys = [
-      { id: 1, title: "Health & Wellness Survey" },
-      { id: 3, title: "Career Goals Survey" }
-    ]
-    @completed_surveys = []
+    unless @student
+      redirect_to dashboard_path, alert: "Student profile not found." and return
     end
 
-    if @student
-      # Ensure there are at least 3 surveys in the system and each has 5 questions
-      (1..3).each do |i|
-        # Attempt to find or create by the external survey_id. In rare cases a
-        # create can fail with a unique constraint on the primary key (sequence
-        # out of sync or race). Rescue and fetch the existing record instead of
-        # letting the request raise 404.
-        begin
-          survey = Survey.find_or_create_by(survey_id: i) do |s|
-            s.assigned_date = Date.today
-          end
-        rescue ActiveRecord::RecordNotUnique => e
-          Rails.logger.warn "Survey create conflict for survey_id=#{i}: #{e.message}"
-          survey = Survey.find_by(survey_id: i)
-          # If we still can't find the survey something else is wrong — re-raise
-          raise unless survey
-        end
+    surveys = Survey.includes(:questions).ordered
 
-        # ensure 5 questions for this survey via competencies -> questions; we'll create a single competency to hold them
-        if survey.competencies.empty?
-          comp = survey.competencies.create!(name: "Default competency #{survey.id}", description: "Auto-generated")
-          # create five questions: select, checkbox, radio, text, text
-          comp.questions.create!(question_order: 1, question_type: "select", question: "Choose your primary focus", answer_options: "Leadership,Analytics,Finance")
-          comp.questions.create!(question_order: 2, question_type: "checkbox", question: "Which skills improved", answer_options: "Leadership,Analytics,Finance")
-          comp.questions.create!(question_order: 3, question_type: "radio", question: "Do you feel confident?", answer_options: "Yes,No")
-          comp.questions.create!(question_order: 4, question_type: "text", question: "Please describe one achievement", answer_options: nil)
-          comp.questions.create!(question_order: 5, question_type: "text", question: "Any additional feedback", answer_options: nil)
-        end
+    student_responses = StudentQuestion
+                          .joins(question: :category)
+                          .where(student_id: @student.student_id)
+                          .select(
+                            "categories.survey_id AS survey_id",
+                            "student_questions.question_id",
+                            "student_questions.updated_at"
+                          )
 
-        # create a SurveyResponse for this student if missing
-        sr = SurveyResponse.find_or_initialize_by(student_id: @student.id, survey_id: survey.id)
-        if sr.new_record?
-          sr.status = SurveyResponse.statuses[:not_started]
-          sr.advisor_id = @student.advisor_id
-          sr.save!
+    responses_matrix = Hash.new { |hash, key| hash[key] = [] }
+    student_responses.each do |entry|
+      responses_matrix[entry.survey_id] << { question_id: entry.question_id, updated_at: entry.updated_at }
+    end
+
+    @completed_surveys = []
+    @pending_surveys = []
+
+    surveys.each do |survey|
+      required_ids = survey.questions.select { |question| required_question?(question) }.map(&:id)
+      responses = responses_matrix[survey.id]
+      answered_ids = responses.map { |entry| entry[:question_id] }.uniq
+      answered_count = answered_ids.size
+      total_count = required_ids.present? ? required_ids.size : survey.questions.count
+      completed_at = responses.map { |entry| entry[:updated_at] }.compact.max
+
+      survey_response = SurveyResponse.build(student: @student, survey: survey)
+      survey_summary = {
+        survey: survey,
+        answered_count: answered_count,
+        total_count: total_count,
+        completed_at: completed_at,
+        required: required_ids.present?,
+        survey_response: survey_response,
+        download_token: survey_response.signed_download_token
+      }
+
+      if required_ids.present?
+        answered_set = answered_ids.to_set
+        if required_ids.all? { |id| answered_set.include?(id) }
+          @completed_surveys << survey_summary.merge(status: "Completed")
+        else
+          @pending_surveys << survey_summary.merge(status: "Pending")
+        end
+      else
+        # Surveys without required questions are considered pending until at least one answer is provided
+        if answered_count.positive?
+          @completed_surveys << survey_summary.merge(status: "Completed")
+        else
+          @pending_surveys << survey_summary.merge(status: "Pending")
         end
       end
-
-      # pending: not submitted
-      @pending_survey_responses = SurveyResponse.pending_for_student(@student.id)
-      @pending_surveys = Survey.where(id: @pending_survey_responses.pluck(:survey_id))
-
-      # completed: submitted
-      @completed_survey_responses = SurveyResponse.completed_for_student(@student.id)
-      @completed_surveys = Survey.where(id: @completed_survey_responses.pluck(:survey_id))
-    else
-      @pending_surveys = []
-      @completed_surveys = []
     end
   end
 
+  # Displays advisor-specific information such as advisees and recent feedback.
+  # Handles admin impersonation of advisor dashboards.
+  #
+  # @return [void]
   def advisor
-       # Advisor dashboard (also used by admins with additional features)
-  end
+    @advisor = current_advisor_profile
+    admin_impersonating_advisor = current_user.admin_profile.present? && !current_user.role_admin?
 
-  def admin
-    # Admin dashboard - loads data for admin view
-    @total_students = Admin.where(role: "student").count
-    @total_advisors = Admin.where(role: "advisor").count
-    @total_surveys = 0 # Placeholder for when surveys are implemented
-    @total_notifications = 0 # Placeholder for notifications
-    @total_users = Admin.count
-    @recent_logins = Admin.order(updated_at: :desc).limit(5)
-  end
-
-  def manage_members
-    # Admin-only action for managing member roles
-    unless current_admin.admin?
-      redirect_to root_path, alert: "Access denied. Admin privileges required."
-      return
+    if admin_impersonating_advisor
+      @advisees = Student.left_joins(:user).includes(:advisor).order(Arel.sql("LOWER(users.name) ASC"))
+      @recent_feedback = Feedback.includes(:category, :survey, :student).order(created_at: :desc).limit(5)
+      @pending_notifications_count = Notification.unread.count
+    else
+      @advisees = @advisor&.advisees&.includes(:user) || []
+      @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
+      @pending_notifications_count = if @advisor
+        Notification.unread.where(notifiable: @advisor).count
+      else
+        0
+      end
     end
 
-    # Load all users with their roles
-    @users = Admin.all.order(:full_name, :email)
+    @advisee_count = @advisees.size
+    @active_survey_count = Survey.count
+  end
+
+  # Shows high-level system metrics for administrators.
+  #
+  # @return [void]
+  def admin
     @role_counts = {
-      student: Admin.where(role: "student").count,
-      advisor: Admin.where(role: "advisor").count,
-      admin: Admin.where(role: "admin").count
+      student: User.students.count,
+      advisor: User.advisors.count,
+      admin: User.admins.count
+    }
+
+    @total_surveys = Survey.count
+    @total_responses = StudentQuestion.count
+    @recent_logins = User.order(updated_at: :desc).limit(5)
+  end
+
+  # Lists all members and role counts for admin management.
+  #
+  # @return [void]
+  def manage_members
+    ensure_admin!
+    @users = User.order(:name, :email)
+    @role_counts = {
+      student: User.students.count,
+      advisor: User.advisors.count,
+      admin: User.admins.count
     }
   end
 
+  # Applies role updates submitted by admins, reporting successes and failures.
+  #
+  # @return [void]
   def update_roles
-    # Admin-only action for updating user roles
-    unless current_admin.admin?
-      redirect_to root_path, alert: "Access denied. Admin privileges required."
+    ensure_admin!
+
+    role_updates = params[:role_updates] || {}
+    if role_updates.empty?
+      redirect_to manage_members_path, alert: "No role changes were submitted."
       return
     end
 
-    begin
-      role_updates = params[:role_updates] || {}
-      changes_made = 0
-      successful_updates = []
-      failed_updates = []
+    allowed_roles = User.roles.values
+    successful_updates = []
+    failed_updates = []
 
-      if role_updates.empty?
-        redirect_to manage_members_path, alert: "No role changes were submitted."
-        return
-      end
-
-      ActiveRecord::Base.transaction do
-        role_updates.each do |user_id, new_role|
-          begin
-            user = Admin.find(user_id.to_i)
-            current_role = user.role || "student"
-
-            # Skip if it's the current admin or if role is unchanged
-            if user == current_admin
-              next
-            end
-
-            if current_role == new_role
-              next
-            end
-
-            if %w[student advisor admin].include?(new_role)
-              user.update!(role: new_role)
-              changes_made += 1
-              successful_updates << "#{user.email}: #{current_role} → #{new_role}"
-            else
-              failed_updates << "#{user.email}: invalid role '#{new_role}'"
-            end
-          rescue ActiveRecord::RecordNotFound => e
-            failed_updates << "User ID #{user_id}: not found"
-          rescue => e
-            Rails.logger.error "Error updating user #{user_id}: #{e.message}"
-            failed_updates << "User ID #{user_id}: #{e.message}"
-          end
+    ActiveRecord::Base.transaction do
+      role_updates.each do |user_id, new_role|
+        user = User.find_by(id: user_id)
+        unless user
+          failed_updates << "User ID #{user_id}: not found"
+          next
         end
-      end
 
-      if changes_made > 0
-        success_message = "Successfully updated #{changes_made} user role#{'s' if changes_made > 1}."
-        if failed_updates.any?
-          success_message += " Some updates failed: #{failed_updates.join(', ')}"
+        if user == current_user
+          failed_updates << "#{user.email}: cannot change your own role"
+          next
         end
-        redirect_to manage_members_path, notice: success_message
-      elsif failed_updates.any?
-        error_message = "Role update errors: #{failed_updates.join(', ')}"
-        redirect_to manage_members_path, alert: error_message
-      else
-        redirect_to manage_members_path, notice: "No role changes were needed."
-      end
 
-    rescue => e
-      Rails.logger.error "Critical error in update_roles: #{e.message}"
-      redirect_to manage_members_path, alert: "An error occurred while updating user roles. Please try again."
+        unless allowed_roles.include?(new_role)
+          failed_updates << "#{user.email}: invalid role '#{new_role}'"
+          next
+        end
+
+        next if user.role == new_role
+
+        previous_role = user.role
+        user.update!(role: new_role)
+        successful_updates << "#{user.email}: #{previous_role} → #{new_role}"
+      rescue StandardError => e
+        Rails.logger.error "Error updating user #{user_id}: #{e.message}"
+        failed_updates << "User ID #{user_id}: #{e.message}"
+      end
+    end
+
+    if successful_updates.present?
+      message = "Updated #{successful_updates.size} user role#{'s' if successful_updates.size > 1}."
+      message += " Failures: #{failed_updates.join(', ')}" if failed_updates.present?
+      redirect_to manage_members_path, notice: message
+    elsif failed_updates.present?
+      redirect_to manage_members_path, alert: "Role update errors: #{failed_updates.join(', ')}"
+    else
+      redirect_to manage_members_path, notice: "No role changes were needed."
     end
   end
 
+  # Returns a JSON payload summarizing users and role counts for troubleshooting.
+  #
+  # @return [void]
   def debug_users
-    # Debug endpoint to check user roles
-    unless current_admin.admin?
-      render json: { error: "Access denied" }, status: 403
-      return
-    end
+    ensure_admin!
 
-    users = Admin.all.map do |user|
+    users = User.order(:name).map do |user|
       {
         id: user.id,
         email: user.email,
-        full_name: user.full_name,
-        role: user.role || "student",
+        name: user.name,
+        role: user.role,
         updated_at: user.updated_at
       }
     end
@@ -199,11 +220,159 @@ class DashboardsController < ApplicationController
     render json: {
       users: users,
       role_counts: {
-        student: Admin.where(role: "student").count,
-        advisor: Admin.where(role: "advisor").count,
-        admin: Admin.where(role: "admin").count
+        student: User.students.count,
+        advisor: User.advisors.count,
+        admin: User.admins.count
       },
       timestamp: Time.current
     }
+  end
+
+  # Allows role switching in non-production environments for testing nested
+  # dashboards.
+  #
+  # @return [void]
+  def switch_role
+    new_role = params[:role].to_s.downcase
+
+    unless User.roles.values.include?(new_role)
+      redirect_back fallback_location: dashboard_path, alert: "Unrecognized role selection." and return
+    end
+
+    if current_user.role == new_role
+      redirect_to dashboard_path_for_role(new_role), notice: "Already viewing the #{new_role.titleize} dashboard." and return
+    end
+
+    begin
+      current_user.update!(role: new_role)
+      flash[:notice] = "Role switched to #{new_role.titleize} for testing."
+    rescue StandardError => e
+      Rails.logger.error "Role switch failed for user #{current_user.id}: #{e.message}"
+      redirect_back fallback_location: dashboard_path, alert: "Unable to switch roles: #{e.message}" and return
+    end
+
+    redirect_to dashboard_path_for_role(new_role)
+  end
+
+  # Lists students and advisors for assignment management.
+  #
+  # @return [void]
+  def manage_students
+    @students = load_students
+    @advisors = Advisor.joins(:user).order(Arel.sql("LOWER(users.name) ASC"))
+  end
+
+  # Updates the advisor assigned to a student.
+  #
+  # @return [void]
+  def update_student_advisor
+    @student = Student.find(params[:id])
+    if @student.update(student_params)
+      redirect_to manage_students_path, notice: "Advisor updated successfully."
+    else
+      redirect_to manage_students_path, alert: "Failed to update advisor."
+    end
+  end
+
+  private
+
+  # Ensures the current user has the necessary profile record for their role.
+  #
+  # @return [void]
+  def ensure_profile_present
+    return if current_user.role_admin?
+
+    if current_user.role_student? && current_student.nil?
+      current_user.create_student_profile unless current_user.student_profile
+      @current_student = current_user.student_profile
+    elsif current_user.role_advisor? && current_advisor_profile.nil?
+      current_user.create_advisor_profile unless current_user.advisor_profile
+      @current_advisor = current_user.advisor_profile
+    end
+  end
+
+  # Raises an alert when a non-admin attempts to access admin-only actions.
+  #
+  # @return [Boolean] false when access is denied
+  def ensure_admin!
+    return if current_user.role_admin?
+
+    redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
+    false
+  end
+
+  # Gatekeeps the role-switch feature to development and test environments.
+  #
+  # @return [void]
+  def ensure_role_switch_allowed
+    # Always allow in development and test
+    return if Rails.env.development? || Rails.env.test?
+
+    # When ENABLE_ROLE_SWITCH=="1" the feature is explicitly enabled for this deployment.
+    # In that mode, allow any signed-in user to use the switcher (useful for testing impersonation
+    # flows across roles). If the flag is not set, deny access in production.
+    if ENV["ENABLE_ROLE_SWITCH"] == "1" && current_user.present?
+      return
+    end
+
+    redirect_to dashboard_path, alert: "Role switching is only available in development/test or when ENABLE_ROLE_SWITCH is enabled."
+  end
+
+  # Resolves the dashboard path for a given role value.
+  #
+  # @param role [String]
+  # @return [String]
+  def dashboard_path_for_role(role)
+    case role
+    when User.roles[:student]
+      student_dashboard_path
+    when User.roles[:advisor]
+      advisor_dashboard_path
+    when User.roles[:admin]
+      admin_dashboard_path
+    else
+      dashboard_path
+    end
+  end
+
+  # Determines whether a question must be answered to count toward completion.
+  #
+  # @param question [Question, nil]
+  # @return [Boolean]
+  def required_question?(question)
+    return false unless question
+
+    return true if question.required?
+
+    return false unless question.question_type_multiple_choice?
+
+    options = question.answer_options_list.map(&:strip).map(&:downcase)
+    !(options == %w[yes no] || options == %w[no yes])
+  end
+
+
+  # Loads students visible to the current user, respecting admin/advisor scope.
+  #
+  # @return [ActiveRecord::Relation<Student>]
+  def load_students
+    has_admin_privileges = current_user&.role_admin? || current_user&.admin_profile.present?
+
+    scope = if has_admin_privileges
+      Student.includes(:user, advisor: :user)
+    else
+      current_advisor_profile&.advisees&.includes(:user, advisor: :user) || Student.none
+    end
+
+    scope
+      .left_joins(:user)
+      .includes(:advisor)
+      .order(Arel.sql("LOWER(users.name) ASC"))
+  end
+
+  # Strong parameters for assigning an advisor to a student.
+  #
+  # @return [ActionController::Parameters]
+  def student_params
+    params.require(:student).permit(:advisor_id)
   end
 end

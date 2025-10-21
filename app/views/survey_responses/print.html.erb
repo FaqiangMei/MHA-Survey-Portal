@@ -1,0 +1,26 @@
+<%# Print view: render a header and the existing survey_response partial for printing or client-side PDF export %>
+<% sr = local_assigns[:survey_response] || @survey_response %>
+<% survey = sr&.survey %>
+
+<%- content_for :header do -%>
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <div class="survey-title"><%= survey&.title.presence || "Survey ##{survey&.id}" %></div>
+      <div style="font-size:0.9rem; color:#444;">Student: <%= sr&.student&.user&.name.presence || "Student ##{sr&.student_id}" %></div>
+    </div>
+    <div style="text-align:right; font-size:0.9rem; color:#444;">
+      <div>Printed: <%= Time.current.strftime('%Y-%m-%d') %></div>
+    </div>
+  </div>
+<%- end -%>
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: .75rem;">
+  <div>
+    <a href="<%= student_dashboard_path %>" class="btn btn-secondary">← Back</a>
+  </div>
+  <div>
+    <button onclick="window.print();" class="btn btn-primary">Print</button>
+  </div>
+</div>
+
+<%= render partial: 'survey_response', locals: { survey_response: sr } %>

@@ -1,126 +1,106 @@
+# Presents individual survey responses for viewing, printing, or exporting,
+# enforcing authorization rules for admins, advisors, and students.
 class SurveyResponsesController < ApplicationController
-  before_action :set_survey_response, only: %i[ show edit update destroy reopen ]
-  before_action :authorize_student_view!, only: %i[ show edit update destroy ]
+  before_action :set_survey_response
+  before_action :authorize_view!
 
-  # GET /survey_responses or /survey_responses.json
-  def index
-    @survey_responses = SurveyResponse.all
-  end
-
-  # GET /survey_responses/1 or /survey_responses/1.json
+  # Shows a survey response within the standard layout.
+  #
+  # @return [void]
   def show
-    # collect all question ids for this survey (through competencies)
-    survey = @survey_response.survey
-    question_ids = []
-    if survey && survey.respond_to?(:competencies)
-      survey.competencies.each do |comp|
-        question_ids.concat(comp.questions.pluck(:id)) if comp.respond_to?(:questions)
-      end
-    end
-    @question_responses = QuestionResponse.where(question_id: question_ids)
-
-    respond_to do |format|
-      format.html
-      format.pdf do
-        html = render_to_string(
-          template: "survey_responses/show",
-          layout: "pdf",
-          encoding: "UTF-8",
-          locals: { :@survey_response => @survey_response, :@question_responses => @question_responses }
-        )
-        render pdf: "survey_response_#{@survey_response.id}",
-               html: html,
-               encoding: "UTF-8"
-      end
-    end
+    @question_responses = preload_question_responses
   end
 
-  # GET /survey_responses/new
-  def new
-    @survey_response = SurveyResponse.new
-  end
+  # Streams a PDF version of the survey response when WickedPdf is available.
+  # Falls back with an error when server-side rendering is disabled.
+  #
+  # @return [void]
+  def download
+    @question_responses = preload_question_responses
 
-  # GET /survey_responses/1/edit
-  def edit
-    # Only non-student users (advisors/admins) may edit
-    if current_student && @survey_response.student_id == current_student.id
-      redirect_to @survey_response, alert: "Students are not allowed to edit survey responses."
+    unless defined?(WickedPdf)
+      logger.warn "Server-side PDF generation requested but WickedPdf is not available"
+      render plain: "Server-side PDF generation unavailable. Please use the 'Download as PDF' button which uses your browser's Print/Save-as-PDF feature.", status: :service_unavailable and return
     end
-  end
 
-  # POST /survey_responses or /survey_responses.json
-  def create
-    @survey_response = SurveyResponse.new(survey_response_params)
+    pdf_data = generate_pdf
 
-    respond_to do |format|
-      if @survey_response.save
-        format.html { redirect_to @survey_response, notice: "Survey response was successfully created." }
-        format.json { render :show, status: :created, location: @survey_response }
-      else
-        format.html { render :new, status: :unprocessable_entity }
-        format.json { render json: @survey_response.errors, status: :unprocessable_entity }
-      end
+    unless pdf_data&.start_with?("%PDF")
+      logger.error "PDF generation returned non-PDF payload for SurveyResponse=#{@survey_response.id}: first bytes=#{pdf_data&.byteslice(0, 128).inspect}"
+      head :internal_server_error and return
     end
-  end
 
-  # PATCH/PUT /survey_responses/1 or /survey_responses/1.json
-  def update
-    # Prevent students from updating
-    if current_student && @survey_response.student_id == current_student.id
-      redirect_to @survey_response, alert: "Students are not allowed to update survey responses." and return
-    end
-    respond_to do |format|
-      if @survey_response.update(survey_response_params)
-        format.html { redirect_to @survey_response, notice: "Survey response was successfully updated." }
-        format.json { render :show, status: :ok, location: @survey_response }
-      else
-        format.html { render :edit, status: :unprocessable_entity }
-        format.json { render json: @survey_response.errors, status: :unprocessable_entity }
-      end
-    end
-  end
-
-  # DELETE /survey_responses/1 or /survey_responses/1.json
-  def destroy
-    # Prevent students from destroying
-    if current_student && @survey_response.student_id == current_student.id
-      redirect_to survey_responses_path, alert: "Students are not allowed to destroy survey responses." and return
-    end
-    @survey_response.destroy!
-
-    respond_to do |format|
-      format.html { redirect_to survey_responses_path, notice: "Survey response was successfully destroyed.", status: :see_other }
-      format.json { head :no_content }
-    end
-  end
-
-  # PATCH /survey_responses/:id/reopen
-  def reopen
-    # Only allow reopening if current_student owns it
-    if current_student && @survey_response.student_id == current_student.id
-      @survey_response.update!(status: SurveyResponse.statuses[:not_started])
-      redirect_to student_dashboard_path, notice: "Survey has been moved back to To-do."
-    else
-      redirect_to survey_responses_path, alert: "Not authorized to reopen this survey."
+    begin
+      filename = "survey_response_#{@survey_response.id}.pdf"
+      send_data pdf_data, filename: filename, disposition: "attachment", type: "application/pdf"
+    rescue => e
+      logger.error "Download PDF failed for SurveyResponse #{@survey_response.id}: #{e.class} - #{e.message}\n#{e.backtrace&.join("\n")}"
+      head :internal_server_error
     end
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_survey_response
-      @survey_response = SurveyResponse.find(params[:id])
+
+  # Finds the survey response by signed token or ID parameter.
+  #
+  # @return [void]
+  def set_survey_response
+    token = params[:token].presence
+
+    @survey_response = if token
+      SurveyResponse.find_by_signed_download_token(token)
+    elsif params[:id].present?
+      SurveyResponse.find_from_param(params[:id])
     end
 
-    def authorize_student_view!
-      # Students may only view their own survey responses. Advisors and admins can view any.
-      return unless current_student
-      if @survey_response && @survey_response.student_id != current_student.id
-        redirect_to student_dashboard_path, alert: "You are not authorized to view that survey response."
-      end
+    return if @survey_response
+
+    logger.warn "SurveyResponse lookup failed for id=#{params[:id]} token_present=#{token.present?}"
+    head :not_found
+  end
+
+  # Ensures the current user is permitted to view the response.
+  #
+  # @return [void]
+  def authorize_view!
+    return if params[:token].present? # signed token grants access without session
+
+    current = current_user
+    if current&.role_admin? || current&.role_advisor?
+      return
     end
 
-    # Only allow a list of trusted parameters through.
-    def survey_response_params
-      params.expect(survey_response: [ :surveyresponse_id, :student_id, :advisor_id, :survey_id, :semester, :status ])
+    student_profile = current_student
+    if student_profile && student_profile.student_id == @survey_response.student_id
+      return
     end
+
+    logger.warn "Authorization failed for SurveyResponse #{@survey_response.id} user=#{current&.id}"
+    head :unauthorized
+  end
+
+  # Preloads related question responses for rendering.
+  #
+  # @return [ActiveRecord::Associations::CollectionProxy<QuestionResponse>]
+  def preload_question_responses
+    @survey_response.question_responses
+  end
+
+  # Generates a PDF payload from the survey response using WickedPdf.
+  #
+  # @return [String, nil]
+  def generate_pdf
+    html = render_to_string(
+      template: "survey_responses/show",
+      layout: "pdf",
+      formats: [ :html ],
+      encoding: "UTF-8",
+      locals: { survey_response: @survey_response }
+    )
+
+    WickedPdf.new.pdf_from_string(html)
+  rescue => e
+    logger.error "PDF generation raised #{e.class} - #{e.message}\n#{e.backtrace&.join("\n")}"
+    nil
+  end
 end

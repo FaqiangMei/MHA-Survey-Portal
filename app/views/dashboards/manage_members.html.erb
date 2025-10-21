@@ -50,7 +50,7 @@
             </thead>
             <tbody>
               <% @users.each do |user| %>
-                <tr class="user-row <%= 'current-admin' if user == current_admin %>">
+                <tr class="user-row <%= 'current-user' if user == current_user %>">
                   <td class="user-avatar-cell">
                     <div class="user-table-avatar"
                          <% if user.avatar_url.present? %>
@@ -62,7 +62,7 @@
                   
                   <td class="user-name-cell">
                     <div class="user-name"><%= user.full_name || "N/A" %></div>
-                    <% if user == current_admin %>
+                    <% if user == current_user %>
                       <span class="current-user-badge">You</span>
                     <% end %>
                   </td>
@@ -78,16 +78,12 @@
                   </td>
                   
                   <td class="user-new-role-cell">
-                    <% if user == current_admin %>
+                    <% if user == current_user %>
                       <span class="role-locked">Role Locked</span>
                     <% else %>
                       <div class="role-selector">
                         <%= select_tag "role_updates[#{user.id}]", 
-                            options_for_select([
-                              ['Student', 'student'],
-                              ['Advisor', 'advisor'],
-                              ['Admin', 'admin']
-                            ], user.role || 'student'),
+                            options_for_select(User.roles.map { |key, value| [key.titleize, key] }, user.role || 'student'),
                             { 
                               class: 'role-select', 
                               data: { 
@@ -102,7 +98,7 @@
                   </td>
                   
                   <td class="user-actions-cell">
-                    <% if user == current_admin %>
+                    <% if user == current_user %>
                       <span class="action-disabled">-</span>
                     <% else %>
                       <span class="role-change-indicator" data-user-id="<%= user.id %>">
@@ -117,14 +113,14 @@
         </div>
 
         <!-- Action Buttons -->
-        <div class="form-actions">
-          <div class="changes-summary" id="changes-summary" style="display: none;">
-            <span class="changes-count">0 changes pending</span>
+        <div class="mt-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+          <div class="text-sm text-slate-600" id="changes-summary" style="display: none;">
+            <span class="changes-count font-semibold">0 changes pending</span>
           </div>
-          
-          <div class="action-buttons">
-            <%= link_to "Cancel", admin_dashboard_path, class: "btn btn-secondary" %>
-            <%= form.submit "Save Changes", class: "btn btn-primary", id: "save-changes-btn", disabled: true %>
+
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            <%= link_to "Cancel", admin_dashboard_path, class: tailwind_button_classes(:secondary) %>
+            <%= form.submit "Save Changes", class: tailwind_button_classes(:primary), id: "save-changes-btn", disabled: true %>
           </div>
         </div>
 
@@ -134,118 +130,130 @@
 
   <!-- JavaScript for role management -->
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const form = document.getElementById('role-management-form');
-      const saveButton = document.getElementById('save-changes-btn');
-      const changesSummary = document.getElementById('changes-summary');
-      const changesCount = changesSummary.querySelector('.changes-count');
-      
-      let pendingChanges = {};
-      
-      // Track changes to role selectors
-      document.querySelectorAll('.role-select').forEach(select => {
-        const userId = select.dataset.userId;
-        const originalRole = select.dataset.originalRole || select.dataset.currentRole;
-        const indicator = document.querySelector(`.role-change-indicator[data-user-id="${userId}"]`);
-        
-        if (!indicator) {
-          return; // Skip this select if no indicator found
+    (function() {
+      function initManageMembers() {
+        const form = document.getElementById('role-management-form');
+        if (!form || form.dataset.initialized === 'true') {
+          return;
         }
-        
-        // Set the initial value explicitly
-        select.value = originalRole;
-        
-        select.addEventListener('change', function(e) {
-          const newRole = this.value;
-          const userRow = this.closest('.user-row');
-          const userName = userRow ? userRow.querySelector('.user-name').textContent.trim() : `User ${userId}`;
-          
-          if (newRole !== originalRole) {
-            pendingChanges[userId] = {
-              oldRole: originalRole,
-              newRole: newRole,
-              userName: userName
-            };
-            
-            indicator.textContent = `${originalRole} → ${newRole}`;
-            indicator.className = 'role-change-indicator changed';
-            
-            if (userRow) {
-              userRow.classList.add('has-changes');
-            }
+
+        form.dataset.initialized = 'true';
+
+        const saveButton = document.getElementById('save-changes-btn');
+        const changesSummary = document.getElementById('changes-summary');
+        const changesCount = changesSummary ? changesSummary.querySelector('.changes-count') : null;
+
+        if (!saveButton || !changesSummary || !changesCount) {
+          return;
+        }
+
+        const pendingChanges = {};
+
+        function findIndicator(userId) {
+          return form.querySelector(`.role-change-indicator[data-user-id="${userId}"]`);
+        }
+
+        function updateUI() {
+          const changeCount = Object.keys(pendingChanges).length;
+
+          if (changeCount > 0) {
+            saveButton.disabled = false;
+            saveButton.style.opacity = '1';
+            saveButton.style.cursor = 'pointer';
+            changesSummary.style.display = 'block';
+            changesCount.textContent = `${changeCount} change${changeCount > 1 ? 's' : ''} pending`;
+            saveButton.setAttribute('data-has-changes', 'true');
           } else {
-            delete pendingChanges[userId];
-            indicator.textContent = 'No changes';
-            indicator.className = 'role-change-indicator';
-            
-            if (userRow) {
-              userRow.classList.remove('has-changes');
-            }
+            saveButton.disabled = true;
+            saveButton.style.opacity = '0.5';
+            saveButton.style.cursor = 'not-allowed';
+            changesSummary.style.display = 'none';
+            saveButton.removeAttribute('data-has-changes');
           }
-          
-          updateUI();
+        }
+
+        form.querySelectorAll('.role-select').forEach(select => {
+          const userId = select.dataset.userId;
+          const originalRole = select.dataset.originalRole || select.dataset.currentRole;
+          const indicator = findIndicator(userId);
+
+          if (!indicator) {
+            return;
+          }
+
+          select.value = originalRole;
+
+          select.addEventListener('change', function() {
+            const newRole = this.value;
+            const userRow = this.closest('.user-row');
+            const userName = userRow ? userRow.querySelector('.user-name').textContent.trim() : `User ${userId}`;
+
+            if (newRole !== originalRole) {
+              pendingChanges[userId] = {
+                oldRole: originalRole,
+                newRole: newRole,
+                userName: userName
+              };
+
+              indicator.textContent = `${originalRole} → ${newRole}`;
+              indicator.className = 'role-change-indicator changed';
+
+              if (userRow) {
+                userRow.classList.add('has-changes');
+              }
+            } else {
+              delete pendingChanges[userId];
+              indicator.textContent = 'No changes';
+              indicator.className = 'role-change-indicator';
+
+              if (userRow) {
+                userRow.classList.remove('has-changes');
+              }
+            }
+
+            updateUI();
+          });
         });
-      });
-      
-      function updateUI() {
-        const changeCount = Object.keys(pendingChanges).length;
-        
-        if (changeCount > 0) {
-          saveButton.disabled = false;
-          saveButton.style.opacity = '1';
-          saveButton.style.cursor = 'pointer';
-          changesSummary.style.display = 'block';
-          changesCount.textContent = `${changeCount} change${changeCount > 1 ? 's' : ''} pending`;
-          saveButton.setAttribute('data-has-changes', 'true');
-        } else {
+
+        saveButton.addEventListener('click', function(e) {
+          if (this.disabled) {
+            e.preventDefault();
+            e.stopPropagation();
+            alert('No changes to save. Please make role changes first.');
+          }
+        });
+
+        form.addEventListener('submit', function(e) {
+          const changeCount = Object.keys(pendingChanges).length;
+
+          if (changeCount === 0) {
+            alert('No changes to save.');
+            e.preventDefault();
+            return false;
+          }
+
+          const changesList = Object.values(pendingChanges)
+            .map(change => `• ${change.userName}: ${change.oldRole} → ${change.newRole}`)
+            .join('\n');
+
+          const confirmMessage = `You are about to make ${changeCount} role change${changeCount > 1 ? 's' : ''}:\n\n${changesList}\n\nAre you sure you want to continue?`;
+
+          if (!confirm(confirmMessage)) {
+            e.preventDefault();
+            return false;
+          }
+
           saveButton.disabled = true;
-          saveButton.style.opacity = '0.5';
-          saveButton.style.cursor = 'not-allowed';
-          changesSummary.style.display = 'none';
-          saveButton.removeAttribute('data-has-changes');
-        }
+          saveButton.textContent = 'Saving...';
+
+          return true;
+        });
+
+        updateUI();
       }
-      
-      // Save button click handler
-      saveButton.addEventListener('click', function(e) {
-        if (this.disabled) {
-          e.preventDefault();
-          e.stopPropagation();
-          alert('No changes to save. Please make role changes first.');
-          return false;
-        }
-      });
-      
-      // Form submission handling
-      form.addEventListener('submit', function(e) {
-        const changeCount = Object.keys(pendingChanges).length;
-        
-        if (changeCount === 0) {
-          alert('No changes to save.');
-          e.preventDefault();
-          return false;
-        }
-        
-        const changesList = Object.values(pendingChanges)
-          .map(change => `• ${change.userName}: ${change.oldRole} → ${change.newRole}`)
-          .join('\n');
-        
-        const confirmMessage = `You are about to make ${changeCount} role change${changeCount > 1 ? 's' : ''}:\n\n${changesList}\n\nAre you sure you want to continue?`;
-        
-        if (!confirm(confirmMessage)) {
-          e.preventDefault();
-          return false;
-        }
-        
-        // Show loading state
-        saveButton.disabled = true;
-        saveButton.textContent = 'Saving...';
-        
-        return true;
-      });
-      
-      // Initial UI update
-      updateUI();
-    });
+
+      document.addEventListener('turbo:load', initManageMembers);
+      document.addEventListener('DOMContentLoaded', initManageMembers);
+    })();
   </script>
 <!-- end of manage members -->

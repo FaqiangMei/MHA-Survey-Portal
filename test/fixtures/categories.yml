@@ -1,0 +1,6 @@
+clinical_skills:
+  name: Clinical Skills
+  description: Evaluation of clinical practice
+  survey: fall_2025
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

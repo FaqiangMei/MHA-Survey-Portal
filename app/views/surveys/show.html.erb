@@ -1,62 +1,86 @@
-<% survey_name =
-  case @survey.survey_id
-  when 1 then "Current Residential and Executive MHA Track Study Survey"
-  when 2 then "Competency Self-Assessment Survey"
-  when 3 then "Final Feedback Survey"
-  else "Survey ##{@survey.survey_id}"
-  end
-%>
+<% survey_title = @survey.title.presence || "Survey ##{@survey.id}" %>
 
-<div class="survey-container">
-  <h1 class="survey-title"><%= survey_name %></h1>
-  <%= form_with url: submit_survey_path(@survey), local: true, class: "survey-form" do |f| %>
-    <% if @survey.respond_to?(:questions) && @survey.questions.any? %>
-      <% @survey.questions.order(:question_order).each do |q| %>
-        <div class="form-group question-block">
-          <label class="form-label"><%= q.question || "Question #{q.id}" %></label>
-          <% case q.question_type %>
-          <% when 'text' %>
-            <%= text_area_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control', rows: 3 %>
-          <% when 'select' %>
-            <% options = (q.answer_options || '').split(',').map(&:strip) %>
-            <%= select_tag "answers[#{q.id}]", options_for_select(options, @existing_answers[q.id]), include_blank: true, class: 'form-control' %>
-          <% when 'radio' %>
-            <% options = (q.answer_options || '').split(',').map(&:strip) %>
-            <% options.each do |opt| %>
-              <label class="form-check">
-                <%= radio_button_tag "answers[#{q.id}]", opt, (@existing_answers[q.id].to_s == opt.to_s) %> <%= opt %>
-              </label>
-            <% end %>
-          <% when 'checkbox' %>
-            <% options = (q.answer_options || '').split(',').map(&:strip) %>
-            <% selected = Array(@existing_answers[q.id]) %>
-            <% options.each do |opt| %>
-              <label class="form-check">
-                <%= check_box_tag "answers[#{q.id}][]", opt, selected.include?(opt) %> <%= opt %>
-              </label>
-            <% end %>
-          <% else %>
-            <%= text_field_tag "answers[#{q.id}]", (@existing_answers[q.id] || nil), class: 'form-control' %>
+<div class="survey-container mx-auto max-w-4xl space-y-8">
+  <header class="survey-header text-center space-y-1">
+    <h1 class="text-2xl font-semibold text-slate-900"><%= @survey.title %></h1>
+    <p class="text-sm text-slate-600">
+      Semester: <%= @survey.semester.presence || "TBD" %> · Tracks: <%= @survey.track_list.presence&.join(", ") || "Unassigned" %>
+    </p>
+  </header>
+
+  <%= form_with url: submit_survey_path(@survey), method: :post, local: true, data: { turbo: false }, class: "space-y-6 survey-form" do |form| %>
+    <% @category_groups.each do |category| %>
+      <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <header>
+          <h2 class="text-xl font-semibold text-slate-900"><%= category.name %></h2>
+          <% if category.description.present? %>
+            <p class="text-sm text-slate-600"><%= category.description %></p>
           <% end %>
-        </div>
-      <% end %>
-    <% else %>
-      <!-- Fallback sample questions if none exist in DB -->
-      <div class="form-group">
-        <label class="form-label">Sample free text</label>
-        <%= text_area_tag "answers[sample_text]", nil, class: 'form-control' %>
-      </div>
+        </header>
+
+        <% category.questions.ordered.each_with_index do |question, index| %>
+          <% field_name = "answers[#{question.id}]" %>
+          <% current_value = @existing_answers[question.id.to_s] %>
+          <% required = @computed_required[question.id] %>
+
+          <article class="space-y-2 question-block" data-question-id="<%= question.id %>">
+            <label class="block text-sm font-medium text-slate-900" for="question-<%= question.id %>">
+              <span class="font-semibold">Q<%= index + 1 %></span>
+              <span class="ml-2"><%= question.question_text %></span>
+              <% if required %>
+                <span class="ml-1 text-red-600" aria-hidden="true">*</span>
+              <% end %>
+            </label>
+
+            <% case question.question_type %>
+            <% when "short_answer" %>
+              <%= text_area_tag field_name, current_value, rows: 3, id: "question-#{question.id}", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
+            <% when "multiple_choice" %>
+              <% options = question.answer_options_list.presence || [] %>
+              <div class="flex flex-col gap-2" role="radiogroup">
+                <% options.each do |option| %>
+                  <label class="flex items-center gap-2 text-sm text-slate-800">
+                    <%= radio_button_tag field_name, option, current_value.to_s == option.to_s, id: "question-#{question.id}-#{option.parameterize}", class: "h-4 w-4 text-blue-600" %>
+                    <span><%= option %></span>
+                  </label>
+                <% end %>
+              </div>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
+            <% when "scale" %>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-slate-500">Low</span>
+                <%= range_field_tag field_name, current_value || 3, in: 1..5, step: 1, id: "question-#{question.id}", class: "w-full" %>
+                <span class="text-xs text-slate-500">High</span>
+              </div>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
+            <% when "evidence" %>
+              <%= text_field_tag field_name, current_value, id: "question-#{question.id}", placeholder: "https://drive.google.com/...", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% elsif current_value.present? && Array(@invalid_evidence).map(&:to_s).include?(question.id.to_s) %>
+                <div class="text-xs text-red-600 mt-1">Invalid Google Drive link</div>
+              <% end %>
+            <% else %>
+              <%= text_field_tag field_name, current_value, id: "question-#{question.id}", class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+              <% if required && (current_value.nil? || current_value.to_s.strip.blank?) && request.post? %>
+                <div class="text-xs text-red-600 mt-1">This question is required</div>
+              <% end %>
+            <% end %>
+
+          </article>
+        <% end %>
+      </section>
     <% end %>
 
-    <div class="form-actions">
-      <%= f.submit "Submit Survey", class: "btn btn-primary" %>
+    <div class="flex justify-end">
+      <%= form.submit "Submit Survey", class: "inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500 focus:outline-none focus-visible:ring focus-visible:ring-blue-500/70" %>
     </div>
   <% end %>
-</div>
-
-<div class="actions">
-  <%= link_to "Edit this survey", edit_survey_path(@survey), class: "btn btn-secondary" %>
-  <%= button_to "Destroy this survey", survey_path(@survey), method: :delete, data: { confirm: "Are you sure?" }, class: "btn btn-danger" %>
-  <%= link_to "Back", surveys_path, class: "btn btn-link" %>
-</div>
 </div>

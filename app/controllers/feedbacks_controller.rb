@@ -1,44 +1,168 @@
+# CRUD endpoints for advisor feedback records associated with survey
+# responses.
 class FeedbacksController < ApplicationController
   before_action :set_feedback, only: %i[ show edit update destroy ]
+  before_action :set_survey_and_student, only: %i[new create]
 
-  # GET /feedbacks or /feedbacks.json
+  # Lists all feedback entries.
+  #
+  # @return [void]
   def index
     @feedbacks = Feedback.all
   end
 
-  # GET /feedbacks/1 or /feedbacks/1.json
+  # Displays a single feedback entry.
+  #
+  # @return [void]
   def show
   end
 
-  # GET /feedbacks/new
+  # Renders the new feedback form.
+  #
+  # @return [void]
   def new
-    @feedback = Feedback.new
+    load_feedback_new_context
   end
 
-  # GET /feedbacks/1/edit
-  def edit
-  end
+  # Renders the edit form for existing feedback.
+  #
+  # @return [void]
+  def edit; end
 
-  # POST /feedbacks or /feedbacks.json
+  # Creates a feedback record from submitted attributes.
+  #
+  # @return [void]
   def create
-    @feedback = Feedback.new(feedback_params)
+    Rails.logger.debug "[FeedbacksController#create] params_keys=#{params.keys.inspect} ratings_present=#{params[:ratings].present?} feedback_present=#{params[:feedback].present?}"
+    @advisor = current_advisor_profile
+    # Support two modes:
+    # 1) batch per-category ratings via params[:ratings]
+    # 2) per-category single feedback via nested feedback params
+    if params[:ratings].present?
+      raw_ratings = params.require(:ratings)
+      ratings = raw_ratings.to_unsafe_h.each_with_object({}) do |(cat_id, values), memo|
+        allowed = if values.respond_to?(:permit)
+                    values.permit(:id, :average_score, :comments).to_h
+        else
+                    values.to_h.slice("id", "average_score", "comments")
+        end
+        memo[cat_id] = allowed
+      end
+
+      batch_errors = {}
+      saved_feedbacks = []
+
+      Feedback.transaction do
+        ratings.each do |cat_id_str, data|
+          Rails.logger.debug "[FeedbacksController#create] processing category=#{cat_id_str} data=#{data.inspect}"
+          cat_id = cat_id_str.to_i
+          attrs = data.to_h
+
+          # Skip empty inputs
+          next if attrs["average_score"].blank? && attrs["comments"].blank?
+
+          fb = if attrs["id"].present?
+                 Feedback.find_by(id: attrs["id"], student_id: @student.student_id, survey_id: @survey.id, advisor_id: @advisor&.advisor_id)
+          else
+                 Feedback.find_or_initialize_by(student_id: @student.student_id, survey_id: @survey.id, category_id: cat_id, advisor_id: @advisor&.advisor_id)
+          end
+          Rails.logger.debug "[FeedbacksController#create] found fb=#{fb.inspect} attrs=#{attrs.inspect}"
+
+          unless fb
+            batch_errors[cat_id] = [ "Feedback record not found" ]
+            next
+          end
+
+          fb.average_score = attrs["average_score"].presence
+          fb.comments = attrs["comments"].presence
+          fb.survey_id = @survey.id
+          fb.student_id = @student.student_id
+          fb.advisor_id = @advisor&.advisor_id
+          fb.category_id = cat_id
+
+          unless fb.save
+            batch_errors[cat_id] = fb.errors.full_messages
+          else
+            saved_feedbacks << fb
+          end
+        end
+
+        if batch_errors.any?
+          raise ActiveRecord::Rollback
+        end
+      end
+
+      if batch_errors.any?
+        @batch_errors = batch_errors
+        Rails.logger.error "[FeedbacksController#create] batch_errors=#{batch_errors.inspect}"
+        @feedback = Feedback.new
+        load_feedback_new_context
+        respond_to do |format|
+          format.html { render :new, status: :unprocessable_entity }
+          format.json { render json: { errors: batch_errors }, status: :unprocessable_entity }
+        end
+        return
+      end
+
+      if saved_feedbacks.empty?
+        Rails.logger.error "[FeedbacksController#create] saved_feedbacks empty; ratings=#{ratings.inspect}"
+        @feedback = Feedback.new
+        @feedback.errors.add(:base, "No ratings provided")
+        load_feedback_new_context
+        respond_to do |format|
+          format.html { render :new, status: :unprocessable_entity }
+          format.json { render json: { error: "No ratings provided" }, status: :unprocessable_entity }
+        end
+        return
+      end
+
+      @feedback = saved_feedbacks.first
+    elsif params[:feedback].present? && params.dig(:feedback, :category_id).present?
+      # per-category single feedback
+      set_survey_and_student unless @survey && @student
+      @advisor = current_advisor_profile
+      @feedback = Feedback.new(
+        survey_id: @survey.id,
+        student_id: @student.student_id,
+        advisor_id: @advisor&.advisor_id,
+        category_id: feedback_params[:category_id],
+        average_score: feedback_params[:average_score],
+        comments: feedback_params[:comments]
+      )
+    else
+      @feedback = Feedback.new
+      @feedback.errors.add(:base, "No category or ratings provided")
+      respond_to do |format|
+        format.html { render :new, status: :unprocessable_entity }
+        format.json { render json: { error: "No category or ratings provided" }, status: :unprocessable_entity }
+      end
+      return
+    end
 
     respond_to do |format|
       if @feedback.save
-        format.html { redirect_to @feedback, notice: "Feedback was successfully created." }
-        format.json { render :show, status: :created, location: @feedback }
+        format.html { redirect_to student_records_path, notice: (params[:ratings].present? ? "Feedback saved." : "Category feedback saved.") }
+        format.json { render json: @feedback, status: :created, location: @feedback }
       else
+        load_feedback_new_context
         format.html { render :new, status: :unprocessable_entity }
         format.json { render json: @feedback.errors, status: :unprocessable_entity }
       end
     end
   end
 
-  # PATCH/PUT /feedbacks/1 or /feedbacks/1.json
+  # Updates an existing feedback entry.
+  #
+  # @return [void]
   def update
     respond_to do |format|
       if @feedback.update(feedback_params)
-        format.html { redirect_to @feedback, notice: "Feedback was successfully updated.", status: :see_other }
+        # If we have survey_id and student_id context, redirect back to the advisor feedback page
+        if feedback_params[:survey_id].present? && feedback_params[:student_id].present?
+          format.html { redirect_to new_feedback_path(survey_id: feedback_params[:survey_id], student_id: feedback_params[:student_id]), notice: "Feedback was successfully updated.", status: :see_other }
+        else
+          format.html { redirect_to @feedback, notice: "Feedback was successfully updated.", status: :see_other }
+        end
         format.json { render :show, status: :ok, location: @feedback }
       else
         format.html { render :edit, status: :unprocessable_entity }
@@ -47,7 +171,9 @@ class FeedbacksController < ApplicationController
     end
   end
 
-  # DELETE /feedbacks/1 or /feedbacks/1.json
+  # Deletes feedback and redirects back to the index.
+  #
+  # @return [void]
   def destroy
     @feedback.destroy!
 
@@ -58,13 +184,35 @@ class FeedbacksController < ApplicationController
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_feedback
-      @feedback = Feedback.find(params.expect(:id))
-    end
+  # Finds the feedback referenced in the request.
+  #
+  # @return [void]
+  def set_feedback
+    @feedback = Feedback.find(params[:id])
+  end
 
-    # Only allow a list of trusted parameters through.
-    def feedback_params
-      params.expect(feedback: [ :feedback_id, :advisor_id, :competency_id, :rating, :comments ])
-    end
+  # Strong parameters for feedback creation/update.
+  #
+  # @return [ActionController::Parameters]
+  def feedback_params
+    params.require(:feedback).permit(:advisor_id, :category_id, :survey_id, :student_id, :comments, :average_score)
+  end
+
+  def load_feedback_new_context
+    # Build PORO and related data the `new` view expects so re-rendering `new`
+    # preserves student responses and existing feedback state.
+    @survey_response = SurveyResponse.build(student: @student, survey: @survey)
+    question_ids = @survey.questions.select(:id)
+    @responses = StudentQuestion.where(student_id: @student.student_id, question_id: question_ids).includes(question: :category)
+    @existing_feedbacks = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).includes(:category, :advisor)
+    @existing_feedbacks_by_category = @existing_feedbacks.index_by(&:category_id)
+  end
+
+  def set_survey_and_student
+    survey_id = params[:survey_id] || params.dig(:feedback, :survey_id)
+    student_id = params[:student_id] || params.dig(:feedback, :student_id)
+
+    @survey = Survey.find(survey_id)
+    @student = Student.find(student_id)
+  end
 end

@@ -1,52 +1,94 @@
 require "test_helper"
+require "securerandom"
 
 class QuestionResponsesControllerTest < ActionDispatch::IntegrationTest
-  include Devise::Test::IntegrationHelpers
-
   setup do
-    @question_response = question_responses(:one)
-    @admin = admins(:one)
+    @admin = users(:admin)
     sign_in @admin
+
+    @student = students(:student)
+    @advisor = advisors(:advisor)
+    @category = categories(:clinical_skills)
+    @question = @category.questions.create!(
+      question_text: "Temp question #{SecureRandom.hex(4)}",
+      question_order: Question.maximum(:question_order).to_i + 1,
+      question_type: "short_answer"
+    )
+
+    @question_response = QuestionResponse.create!(
+      student: @student,
+      advisor: @advisor,
+      question: @question,
+      answer: "Initial answer"
+    )
   end
 
-  test "should get index" do
-    get question_responses_url
+  test "index lists responses" do
+    get question_responses_path
     assert_response :success
+    assert_includes response.body, "Initial answer"
   end
 
-  test "should get new" do
-    get new_question_response_url
+  test "show displays selected response" do
+    get question_response_path(@question_response)
     assert_response :success
+    assert_includes response.body, @question_response.answer
   end
 
-  test "should create question_response" do
-    assert_difference("QuestionResponse.count") do
-      post question_responses_url, params: { question_response: { answer: @question_response.answer, competencyresponse_id: @question_response.competencyresponse_id, question_id: @question_response.question_id, questionresponse_id: @question_response.questionresponse_id } }
+  test "new renders creation form" do
+    get new_question_response_path
+    assert_response :success
+    assert_select "form"
+  end
+
+  test "create with invalid data re-renders form" do
+    assert_no_difference "QuestionResponse.count" do
+      post question_responses_path, params: { question_response: { answer: "" } }
     end
 
-    assert_redirected_to question_response_url(QuestionResponse.last)
+    assert_response :unprocessable_entity
   end
 
-  test "should show question_response" do
-    get question_response_url(@question_response)
-    assert_response :success
-  end
+  test "create persists response" do
+    new_question = @category.questions.create!(
+      question_text: "Additional #{SecureRandom.hex(4)}",
+      question_order: Question.maximum(:question_order).to_i + 1,
+      question_type: "short_answer"
+    )
 
-  test "should get edit" do
-    get edit_question_response_url(@question_response)
-    assert_response :success
-  end
+    params = {
+      question_response: {
+        student_id: @student.student_id,
+        advisor_id: @advisor.advisor_id,
+        question_id: new_question.id,
+        answer: "New answer"
+      }
+    }
 
-  test "should update question_response" do
-    patch question_response_url(@question_response), params: { question_response: { answer: @question_response.answer, competencyresponse_id: @question_response.competencyresponse_id, question_id: @question_response.question_id, questionresponse_id: @question_response.questionresponse_id } }
-    assert_redirected_to question_response_url(@question_response)
-  end
-
-  test "should destroy question_response" do
-    assert_difference("QuestionResponse.count", -1) do
-      delete question_response_url(@question_response)
+    assert_difference "QuestionResponse.count", 1 do
+      post question_responses_path, params: params
     end
 
-    assert_redirected_to question_responses_url
+    response_record = QuestionResponse.order(:created_at).last
+    assert_redirected_to question_response_path(response_record)
+    follow_redirect!
+    assert_includes response.body, "Question response was successfully created"
+  end
+
+  test "update modifies answer" do
+    patch question_response_path(@question_response), params: {
+      question_response: { answer: "Updated answer" }
+    }
+
+    assert_redirected_to question_response_path(@question_response)
+    assert_equal "Updated answer", @question_response.reload.answer
+  end
+
+  test "destroy removes response" do
+    assert_difference "QuestionResponse.count", -1 do
+      delete question_response_path(@question_response)
+    end
+
+    assert_redirected_to question_responses_path
   end
 end

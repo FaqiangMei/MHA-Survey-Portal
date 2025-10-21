@@ -1,52 +1,51 @@
 require "test_helper"
 
 class FeedbacksControllerTest < ActionDispatch::IntegrationTest
-  include Devise::Test::IntegrationHelpers
-
   setup do
-    @feedback = feedbacks(:one)
-    @admin = admins(:one)
-    sign_in @admin
-  end
+    @adv_user = users(:advisor)
+    @advisor = @adv_user.advisor_profile
 
-  test "should get index" do
-    get feedbacks_url
-    assert_response :success
-  end
+    @student_user = users(:student)
+    @student = students(:student) || Student.first
 
-  test "should get new" do
-    get new_feedback_url
-    assert_response :success
-  end
-
-  test "should create feedback" do
-    assert_difference("Feedback.count") do
-      post feedbacks_url, params: { feedback: { advisor_id: @feedback.advisor_id, comments: @feedback.comments, competency_id: @feedback.competency_id, feedback_id: @feedback.feedback_id, rating: @feedback.rating } }
+    @survey = (defined?(surveys) && surveys(:fall_2025) rescue nil)
+    unless @survey
+      @survey = Survey.create!(title: "Survey X", semester: "Fall")
+      c1 = @survey.categories.create!(name: "Cat A")
+      c1.questions.create!(question_text: "Q A1", question_order: 1, question_type: "short_answer")
+      c2 = @survey.categories.create!(name: "Cat B")
+      c2.questions.create!(question_text: "Q B1", question_order: 1, question_type: "short_answer")
     end
 
-    assert_redirected_to feedback_url(Feedback.last)
-  end
-
-  test "should show feedback" do
-    get feedback_url(@feedback)
-    assert_response :success
-  end
-
-  test "should get edit" do
-    get edit_feedback_url(@feedback)
-    assert_response :success
-  end
-
-  test "should update feedback" do
-    patch feedback_url(@feedback), params: { feedback: { advisor_id: @feedback.advisor_id, comments: @feedback.comments, competency_id: @feedback.competency_id, feedback_id: @feedback.feedback_id, rating: @feedback.rating } }
-    assert_redirected_to feedback_url(@feedback)
-  end
-
-  test "should destroy feedback" do
-    assert_difference("Feedback.count", -1) do
-      delete feedback_url(@feedback)
+    # Ensure survey has at least two categories (fixtures may not include them)
+    if @survey.categories.count < 2
+      (2 - @survey.categories.count).times do |i|
+        c = @survey.categories.create!(name: "Cat #{i + 1}")
+        c.questions.create!(question_text: "Q #{i + 1}", question_order: i + 1, question_type: "short_answer")
+      end
+      @survey.reload
     end
+    @cat1, @cat2 = @survey.categories.order(:id).limit(2)
 
-    assert_redirected_to feedbacks_url
+    sign_in @adv_user
+  end
+
+  test "batch create creates feedback records and redirects" do
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        @cat1.id.to_s => { average_score: "4", comments: "Good" },
+        @cat2.id.to_s => { average_score: "3", comments: "Ok" }
+      }
+    }
+
+    before_count = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
+    post feedbacks_path, params: params
+
+    assert_response :redirect
+    assert_redirected_to student_records_path
+    after_count = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
+    assert_equal before_count + 2, after_count
   end
 end

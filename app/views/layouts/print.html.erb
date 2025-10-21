@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Print Survey Response</title>
+    <style>
+      /* Page layout */
+      @page { size: A4; margin: 18mm }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; color: #111; background: #fff }
+      .print-wrapper { padding: 10mm 12mm 18mm 12mm; max-width: 900px; margin: 0 auto; font-size: 12px; line-height: 1.28 }
+
+      /* Header */
+      .print-header { display: block; margin-bottom: 6mm }
+      .survey-title { font-size: 1.1rem; font-weight: 700 }
+
+      /* Content */
+      .category-block { margin-bottom: 8mm }
+      .question-block { margin-bottom: 6mm }
+      .question-text { margin-bottom: .25rem }
+
+      /* Controls render as text */
+      input[disabled], textarea[disabled], select[disabled], .form-control[disabled] { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0; margin: 0; font: inherit }
+      textarea[disabled] { white-space: pre-wrap }
+
+      /* Prevent breaking inside question blocks */
+      .question-block { page-break-inside: avoid; break-inside: avoid }
+
+      /* Print cleanup and footer */
+      @media print {
+        .survey-response-actions, .btn { display: none !important }
+        .print-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 28px; border-top: 1px solid #e6e6e6; background: #fff; padding: 6px 12mm; font-size: 10px; color: #666 }
+        .print-wrapper { padding-bottom: 14mm }
+      }
+      .print-footer:after { content: "Page " counter(page) }
+    </style>
+    <script>
+      // Decide mode: normal print vs auto-download
+      function isDownloadMode() {
+        try { return new URLSearchParams(window.location.search).get('download') === 'true' }
+        catch(e) { return false }
+      }
+
+      function triggerPrint() {
+        try { window.print() } catch(e) { console.warn(e) }
+      }
+
+      function autoDownloadPdf(filename) {
+        // Load html2pdf dynamically then generate PDF and close window
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js';
+        script.onload = function() {
+          try {
+            var element = document.querySelector('.print-wrapper') || document.body;
+            var opt = {
+              margin:       10,
+              filename:     filename,
+              image:        { type: 'jpeg', quality: 0.98 },
+              html2canvas:  { scale: 2 },
+              jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(element).save().then(function(){ try{ window.close() } catch(e){} });
+          } catch(e) { console.error('html2pdf error', e); triggerPrint() }
+        };
+        script.onerror = function(){ console.error('Failed to load html2pdf'); triggerPrint() };
+        document.head.appendChild(script);
+      }
+
+      window.addEventListener('load', function(){
+        setTimeout(function(){
+          if (isDownloadMode()) {
+            var fname = 'survey_response_<%= @survey_response&.id %>.pdf';
+            autoDownloadPdf(fname);
+          } else {
+            triggerPrint();
+          }
+        }, 250);
+      });
+    </script>
+  </head>
+  <body>
+    <div class="print-wrapper">
+      <div class="print-header"><%= yield :header if content_for?(:header) %></div>
+      <%= yield %>
+    </div>
+    <div class="print-footer" aria-hidden="true"></div>
+  </body>
+</html>

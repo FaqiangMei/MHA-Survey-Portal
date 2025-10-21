@@ -1,15 +1,9 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
-one:
-  feedback_id: 1
-  advisor_id: 1
-  competency_id: 1
-  rating: 1
-  comments: MyString
-
-two:
-  feedback_id: 1
-  advisor_id: 1
-  competency_id: 1
-  rating: 1
-  comments: MyString
+advisor_feedback:
+  student: student
+  advisor: advisor
+  category: clinical_skills
+  survey: fall_2025
+  average_score: 4.5
+  comments: Excellent progress
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

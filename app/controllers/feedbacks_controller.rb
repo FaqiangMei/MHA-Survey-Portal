@@ -33,6 +33,8 @@ class FeedbacksController < ApplicationController
   #
   # @return [void]
   def create
+    Rails.logger.debug "[FeedbacksController#create] params_keys=#{params.keys.inspect} ratings_present=#{params[:ratings].present?} feedback_present=#{params[:feedback].present?}"
+    @advisor = current_advisor_profile
     # Support two modes:
     # 1) batch per-category ratings via params[:ratings]
     # 2) per-category single feedback via nested feedback params
@@ -41,9 +43,9 @@ class FeedbacksController < ApplicationController
       ratings = raw_ratings.to_unsafe_h.each_with_object({}) do |(cat_id, values), memo|
         allowed = if values.respond_to?(:permit)
                     values.permit(:id, :average_score, :comments).to_h
-                  else
+        else
                     values.to_h.slice("id", "average_score", "comments")
-                  end
+        end
         memo[cat_id] = allowed
       end
 
@@ -52,6 +54,7 @@ class FeedbacksController < ApplicationController
 
       Feedback.transaction do
         ratings.each do |cat_id_str, data|
+          Rails.logger.debug "[FeedbacksController#create] processing category=#{cat_id_str} data=#{data.inspect}"
           cat_id = cat_id_str.to_i
           attrs = data.to_h
 
@@ -60,12 +63,13 @@ class FeedbacksController < ApplicationController
 
           fb = if attrs["id"].present?
                  Feedback.find_by(id: attrs["id"], student_id: @student.student_id, survey_id: @survey.id, advisor_id: @advisor&.advisor_id)
-               else
+          else
                  Feedback.find_or_initialize_by(student_id: @student.student_id, survey_id: @survey.id, category_id: cat_id, advisor_id: @advisor&.advisor_id)
-               end
+          end
+          Rails.logger.debug "[FeedbacksController#create] found fb=#{fb.inspect} attrs=#{attrs.inspect}"
 
           unless fb
-            batch_errors[cat_id] = ["Feedback record not found"]
+            batch_errors[cat_id] = [ "Feedback record not found" ]
             next
           end
 
@@ -90,6 +94,7 @@ class FeedbacksController < ApplicationController
 
       if batch_errors.any?
         @batch_errors = batch_errors
+        Rails.logger.error "[FeedbacksController#create] batch_errors=#{batch_errors.inspect}"
         @feedback = Feedback.new
         load_feedback_new_context
         respond_to do |format|
@@ -100,6 +105,7 @@ class FeedbacksController < ApplicationController
       end
 
       if saved_feedbacks.empty?
+        Rails.logger.error "[FeedbacksController#create] saved_feedbacks empty; ratings=#{ratings.inspect}"
         @feedback = Feedback.new
         @feedback.errors.add(:base, "No ratings provided")
         load_feedback_new_context

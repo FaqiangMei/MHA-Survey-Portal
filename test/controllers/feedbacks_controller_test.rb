@@ -2,19 +2,30 @@ require "test_helper"
 
 class FeedbacksControllerTest < ActionDispatch::IntegrationTest
   setup do
-    @adv_user = User.create!(email: "adv2@example.com", name: "Adv2", role: "advisor")
+    @adv_user = users(:advisor)
     @advisor = @adv_user.advisor_profile
 
-    @student_user = User.create!(email: "stu2@example.com", name: "Stu2", role: "student")
-    @student = @student_user.student_profile
+    @student_user = users(:student)
+    @student = students(:student) || Student.first
 
-    @survey = Survey.new(title: "Survey X", semester: "Fall")
-    cat_a = @survey.categories.build(name: "Cat A")
-    cat_a.questions.build(question_text: "Q A1", question_order: 1, question_type: "short_answer")
-    cat_b = @survey.categories.build(name: "Cat B")
-    cat_b.questions.build(question_text: "Q B1", question_order: 1, question_type: "short_answer")
-    @survey.save!
-    @cat1, @cat2 = @survey.categories
+    @survey = (defined?(surveys) && surveys(:fall_2025) rescue nil)
+    unless @survey
+      @survey = Survey.create!(title: "Survey X", semester: "Fall")
+      c1 = @survey.categories.create!(name: "Cat A")
+      c1.questions.create!(question_text: "Q A1", question_order: 1, question_type: "short_answer")
+      c2 = @survey.categories.create!(name: "Cat B")
+      c2.questions.create!(question_text: "Q B1", question_order: 1, question_type: "short_answer")
+    end
+
+    # Ensure survey has at least two categories (fixtures may not include them)
+    if @survey.categories.count < 2
+      (2 - @survey.categories.count).times do |i|
+        c = @survey.categories.create!(name: "Cat #{i + 1}")
+        c.questions.create!(question_text: "Q #{i + 1}", question_order: i + 1, question_type: "short_answer")
+      end
+      @survey.reload
+    end
+    @cat1, @cat2 = @survey.categories.order(:id).limit(2)
 
     sign_in @adv_user
   end
@@ -29,12 +40,12 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_difference -> { Feedback.count }, 2 do
-      post feedbacks_path, params: params
-    end
+    before_count = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
+    post feedbacks_path, params: params
 
     assert_response :redirect
     assert_redirected_to student_records_path
-    assert_equal 2, Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
+    after_count = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
+    assert_equal before_count + 2, after_count
   end
 end

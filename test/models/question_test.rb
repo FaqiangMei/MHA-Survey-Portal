@@ -68,12 +68,23 @@ class QuestionTest < ActiveSupport::TestCase
     end
   end
 
-    test "At least 75% of non-evidence questions are required" do
+  test "At least 75% of non-evidence questions are required" do
     non_evidence = Question.where.not(question_type: "evidence")
-    required_count = non_evidence.where(required: true).count
-    total = non_evidence.count
+    # Exclude flexibility questions which are intentionally optional
+    non_flexibility = non_evidence.where.not("LOWER(question_text) LIKE ?", "%flexible%work%")
+    
+    required_count = non_flexibility.where(required: true).count
+    total = non_flexibility.count
 
     ratio = (required_count.to_f / total) * 100
-    assert ratio >= 75, "Expected at least 75% of non-evidence questions to be required, got #{ratio.round(2)}%"
+    assert ratio >= 75, "Expected at least 75% of non-evidence questions (excluding flexibility) to be required, got #{ratio.round(2)}%"
+  end
+
+  test "Flexibility questions are optional" do
+    flexibility_questions = Question.where("LOWER(question_text) LIKE ?", "%flexible%work%")
+    
+    flexibility_questions.each do |q|
+      assert_not q.required?, "Flexibility question '#{q.question_text}' should be optional (not required)"
+    end
   end
 end

@@ -98,6 +98,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_27_120000) do
     t.string "track"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "major"
     t.index ["advisor_id"], name: "index_students_on_advisor_id"
     t.index ["uin"], name: "index_students_on_uin", unique: true, where: "(uin IS NOT NULL)"
   end

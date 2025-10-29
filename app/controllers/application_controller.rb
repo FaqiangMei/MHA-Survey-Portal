@@ -5,6 +5,7 @@ class ApplicationController < ActionController::Base
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   before_action :authenticate_user!
   before_action :check_student_profile_complete
+  before_action :load_notification_state, if: :user_signed_in?
   allow_browser versions: :modern
 
   helper_method :current_student, :current_advisor_profile
@@ -45,5 +46,14 @@ class ApplicationController < ActionController::Base
     return if controller_name == "sessions" # Allow logout
 
     redirect_to edit_student_profile_path, alert: "Please complete your profile to continue."
+  end
+
+  # Preloads the notification count and recent records for the header dropdown.
+  #
+  # @return [void]
+  def load_notification_state
+    notifications_scope = current_user.notifications
+    @unread_notification_count = notifications_scope.unread.count
+    @recent_notifications = notifications_scope.recent.limit(10)
   end
 end

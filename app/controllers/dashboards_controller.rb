@@ -91,6 +91,8 @@ class DashboardsController < ApplicationController
         end
       end
     end
+
+    @dashboard_notifications = current_user.notifications.recent.limit(5)
   end
 
   # Displays advisor-specific information such as advisees and recent feedback.
@@ -104,15 +106,11 @@ class DashboardsController < ApplicationController
     if admin_impersonating_advisor
       @advisees = Student.left_joins(:user).includes(:advisor).order(Arel.sql("LOWER(users.name) ASC"))
       @recent_feedback = Feedback.includes(:category, :survey, :student).order(created_at: :desc).limit(5)
-      @pending_notifications_count = Notification.unread.count
+      @pending_notifications_count = current_user.notifications.unread.count
     else
       @advisees = @advisor&.advisees&.includes(:user) || []
       @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
-      @pending_notifications_count = if @advisor
-        Notification.unread.where(notifiable: @advisor).count
-      else
-        0
-      end
+      @pending_notifications_count = current_user.notifications.unread.count
     end
 
     @advisee_count = @advisees.size

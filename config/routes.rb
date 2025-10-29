@@ -68,6 +68,12 @@ Rails.application.routes.draw do
     post :save_progress, on: :member
   end
 
+  resources :notifications, only: %i[index show update] do
+    collection do
+      patch :mark_all_read
+    end
+  end
+
   resources :survey_responses, only: :show do
     member do
       get :download

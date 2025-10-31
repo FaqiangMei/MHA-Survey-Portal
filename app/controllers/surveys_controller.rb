@@ -221,10 +221,10 @@ class SurveysController < ApplicationController
       assignment.advisor_id ||= student.advisor_id
       assignment.assigned_at ||= Time.current
       assignment.save! if assignment.new_record? || assignment.changed?
-      
+
       Rails.logger.info "[SUBMIT] Marking assignment #{assignment.id} as completed"
       assignment.mark_completed!
-      
+
       Rails.logger.info "[SUBMIT] Enqueueing notification job"
       begin
         SurveyNotificationJob.perform_later(event: :completed, survey_assignment_id: assignment.id)
@@ -236,7 +236,7 @@ class SurveysController < ApplicationController
       Rails.logger.info "[SUBMIT] Building survey response"
       survey_response = SurveyResponse.build(student: student, survey: @survey)
       survey_response_id = survey_response.id
-      
+
       Rails.logger.info "[SUBMIT] Redirecting to survey response path with ID: #{survey_response_id}"
       begin
         redirect_to survey_response_path(survey_response_id), notice: "Survey submitted successfully!"
@@ -247,10 +247,10 @@ class SurveysController < ApplicationController
     rescue StandardError => e
       Rails.logger.error "[SUBMIT ERROR] Failed to complete survey submission: #{e.class}: #{e.message}"
       Rails.logger.error "[SUBMIT ERROR] Backtrace:\n#{e.backtrace.first(20).join("\n")}"
-      
+
       # Re-raise if it's an ActiveRecord error that should propagate
       raise if e.is_a?(ActiveRecord::RecordInvalid) || e.is_a?(ActiveRecord::RecordNotSaved)
-      
+
       redirect_to survey_path(@survey), alert: "An error occurred while submitting the survey. Please try again or contact support if the problem persists."
     end
   end

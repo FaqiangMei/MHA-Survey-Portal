@@ -216,18 +216,41 @@ class SurveysController < ApplicationController
     end
 
     begin
+      Rails.logger.info "[SUBMIT] Creating/updating assignment for survey #{@survey.id}, student #{student.student_id}"
       assignment = SurveyAssignment.find_or_initialize_by(survey_id: @survey.id, student_id: student.student_id)
       assignment.advisor_id ||= student.advisor_id
       assignment.assigned_at ||= Time.current
       assignment.save! if assignment.new_record? || assignment.changed?
+      
+      Rails.logger.info "[SUBMIT] Marking assignment #{assignment.id} as completed"
       assignment.mark_completed!
-      SurveyNotificationJob.perform_later(event: :completed, survey_assignment_id: assignment.id)
+      
+      Rails.logger.info "[SUBMIT] Enqueueing notification job"
+      begin
+        SurveyNotificationJob.perform_later(event: :completed, survey_assignment_id: assignment.id)
+      rescue StandardError => job_error
+        # Don't fail submission if job enqueue fails
+        Rails.logger.warn "[SUBMIT] Failed to enqueue notification job: #{job_error.class}: #{job_error.message}"
+      end
 
-      survey_response_id = SurveyResponse.build(student: student, survey: @survey).id
-      redirect_to survey_response_path(survey_response_id), notice: "Survey submitted successfully!"
+      Rails.logger.info "[SUBMIT] Building survey response"
+      survey_response = SurveyResponse.build(student: student, survey: @survey)
+      survey_response_id = survey_response.id
+      
+      Rails.logger.info "[SUBMIT] Redirecting to survey response path with ID: #{survey_response_id}"
+      begin
+        redirect_to survey_response_path(survey_response_id), notice: "Survey submitted successfully!"
+      rescue ActionController::UrlGenerationError => url_error
+        Rails.logger.error "[SUBMIT] URL generation failed: #{url_error.message}"
+        redirect_to student_dashboard_path, notice: "Survey submitted successfully!"
+      end
     rescue StandardError => e
       Rails.logger.error "[SUBMIT ERROR] Failed to complete survey submission: #{e.class}: #{e.message}"
-      Rails.logger.error e.backtrace.join("\n")
+      Rails.logger.error "[SUBMIT ERROR] Backtrace:\n#{e.backtrace.first(20).join("\n")}"
+      
+      # Re-raise if it's an ActiveRecord error that should propagate
+      raise if e.is_a?(ActiveRecord::RecordInvalid) || e.is_a?(ActiveRecord::RecordNotSaved)
+      
       redirect_to survey_path(@survey), alert: "An error occurred while submitting the survey. Please try again or contact support if the problem persists."
     end
   end

@@ -88,7 +88,7 @@ class SurveysController < ApplicationController
     invalid_links = []
     missing_ratings = []
 
-    @survey.questions.each do |question|
+    @survey.questions.includes(:category).each do |question|
       submitted_value = answers[question.id.to_s]
 
       # Apply the same required logic as in show action
@@ -125,7 +125,7 @@ class SurveysController < ApplicationController
 
       # Require self-rating for evidence questions outside Employment Information
       if question.question_type == "evidence"
-        category_name = question.category&.name.to_s
+        category_name = (question.category&.name || "").to_s
         rating_required = category_name != "Employment Information"
         if rating_required
           rating_val = params.dig(:answers_rating, question.id.to_s)
@@ -295,7 +295,7 @@ class SurveysController < ApplicationController
   #
   # @return [void]
   def set_survey
-    @survey = Survey.find(params[:id])
+    @survey = Survey.includes(categories: :questions).find(params[:id])
   end
 
   # Checks if a Google Drive/Docs link is publicly accessible.

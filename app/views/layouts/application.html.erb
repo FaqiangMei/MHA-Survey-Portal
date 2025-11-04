@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
+    
     <title><%= content_for(:title) || "Health App" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,6 +24,11 @@
   </head>
 
   <body class="min-h-screen bg-slate-50 text-slate-800 antialiased">
+    <style>
+      /* Smoothly transition margin changes when browser/toolbars adjust the page */
+      html, body { transition: margin-top 0.3s ease !important; will-change: margin-top; }
+      /* Allow Google Translate top banner to be visible; we use JS to push the page down smoothly. */
+    </style>
     <div class="flex min-h-screen flex-col">
       <% if user_signed_in? %>
         <% case current_user.role %>
@@ -37,6 +43,13 @@
 
       <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div class="layout-shell">
+          <!-- Compact Google Translate toggle (top-right under navbar). Click to open language selector panel. -->
+          <div id="gt-compact" aria-hidden="false">
+            <button id="gt-toggle" aria-label="Translate site" title="Translate site" style="position:fixed;right:16px;top:120px;z-index:1300;min-width:88px;height:36px;border-radius:8px;background:#0b57d0;color:white;border:none;box-shadow:0 6px 18px rgba(11,87,208,0.14);cursor:pointer;font-weight:600;padding:0 12px;">Translation</button>
+            <div id="gt-panel" style="display:none;position:fixed;right:16px;top:120px;z-index:1300;background:white;border-radius:8px;padding:8px;box-shadow:0 6px 24px rgba(0,0,0,0.12);">
+              <div id="google_translate_element" class="translate-widget" style="min-width:180px;">Loading...</div>
+            </div>
+          </div>
           <% if flash.any? %>
             <div class="space-y-3">
               <% flash.each do |key, value| %>
@@ -58,4 +71,160 @@
       </main>
     </div>
   </body>
+    <script>
+      // Google Translate widget loader + compact toggle/panel behavior
+      function googleTranslateElementInit() {
+        try {
+          // If the google select already exists inside our container, nothing to do
+          if (document.querySelector('#google_translate_element select.goog-te-combo')) return;
+          // Create the widget into the container (idempotent for the container)
+          if (window.google && window.google.translate) {
+            new google.translate.TranslateElement({pageLanguage: 'en', layout: google.translate.TranslateElement.InlineLayout.SIMPLE}, 'google_translate_element');
+          }
+        } catch (e) { console.warn('googleTranslateElementInit', e); }
+      }
+      (function() {
+        if (!window.__googleTranslateScriptInjected) {
+          window.__googleTranslateScriptInjected = true;
+          var s = document.createElement('script');
+          s.type = 'text/javascript';
+          s.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+          s.async = true;
+          document.head.appendChild(s);
+        }
+
+        // Toggle panel logic and move Google's select into our panel (if needed)
+        var toggle = function() {
+          var panel = document.getElementById('gt-panel');
+          if (!panel) return;
+          panel.style.display = (panel.style.display === 'none' || panel.style.display === '') ? 'block' : 'none';
+        };
+        var btn = document.getElementById('gt-toggle');
+        if (btn) btn.addEventListener('click', toggle);
+
+        var tries = 0;
+        function adoptSelect() {
+          tries++;
+          var el = document.querySelector('#google_translate_element select.goog-te-combo');
+          var panel = document.getElementById('gt-panel');
+          if (el && panel) {
+            el.style.width = '100%';
+            el.style.height = '36px';
+            el.style.display = '';
+            var parent = el.closest('#google_translate_element');
+            if (parent) {
+              Array.from(parent.children).forEach(function(c){ if (c !== el) c.style.display = 'none'; });
+            }
+            // Ensure the select triggers a reload once if Google sets translation cookie but DOM isn't updated
+            try {
+              if (!el.dataset.gtChangeBound) {
+                el.addEventListener('change', function() {
+                  // give Google a moment to set cookie/state
+                  setTimeout(function() {
+                    var m = document.cookie.match(/(^|; )googtrans=([^;]+)/);
+                    if (m && !sessionStorage.getItem('gt_reloaded')) {
+                      sessionStorage.setItem('gt_reloaded', '1');
+                      location.reload();
+                    }
+                  }, 700);
+                });
+                el.dataset.gtChangeBound = '1';
+              }
+            } catch (e) {}
+            return;
+          }
+          if (tries < 12) setTimeout(adoptSelect, 400);
+        }
+        setTimeout(adoptSelect, 600);
+        document.addEventListener('turbo:load', function() {
+          try {
+            console.log('[Google Translate] Turbo navigation detected, checking translation status...');
+
+            // If Google Translate script exists, reinitialize the element (idempotent)
+            if (window.google && window.google.translate && typeof google.translate.TranslateElement === 'function') {
+              googleTranslateElementInit();
+            }
+
+            // Try to detect an active translation via cookie (format: /source/target)
+            var match = document.cookie.match(/googtrans=([^;]+)/);
+            if (match && match[1] && match[1] !== '/auto/en') {
+              console.log('[Google Translate] Translation cookie found, attempting to reapply language for new content...');
+              var lang = match[1].split('/').pop();
+              var combo = document.querySelector('.goog-te-combo');
+              if (combo) {
+                try {
+                  combo.value = lang;
+                  combo.dispatchEvent(new Event('change'));
+                } catch (e) {
+                  console.warn('[Google Translate] Failed to dispatch change on combo, will try fallback reload', e);
+                  // Final fallback: reload once to ensure translation is applied
+                  if (!sessionStorage.getItem('gt_turbo_reloaded')) {
+                    sessionStorage.setItem('gt_turbo_reloaded', '1');
+                    location.reload();
+                  }
+                }
+              } else {
+                // select not present yet — wait a bit then retry once before reload
+                setTimeout(function() {
+                  var combo2 = document.querySelector('.goog-te-combo');
+                  if (combo2) {
+                    try { combo2.value = lang; combo2.dispatchEvent(new Event('change')); } catch (e) { console.warn('[Google Translate] retry failed', e); }
+                  } else {
+                    console.log('[Google Translate] No combo found after retry, fallback reload.');
+                    if (!sessionStorage.getItem('gt_turbo_reloaded')) {
+                      sessionStorage.setItem('gt_turbo_reloaded', '1');
+                      location.reload();
+                    }
+                  }
+                }, 1000);
+              }
+            }
+          } catch (e) {
+            console.warn('[Google Translate] Turbo translation refresh failed', e);
+          }
+
+          // ensure adoptSelect runs again to re-parent Google's select into our panel
+          tries = 0; setTimeout(adoptSelect, 250);
+        });
+      })();
+    // Detect Google Translate toolbar iframe and add/remove top margin to avoid covering content
+    document.addEventListener("DOMContentLoaded", function() {
+      function adjustForGoogleBar() {
+        try {
+          // Look for iframes that Google Translate may inject (ids can vary; use prefix match)
+          var frame = document.querySelector('iframe[id^="goog-gt-"]') || document.querySelector('iframe.goog-te-banner-frame');
+          if (frame && frame.clientHeight) {
+            var h = frame.clientHeight + 'px';
+            document.body.style.setProperty('margin-top', h, 'important');
+            document.documentElement.style.setProperty('margin-top', h, 'important');
+            document.body.style.setProperty('transform', 'none', 'important');
+          } else if (frame) {
+            // Fallback to a sensible default height
+            document.body.style.setProperty('margin-top', '40px', 'important');
+            document.documentElement.style.setProperty('margin-top', '40px', 'important');
+            document.body.style.setProperty('transform', 'none', 'important');
+          } else {
+            // Remove any inline overrides so the page returns to its natural layout
+            document.body.style.removeProperty('margin-top');
+            document.documentElement.style.removeProperty('margin-top');
+            document.body.style.removeProperty('transform');
+          }
+        } catch (e) {
+          // ignore errors
+        }
+      }
+
+      adjustForGoogleBar();
+
+      var observer = new MutationObserver(function() { adjustForGoogleBar(); });
+      observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+      // Also periodically check for a short time in case the iframe is injected asynchronously
+      var checks = 0;
+      var interval = setInterval(function() {
+        adjustForGoogleBar();
+        checks++;
+        if (checks > 20) clearInterval(interval);
+      }, 300);
+    });
+  </script>
 </html>

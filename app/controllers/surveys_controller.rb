@@ -30,10 +30,17 @@ class SurveysController < ApplicationController
 
       Rails.logger.info "[SHOW DEBUG] Found #{responses.count} saved responses"
 
+      @existing_ratings = {}
       responses.each do |response|
-        # Use string key to match view's expectation
-        @existing_answers[response.question_id.to_s] = response.answer
-        Rails.logger.info "[SHOW DEBUG] Question #{response.question_id}: #{response.answer.inspect}"
+        ans = response.answer
+        if response.question.question_type == "evidence" && ans.is_a?(Hash)
+          @existing_answers[response.question_id.to_s] = ans["link"]
+          @existing_ratings[response.question_id.to_s] = ans["rating"]
+        else
+          # Use string key to match view's expectation
+          @existing_answers[response.question_id.to_s] = ans
+        end
+        Rails.logger.info "[SHOW DEBUG] Question #{response.question_id}: #{ans.inspect}"
       end
     end
 
@@ -75,12 +82,15 @@ class SurveysController < ApplicationController
 
     answers = params[:answers] || {}
 
-    allowed_question_ids = @survey.questions.pluck(:id)
+    # Build a questions map for efficient lookups
+    questions_map = @survey.questions.includes(:category).index_by(&:id)
+    allowed_question_ids = questions_map.keys
 
     missing_required = []
     invalid_links = []
+    missing_ratings = []
 
-    @survey.questions.each do |question|
+    questions_map.each_value do |question|
       submitted_value = answers[question.id.to_s]
 
       # Apply the same required logic as in show action
@@ -114,13 +124,27 @@ class SurveysController < ApplicationController
           invalid_links << question unless accessible
         end
       end
+
+      # Require self-rating for evidence questions outside Employment Information
+      if question.question_type == "evidence"
+        category_name = (question.category&.name || "").to_s
+        rating_required = category_name != "Employment Information"
+        if rating_required
+          rating_val = params.dig(:answers_rating, question.id.to_s)
+          if rating_val.to_s.strip.blank?
+            missing_ratings << question
+          end
+        end
+      end
     end
 
-    if missing_required.any? || invalid_links.any?
+    if missing_required.any? || invalid_links.any? || missing_ratings.any?
       @category_groups = @survey.categories.includes(:questions).order(:id)
       @existing_answers = answers
+      @existing_ratings = (params[:answers_rating] || {}).transform_keys(&:to_s)
       @computed_required = {}
       @invalid_evidence = invalid_links.map(&:id)
+      @missing_rating_ids = missing_ratings.map(&:id)
       @category_groups.each do |category|
         category.questions.each do |question|
           required = question.is_required?
@@ -133,6 +157,34 @@ class SurveysController < ApplicationController
           @computed_required[question.id] = required
         end
       end
+
+      # Persist all provided answers (including self-ratings) even when submit fails
+      ActiveRecord::Base.transaction do
+        allowed_question_ids.each do |question_id|
+          submitted_value = answers[question_id.to_s]
+          record = StudentQuestion.find_or_initialize_by(student_id: student.student_id, question_id: question_id)
+          record.advisor_id ||= student.advisor_id
+
+          question = questions_map[question_id]
+          if question&.question_type == "evidence"
+            rating_value = params.dig(:answers_rating, question_id.to_s)
+            if submitted_value.present? || rating_value.present?
+              combined = { "link" => submitted_value, "rating" => (rating_value.presence && rating_value.to_i) }.compact
+              record.answer = combined
+              record.save(validate: false)
+            elsif record.persisted?
+              record.destroy!
+            end
+          else
+            if submitted_value.present?
+              record.answer = submitted_value
+              record.save(validate: false)
+            elsif record.persisted?
+              record.destroy!
+            end
+          end
+        end
+      end
       render :show, status: :unprocessable_entity and return
     end
 
@@ -142,22 +194,65 @@ class SurveysController < ApplicationController
         record = StudentQuestion.find_or_initialize_by(student_id: student.student_id, question_id: question_id)
         record.advisor_id ||= student.advisor_id
 
-        if submitted_value.present?
-          record.answer = submitted_value
-          record.save!
-        elsif record.persisted?
-          record.destroy!
+        question = questions_map[question_id]
+        if question&.question_type == "evidence"
+          rating_value = params.dig(:answers_rating, question_id.to_s)
+          if submitted_value.present? || rating_value.present?
+            combined = { "link" => submitted_value, "rating" => (rating_value.presence && rating_value.to_i) }.compact
+            record.answer = combined
+            record.save!
+          elsif record.persisted?
+            record.destroy!
+          end
+        else
+          if submitted_value.present?
+            record.answer = submitted_value
+            record.save!
+          elsif record.persisted?
+            record.destroy!
+          end
         end
       end
     end
 
-    if (assignment = SurveyAssignment.find_by(survey_id: @survey.id, student_id: student.student_id))
-      assignment.mark_completed!
-      SurveyNotificationJob.perform_later(event: :completed, survey_assignment_id: assignment.id)
-    end
+    begin
+      Rails.logger.info "[SUBMIT] Creating/updating assignment for survey #{@survey.id}, student #{student.student_id}"
+      assignment = SurveyAssignment.find_or_initialize_by(survey_id: @survey.id, student_id: student.student_id)
+      assignment.advisor_id ||= student.advisor_id
+      assignment.assigned_at ||= Time.current
+      assignment.save! if assignment.new_record? || assignment.changed?
 
-    survey_response_id = SurveyResponse.build(student: student, survey: @survey).id
-    redirect_to survey_response_path(survey_response_id), notice: "Survey submitted successfully!"
+      Rails.logger.info "[SUBMIT] Marking assignment #{assignment.id} as completed"
+      assignment.mark_completed!
+
+      Rails.logger.info "[SUBMIT] Enqueueing notification job"
+      begin
+        SurveyNotificationJob.perform_later(event: :completed, survey_assignment_id: assignment.id)
+      rescue StandardError => job_error
+        # Don't fail submission if job enqueue fails
+        Rails.logger.warn "[SUBMIT] Failed to enqueue notification job: #{job_error.class}: #{job_error.message}"
+      end
+
+      Rails.logger.info "[SUBMIT] Building survey response"
+      survey_response = SurveyResponse.build(student: student, survey: @survey)
+      survey_response_id = survey_response.id
+
+      Rails.logger.info "[SUBMIT] Redirecting to survey response path with ID: #{survey_response_id}"
+      begin
+        redirect_to survey_response_path(survey_response_id), notice: "Survey submitted successfully!"
+      rescue ActionController::UrlGenerationError => url_error
+        Rails.logger.error "[SUBMIT] URL generation failed: #{url_error.message}"
+        redirect_to student_dashboard_path, notice: "Survey submitted successfully!"
+      end
+    rescue StandardError => e
+      Rails.logger.error "[SUBMIT ERROR] Failed to complete survey submission: #{e.class}: #{e.message}"
+      Rails.logger.error "[SUBMIT ERROR] Backtrace:\n#{e.backtrace.first(20).join("\n")}"
+
+      # Re-raise if it's an ActiveRecord error that should propagate
+      raise if e.is_a?(ActiveRecord::RecordInvalid) || e.is_a?(ActiveRecord::RecordNotSaved)
+
+      redirect_to survey_path(@survey), alert: "An error occurred while submitting the survey. Please try again or contact support if the problem persists."
+    end
   end
 
   # Saves the current survey progress without validating required fields.
@@ -188,18 +283,34 @@ class SurveysController < ApplicationController
         record = StudentQuestion.find_or_initialize_by(student_id: student.student_id, question_id: question_id)
         record.advisor_id ||= student.advisor_id
 
-        if submitted_value.present?
-          record.answer = submitted_value
-          # Skip validations when saving progress; validations happen on submit
-          if record.save(validate: false)
-            saved_count += 1
-            Rails.logger.info "[SAVE_PROGRESS DEBUG] Saved question #{question_id} with value: #{submitted_value} (validations skipped)"
-          else
-            Rails.logger.warn "[SAVE_PROGRESS DEBUG] Failed to save question #{question_id} during save_progress (validations skipped)"
+        question = @survey.questions.find { |q| q.id == question_id }
+        if question&.question_type == "evidence"
+          rating_value = params.dig(:answers_rating, question_id.to_s)
+          if submitted_value.present? || rating_value.present?
+            combined = { "link" => submitted_value, "rating" => (rating_value.presence && rating_value.to_i) }.compact
+            record.answer = combined
+            if record.save(validate: false)
+              saved_count += 1
+              Rails.logger.info "[SAVE_PROGRESS DEBUG] Saved evidence+rating #{question_id} (validations skipped)"
+            end
+          elsif record.persisted?
+            record.destroy!
+            Rails.logger.info "[SAVE_PROGRESS DEBUG] Destroyed empty evidence+rating for question #{question_id}"
           end
-        elsif record.persisted?
-          record.destroy!
-          Rails.logger.info "[SAVE_PROGRESS DEBUG] Destroyed empty answer for question #{question_id}"
+        else
+          if submitted_value.present?
+            record.answer = submitted_value
+            # Skip validations when saving progress; validations happen on submit
+            if record.save(validate: false)
+              saved_count += 1
+              Rails.logger.info "[SAVE_PROGRESS DEBUG] Saved question #{question_id} with value: #{submitted_value} (validations skipped)"
+            else
+              Rails.logger.warn "[SAVE_PROGRESS DEBUG] Failed to save question #{question_id} during save_progress (validations skipped)"
+            end
+          elsif record.persisted?
+            record.destroy!
+            Rails.logger.info "[SAVE_PROGRESS DEBUG] Destroyed empty answer for question #{question_id}"
+          end
         end
       end
     end
@@ -214,7 +325,7 @@ class SurveysController < ApplicationController
   #
   # @return [void]
   def set_survey
-    @survey = Survey.find(params[:id])
+    @survey = Survey.includes(categories: :questions).find(params[:id])
   end
 
   # Checks if a Google Drive/Docs link is publicly accessible.

@@ -581,6 +581,11 @@ body {
   border: 1px solid var(--gray-200);
 }
 
+/* Extra spacing between categories in survey views to improve readability */
+.category-section {
+  margin-bottom: var(--spacing-6xl);
+}
+
 .section-header {
   display: flex;
   align-items: center;

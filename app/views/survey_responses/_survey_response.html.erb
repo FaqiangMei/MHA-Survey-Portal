@@ -40,7 +40,7 @@
   <% if survey&.categories&.any? %>
     <div class="space-y-8">
       <% survey.categories.includes(:questions).order(:id).each do |category| %>
-        <section class="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 shadow-sm">
+        <section class="category-section space-y-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 shadow-sm">
           <header class="space-y-1">
             <h3 class="text-xl font-semibold text-slate-800"><%= category.name %></h3>
             <% if category.description.present? %>

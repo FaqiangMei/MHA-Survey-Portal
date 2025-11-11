@@ -190,6 +190,13 @@ const buildQueryString = (filters) => {
   return query ? `?${query}` : ""
 }
 
+const replacePdfSection = (baseUrl, sectionKey) => {
+  if (!sectionKey) return baseUrl
+  const pattern = /(\/reports\/)([^/]+)(\/export_pdf\b)/
+  if (!pattern.test(baseUrl)) return baseUrl
+  return baseUrl.replace(pattern, `$1${sectionKey}$3`)
+}
+
 const fetchJson = async (url) => {
   const response = await fetch(url, {
     credentials: "same-origin",
@@ -843,12 +850,26 @@ const ReportsApp = ({ exportUrls = {} }) => {
   }, [ loadData ])
 
   const handleExport = useCallback((format, sectionKey) => {
-    const base = format === "pdf" ? resolvedExportUrls.pdf : resolvedExportUrls.excel
+    if (format === "pdf") {
+      const base = resolvedExportUrls.pdf
+      if (!base) return
+
+      const targetPath = replacePdfSection(base, sectionKey)
+      const query = buildQueryString(filters)
+      window.location.href = `${targetPath}${query}`
+      return
+    }
+
+    const base = resolvedExportUrls.excel
     if (!base) return
 
-    const query = buildQueryString(filters)
-    const sectionSuffix = sectionKey ? `${query ? "&" : "?"}section=${encodeURIComponent(sectionKey)}` : ""
-    window.location.href = `${base}${query}${sectionSuffix}`
+    const queryFilters = { ...filters }
+    if (sectionKey) {
+      queryFilters.section = sectionKey
+    }
+
+    const query = buildQueryString(queryFilters)
+    window.location.href = `${base}${query}`
   }, [ filters, resolvedExportUrls ])
 
   const handleViewModeChange = useCallback((nextMode) => {

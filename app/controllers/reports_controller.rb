@@ -7,8 +7,8 @@ class ReportsController < ApplicationController
   end
 
   def export_pdf
-    payload = aggregator.export_payload
-    section = reports_params[:section]
+  payload = aggregator.export_payload
+  section = normalize_export_section(reports_params[:section])
 
     unless defined?(WickedPdf)
       render plain: "PDF export unavailable. WickedPdf is not configured.", status: :service_unavailable
@@ -18,7 +18,7 @@ class ReportsController < ApplicationController
     html = render_to_string(
       template: "reports/export",
       layout: "report_pdf",
-      locals: { payload: payload, export_section: section }
+  locals: { payload: payload, export_section: section }
     )
 
     pdf = WickedPdf.new.pdf_from_string(html, page_size: "Letter", orientation: "Landscape")
@@ -30,8 +30,8 @@ class ReportsController < ApplicationController
   end
 
   def export_excel
-    payload = aggregator.export_payload
-    section = reports_params[:section]
+  payload = aggregator.export_payload
+  section = normalize_export_section(reports_params[:section])
     package = Reports::ExcelExporter.new(payload, section: section).generate
 
     send_data package.to_stream.read,
@@ -58,5 +58,13 @@ class ReportsController < ApplicationController
 
   def reports_filter_params
     reports_params.except(:section)
+  end
+
+  def normalize_export_section(value)
+    normalized = value.to_s.strip
+    return nil if normalized.blank?
+    return nil if %w[dashboard all full default].include?(normalized)
+
+    normalized
   end
 end

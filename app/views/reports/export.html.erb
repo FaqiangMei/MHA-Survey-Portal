@@ -1,4 +1,10 @@
-<% selected_section = export_section.to_s.presence %>
+<% normalized_section = export_section.to_s.strip %>
+<% selected_section = case normalized_section
+                      when "", "dashboard", "all", "full", "default"
+                        nil
+                      else
+                        normalized_section
+                      end %>
 <% show_benchmark = selected_section.blank? || selected_section == "benchmark" %>
 <% show_competency = selected_section.blank? || selected_section == "competency" %>
 <% show_course = selected_section.blank? || selected_section == "course" %>

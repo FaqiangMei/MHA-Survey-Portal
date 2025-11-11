@@ -261,7 +261,7 @@ class DashboardsController < ApplicationController
   def manage_students
     @students = load_students
     @advisors = Advisor.left_joins(:user).includes(:user).order(Arel.sql("LOWER(users.name) ASC"))
-    @advisor_select_options = [["Unassigned", ""]] + @advisors.map { |advisor| [advisor.display_name, advisor.advisor_id.to_s] }
+    @advisor_select_options = [ [ "Unassigned", "" ] ] + @advisors.map { |advisor| [ advisor.display_name, advisor.advisor_id.to_s ] }
     @assignment_stats = {
       total: @students.size,
       assigned: @students.count { |student| student.advisor_id.present? },

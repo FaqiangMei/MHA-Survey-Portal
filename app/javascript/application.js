@@ -2,6 +2,11 @@ import "@hotwired/turbo-rails"
 import "controllers"
 
 // Accessibility helpers for high contrast mode and text-to-speech support.
+
+// -----------------------------
+// High-contrast mode
+// -----------------------------
+
 const HIGH_CONTRAST_KEY = "mha_high_contrast"
 
 function applyHighContrast(enabled) {

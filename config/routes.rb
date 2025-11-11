@@ -69,6 +69,9 @@ Rails.application.routes.draw do
   # Student profile management
   resource :student_profile, only: %i[show edit update]
 
+  # Account settings (all roles share this page)
+  resource :account, only: %i[edit update]
+
   resources :surveys do
     post :submit, on: :member
     post :save_progress, on: :member
@@ -94,7 +97,7 @@ Rails.application.routes.draw do
     resources :surveys, only: %i[index show] do
       post   :assign,     on: :member
       post   :assign_all, on: :member
-      delete :unassign,   on: :member   
+      delete :unassign,   on: :member
     end
     resources :students, only: %i[show update]
   end
@@ -108,6 +111,9 @@ Rails.application.routes.draw do
   end
 
   get "about", to: "pages#about", as: :about
+  get "faq",   to: "pages#faq",   as: :faq
+
+  
 
   # User settings page (accessible to any authenticated user)
   get "settings", to: "settings#edit", as: :settings

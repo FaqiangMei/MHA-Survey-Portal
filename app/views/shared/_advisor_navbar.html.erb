@@ -2,14 +2,14 @@
 <header class="app-header" role="banner">
   <div class="header-content">
     <div class="header-left">
-      <div class="logo" aria-label="Texas A&M University">
+      <div class="logo" aria-label="Texas A&amp;M University">
         <div class="logo-icon" aria-hidden="true"></div>
         <div class="logo-text">
           TEXAS A&M<br>
           UNIVERSITY
         </div>
       </div>
-
+      
       <nav class="nav-links" aria-label="Primary">
         <a href="<%= advisor_dashboard_path %>"
            class="nav-link <%= 'active' if local_assigns[:active_page] == 'home' %>">
@@ -31,6 +31,7 @@
     </div>
 
     <div class="user-section">
+      <!-- High contrast toggle -->
       <button
         type="button"
         class="btn btn-secondary"
@@ -40,6 +41,7 @@
         High Contrast: Off
       </button>
 
+      <!-- Text-to-speech toggle -->
       <button
         type="button"
         class="btn btn-secondary"
@@ -50,6 +52,7 @@
       </button>
 
       <span class="role-badge advisor">ADVISOR</span>
+
       <div class="notification-area">
         <%= render "shared/notification_menu" %>
       </div>
@@ -82,10 +85,11 @@
           </div>
 
           <div class="profile-menu">
-            <div class="profile-menu-item">
-              <div class="profile-menu-icon" aria-hidden="true">👤</div>
-              <span>Account Information</span>
-            </div>
+            <%= link_to edit_account_path, class: "profile-menu-item" do %>
+            <div class="profile-menu-icon" aria-hidden="true">👤</div>
+            <span>Account Information</span>
+          <% end %>
+            
             <%= link_to settings_path, class: "profile-menu-item" do %>
               <div class="profile-menu-icon" aria-hidden="true">⚙️</div>
               <span>Settings</span>

@@ -301,6 +301,6 @@ class CompositeReportGenerator
 
     tempfile.close!
   rescue Errno::ENOENT, IOError
-    # File already moved or deleted.
+       # File already moved or deleted.
   end
 end

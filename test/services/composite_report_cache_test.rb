@@ -56,7 +56,7 @@ class CompositeReportCacheTest < ActiveSupport::TestCase
   private
 
   def build_pdf(content)
-    file = Tempfile.new(["composite-cache", ".pdf"])
+    file = Tempfile.new([ "composite-cache", ".pdf" ])
     file.binmode
     file.write(content)
     file.flush

@@ -85,7 +85,7 @@ class CompositeReportCache
   def safe_name(key)
     digest = Digest::SHA256.hexdigest(key.to_s)
     prefix = key.to_s.gsub(/[^A-Za-z0-9\-]+/, "-")[0, 24]
-    [prefix.presence, digest[0, 24]].compact.join("-")
+    [ prefix.presence, digest[0, 24] ].compact.join("-")
   end
 
   def metadata_path(key)

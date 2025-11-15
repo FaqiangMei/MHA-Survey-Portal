@@ -44,4 +44,14 @@ class NotificationTest < ActiveSupport::TestCase
     assert_equal first.id, second.id
     assert_equal "Updated content", user.notifications.find_by(title: "System").message
   end
+
+  test "target_path_for returns survey response for completed student assignments" do
+    user = users(:student)
+    assignment = survey_assignments(:residential_assignment)
+    assignment.update!(completed_at: Time.current)
+    notification = Notification.create!(user: user, title: "Reminder", message: "Review", notifiable: assignment)
+
+    expected_response = SurveyResponse.build(student: assignment.student, survey: assignment.survey)
+    assert_equal survey_response_path(expected_response), notification.target_path_for(user)
+  end
 end

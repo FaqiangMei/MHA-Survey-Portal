@@ -9,6 +9,7 @@ class CompositeReportGenerator
   class GenerationError < StandardError; end
 
   CACHE_TTL = 6.hours
+  MAX_EVIDENCE_HISTORY = Integer(ENV.fetch("COMPOSITE_REPORT_MAX_EVIDENCE_HISTORY", 5))
   # Lightweight value object so callers can ensure temporary files are cleaned up.
   class Result
     attr_reader :path, :size_bytes
@@ -182,14 +183,21 @@ class CompositeReportGenerator
     WickedPdf.new.pdf_from_string(
       html,
       encoding: "UTF-8",
-      viewport_size: "1280x800",
-      margin: { top: 12, bottom: 14, left: 10, right: 10 },
+      viewport_size: "1024x768",
+      margin: { top: 10, bottom: 12, left: 8, right: 8 },
       disable_smart_shrinking: true,
       load_error_handling: "ignore",
       load_media_error_handling: "ignore",
       no_stop_slow_scripts: true,
       print_media_type: true,
       quiet: true,
+      extra: [
+        "--dpi", "96",
+        "--image-dpi", "96",
+        "--image-quality", "60",
+        "--no-outline",
+        "--javascript-delay", "500"
+      ],
       return_file: true,
       delete_temporary_files: true
     )
@@ -275,7 +283,13 @@ class CompositeReportGenerator
   end
 
   def evidence_history_by_category
-    @evidence_history_by_category ||= @survey_response.evidence_history_by_category
+    @evidence_history_by_category ||= begin
+      history = @survey_response.evidence_history_by_category
+      limit = MAX_EVIDENCE_HISTORY
+      return history if limit.to_i <= 0
+
+      history.transform_values { |entries| entries.first(limit) }
+    end
   end
 
   def answered_count

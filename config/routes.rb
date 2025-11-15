@@ -77,6 +77,10 @@ Rails.application.routes.draw do
     post :save_progress, on: :member
   end
 
+  # Accept GET requests to /surveys/:id/submit and redirect to the survey show page.
+  # This avoids a noisy RoutingError if a user or external crawler follows a cached/old GET link.
+  get 'surveys/:id/submit', to: redirect('/surveys/%{id}')
+
   resources :notifications, only: %i[index show update] do
     collection do
       patch :mark_all_read

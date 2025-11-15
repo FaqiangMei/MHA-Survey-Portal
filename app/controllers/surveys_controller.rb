@@ -135,32 +135,32 @@ class SurveysController < ApplicationController
       # Require self-rating only for competency questions (the mapped 17 competencies)
       # Define the same competency title map used in the view and detect by question text
       competency_titles = [
-        'Public and Population Health Assessment',
-        'Delivery, Organization, and Financing of Health Services and Health Systems',
-        'Policy Analysis',
-        'Legal & Ethical Bases for Health Services and Health Systems',
-        'Ethics, Accountability, and Self-Assessment',
-        'Organizational Dynamics',
-        'Problem Solving, Decision Making, and Critical Thinking',
-        'Team Building and Collaboration',
-        'Strategic Planning',
-        'Business Planning',
-        'Communication',
-        'Financial Management',
-        'Performance Improvement',
-        'Project Management',
-        'Systems Thinking',
-        'Data Analysis and Information Management',
-        'Quantitative Methods for Health Services Delivery'
+        "Public and Population Health Assessment",
+        "Delivery, Organization, and Financing of Health Services and Health Systems",
+        "Policy Analysis",
+        "Legal & Ethical Bases for Health Services and Health Systems",
+        "Ethics, Accountability, and Self-Assessment",
+        "Organizational Dynamics",
+        "Problem Solving, Decision Making, and Critical Thinking",
+        "Team Building and Collaboration",
+        "Strategic Planning",
+        "Business Planning",
+        "Communication",
+        "Financial Management",
+        "Performance Improvement",
+        "Project Management",
+        "Systems Thinking",
+        "Data Analysis and Information Management",
+        "Quantitative Methods for Health Services Delivery"
       ]
 
       text = question.question_text.to_s.strip
       is_competency = competency_titles.include?(text)
       if !is_competency
         down = text.downcase
-        if down.include?('delivery') || down.include?('financing') || down.include?('health systems')
+        if down.include?("delivery") || down.include?("financing") || down.include?("health systems")
           is_competency = true
-        elsif down.include?('legal') || down.include?('ethical')
+        elsif down.include?("legal") || down.include?("ethical")
           is_competency = true
         end
       end

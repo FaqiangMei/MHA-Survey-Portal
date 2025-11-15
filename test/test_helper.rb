@@ -5,7 +5,7 @@ require "shellwords"
 app_root = File.expand_path("..", __dir__)
 tailwind_build = File.join(app_root, "app/assets/builds/tailwind.css")
 
-if ENV["SKIP_TAILWIND_BUILD"].blank? && !File.exist?(tailwind_build)
+if ENV["SKIP_TAILWIND_BUILD"].to_s.empty? && !File.exist?(tailwind_build)
   system("cd #{Shellwords.escape(app_root)} && bin/rails tailwindcss:build", exception: true)
 end
 

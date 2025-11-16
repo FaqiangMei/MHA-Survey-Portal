@@ -71,9 +71,6 @@ surveys:
           - order: 11
             text: "If no, why not?"
             type: "short_answer"
-          - order: 12
-            text: "Please provide a Google Drive link as evidence for this section."
-            type: "evidence"
             required: true
       - name: "Mentor Relationships (RMHA Only)"
         description: "Mentorship Information"
@@ -102,10 +99,7 @@ surveys:
           - order: 6
             text: "If not, why not?"
             type: "short_answer"
-          - order: 7
-            text: "Please provide a Google Drive link as evidence for this section."
-            type: "evidence"
-            required: true
+          # evidence question removed per request
       - name: "Volunteering/Service"
         description: "Volunteer Work Information"
         questions:
@@ -120,10 +114,7 @@ surveys:
           - order: 3
             text: "If no, why not?"
             type: "short_answer"
-          - order: 4
-            text: "Please provide a Google Drive link as evidence for this section."
-            type: "evidence"
-            required: true
+          # evidence question removed per request
       - name: "Health Care Environment and Community"
         description: "Relation between health care operations and community organizations and policies"
         questions:

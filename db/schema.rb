@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_11_15_090000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -128,6 +128,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_15_090000) do
     t.index ["survey_id"], name: "index_survey_change_logs_on_survey_id"
   end
 
+  create_table "admin_activity_logs", force: :cascade do |t|
+    t.bigint "admin_id", null: false
+    t.string "action", null: false
+    t.string "subject_type"
+    t.bigint "subject_id"
+    t.jsonb "metadata", default: {}, null: false
+    t.text "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["admin_id"], name: "index_admin_activity_logs_on_admin_id"
+    t.index ["subject_type", "subject_id"], name: "index_admin_activity_logs_on_subject"
+  end
+
   create_table "survey_track_assignments", force: :cascade do |t|
     t.bigint "survey_id", null: false
     t.datetime "created_at", null: false
@@ -189,6 +202,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_15_090000) do
   add_foreign_key "survey_assignments", "surveys", on_delete: :cascade
   add_foreign_key "survey_change_logs", "surveys", on_delete: :nullify
   add_foreign_key "survey_change_logs", "users", column: "admin_id"
+  add_foreign_key "admin_activity_logs", "users", column: "admin_id", on_delete: :cascade
   add_foreign_key "survey_track_assignments", "surveys", on_delete: :cascade
   add_foreign_key "surveys", "users", column: "created_by_id"
 end

@@ -56,6 +56,11 @@ Rails.application.routes.draw do
     end
     resources :questions
     resources :survey_change_logs, only: :index
+    resources :program_semesters, only: %i[create destroy] do
+      member do
+        patch :make_current
+      end
+    end
   end
 
   resources :categories

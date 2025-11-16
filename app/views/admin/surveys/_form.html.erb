@@ -29,7 +29,16 @@
 
       <div class="space-y-2">
         <%= form.label :semester, "Semester", class: "block text-sm font-medium text-slate-700" %>
-        <%= form.text_field :semester, required: true, class: input_classes, placeholder: "Fall 2025" %>
+        <% if @program_semester_options.present? %>
+          <%= form.select :semester,
+                          options_for_select(@program_semester_options, survey.semester.presence || @program_semester_options.first),
+                          { include_blank: "Select semester" },
+                          class: input_classes %>
+          <p class="text-xs text-slate-500">Manage semesters from the Survey Builder page.</p>
+        <% else %>
+          <%= form.text_field :semester, required: true, class: input_classes, placeholder: "Fall 2025" %>
+          <p class="text-xs text-amber-600">Add program semesters from the admin panel to unlock the dropdown selector.</p>
+        <% end %>
       </div>
 
       <div class="md:col-span-2 space-y-2">

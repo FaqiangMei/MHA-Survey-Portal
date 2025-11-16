@@ -6,10 +6,17 @@ require "active_support/core_ext/numeric/time"
 puts "\n== Seeding Health sample data =="
 
 previous_queue_adapter = ActiveJob::Base.queue_adapter
+seed_async_adapter = nil
 
 unless Rails.env.test?
-  ActiveJob::Base.queue_adapter = :inline
-  at_exit { ActiveJob::Base.queue_adapter = previous_queue_adapter }
+  # Use a dedicated async adapter during seeding so notification jobs run concurrently
+  # while still flushing before the process exits.
+  seed_async_adapter = ActiveJob::QueueAdapters::AsyncAdapter.new(min_threads: 2, max_threads: 4, idletime: 1.second)
+  ActiveJob::Base.queue_adapter = seed_async_adapter
+  at_exit do
+    seed_async_adapter&.shutdown if seed_async_adapter.respond_to?(:shutdown)
+    ActiveJob::Base.queue_adapter = previous_queue_adapter
+  end
 end
 
 Rails.cache.clear
@@ -140,6 +147,22 @@ survey_templates.each do |definition|
   end
 end
 
+semester_names = survey_templates.map { |definition| definition["semester"].to_s.strip.presence }.compact.uniq
+if semester_names.blank?
+  semester_names = [Time.zone.now.strftime("%B %Y")]
+end
+
+puts "• Syncing program semesters"
+ProgramSemester.transaction do
+  target_current = semester_names.last
+  semester_names.each do |name|
+    ProgramSemester.find_or_create_by!(name: name)
+  end
+
+  ProgramSemester.where.not(name: target_current).update_all(current: false)
+  ProgramSemester.find_by(name: target_current)&.update!(current: true)
+end
+
 puts "• Assigning surveys to each student"
 response_rng = Random.new(20_251_110)
 
@@ -261,21 +284,9 @@ students.each do |student|
       record.save!
     end
 
-    assignment = SurveyAssignment.find_or_initialize_by(survey:, student:)
-    assignment.advisor ||= student.advisor
-    assignment.assigned_at ||= Time.zone.now
-    assignment.due_date ||= 2.weeks.from_now
-
-    created_assignment = assignment.new_record?
-    assignment.save! if assignment.new_record? || assignment.changed?
-
-    if created_assignment
-      SurveyNotificationJob.perform_now(event: :assigned, survey_assignment_id: assignment.id)
-    end
-
-    puts "   • Prepared #{survey.questions.count} questions and assignment for #{student.user.name} (#{track_value})"
-  puts "     ↳ High performer calibration applied" if high_performer_ids.include?(student.student_id)
-    puts "     ↳ Due #{assignment.due_date&.to_date}#{' (new notification queued)' if created_assignment}"
+    puts "   • Prepared #{survey.questions.count} questions for #{student.user.name} (#{track_value})"
+    puts "     ↳ High performer calibration applied" if high_performer_ids.include?(student.student_id)
+    puts "     ↳ Track auto-assign will create survey tasks on next profile update"
   end
 end
 

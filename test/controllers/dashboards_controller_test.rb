@@ -135,6 +135,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Save Changes"
     assert_includes response.body, "advisor-management-form"
+    assert_includes response.body, "track_updates"
   end
 
   test "update_student_advisor updates assignment" do
@@ -185,6 +186,24 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     other_student.update!(advisor: advisors(:other_advisor))
   end
 
+  test "update_student_advisors changes track and logs activity" do
+    sign_in @admin
+
+    student = students(:student)
+    original_track = student.track
+
+    assert_difference -> { AdminActivityLog.where(action: "track_update").count }, 1 do
+      patch update_student_advisors_path, params: { track_updates: { student.student_id => "executive" } }
+    end
+
+    assert_redirected_to manage_students_path
+    follow_redirect!
+    assert_match "Updated 1 track", flash[:notice]
+    assert_equal "executive", student.reload.track
+  ensure
+    student.update!(track: original_track)
+  end
+
   test "student dashboard recreates missing profile" do
     user = users(:student)
     Student.where(student_id: user.id).delete_all
@@ -210,6 +229,16 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Welcome"
+  end
+
+  test "student dashboard only shows surveys for student's track" do
+    sign_in @student
+
+    get student_dashboard_path
+
+    assert_response :success
+    assert_includes response.body, "Fall 2025 Health Assessment"
+    refute_includes response.body, "Spring 2025 Health Assessment"
   end
 
   test "advisor dashboard handles admin impersonation" do

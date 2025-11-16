@@ -14,6 +14,9 @@ class Admin::SurveysController < Admin::BaseController
   def index
     @search_query = params[:q].to_s.strip
     @selected_track = params[:track].presence
+    @program_semesters = ProgramSemester.ordered
+    @current_program_semester = ProgramSemester.current
+    @new_program_semester = ProgramSemester.new
 
     allowed_sort_columns = {
       "title" => "surveys.title",
@@ -233,6 +236,7 @@ class Admin::SurveysController < Admin::BaseController
   def prepare_supporting_data
     @available_tracks = Survey::TRACK_OPTIONS
     @question_types = Question.question_types.keys
+    @program_semester_options = ProgramSemester.ordered.pluck(:name)
   end
 
   # Ensures the survey has at least one category with a question scaffolded for
@@ -269,6 +273,10 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [String]
   def default_semester
+    ProgramSemester.current_name.presence || calculated_semester_from_calendar
+  end
+
+  def calculated_semester_from_calendar
     current = Time.zone.today
     year = current.year
     season = case current.month

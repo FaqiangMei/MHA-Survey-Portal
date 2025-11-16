@@ -14,6 +14,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
+  create_table "admin_activity_logs", force: :cascade do |t|
+    t.bigint "admin_id", null: false
+    t.string "action", null: false
+    t.string "subject_type"
+    t.bigint "subject_id"
+    t.jsonb "metadata", default: {}, null: false
+    t.text "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["admin_id"], name: "index_admin_activity_logs_on_admin_id"
+    t.index ["subject_type", "subject_id"], name: "index_admin_activity_logs_on_subject"
+  end
+
   create_table "admins", primary_key: "admin_id", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
@@ -61,6 +74,15 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.index ["user_id", "read_at"], name: "index_notifications_on_user_and_read_at"
     t.index ["user_id", "title", "notifiable_type", "notifiable_id"], name: "index_notifications_unique_per_user", unique: true
     t.index ["user_id"], name: "index_notifications_on_user_id"
+  end
+
+  create_table "program_semesters", force: :cascade do |t|
+    t.string "name", null: false
+    t.boolean "current", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["current"], name: "index_program_semesters_on_current", where: "(current = true)"
+    t.index ["name"], name: "index_program_semesters_on_name", unique: true
   end
 
   create_table "questions", force: :cascade do |t|
@@ -128,19 +150,6 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.index ["survey_id"], name: "index_survey_change_logs_on_survey_id"
   end
 
-  create_table "admin_activity_logs", force: :cascade do |t|
-    t.bigint "admin_id", null: false
-    t.string "action", null: false
-    t.string "subject_type"
-    t.bigint "subject_id"
-    t.jsonb "metadata", default: {}, null: false
-    t.text "description"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["admin_id"], name: "index_admin_activity_logs_on_admin_id"
-    t.index ["subject_type", "subject_id"], name: "index_admin_activity_logs_on_subject"
-  end
-
   create_table "survey_track_assignments", force: :cascade do |t|
     t.bigint "survey_id", null: false
     t.datetime "created_at", null: false
@@ -183,6 +192,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.index ["uid"], name: "index_users_on_uid", unique: true
   end
 
+  add_foreign_key "admin_activity_logs", "users", column: "admin_id", on_delete: :cascade
   add_foreign_key "admins", "users", column: "admin_id", on_delete: :cascade
   add_foreign_key "advisors", "users", column: "advisor_id", on_delete: :cascade
   add_foreign_key "categories", "surveys"
@@ -202,7 +212,6 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
   add_foreign_key "survey_assignments", "surveys", on_delete: :cascade
   add_foreign_key "survey_change_logs", "surveys", on_delete: :nullify
   add_foreign_key "survey_change_logs", "users", column: "admin_id"
-  add_foreign_key "admin_activity_logs", "users", column: "admin_id", on_delete: :cascade
   add_foreign_key "survey_track_assignments", "surveys", on_delete: :cascade
   add_foreign_key "surveys", "users", column: "created_by_id"
 end

@@ -63,6 +63,15 @@ class AlignSchemaWithTarget < ActiveRecord::Migration[8.0]
       t.index %i[user_id title notifiable_type notifiable_id], unique: true, name: "index_notifications_unique_per_user"
     end
 
+  # Entity table: available program semesters (used for survey assignment windows).
+  create_table :program_semesters do |t|
+      t.string :name, null: false
+      t.boolean :current, null: false, default: false
+      t.timestamps
+    end
+    add_index :program_semesters, :name, unique: true
+    add_index :program_semesters, :current, where: "current = true"
+
   # Entity table: survey definitions.
   create_table :surveys do |t|
       t.string :title, null: false

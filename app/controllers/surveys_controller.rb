@@ -8,7 +8,30 @@ class SurveysController < ApplicationController
   #
   # @return [void]
   def index
-    @surveys = Survey.active.ordered
+    @student = current_student
+    track_value = @student&.track.to_s
+
+    @surveys = if track_value.present?
+                 Survey.active
+                       .includes(:questions, :track_assignments)
+                       .joins(:track_assignments)
+                       .where("LOWER(survey_track_assignments.track) = ?", track_value.downcase)
+                       .distinct
+                       .ordered
+    else
+                 Survey.none
+    end
+
+    survey_ids = @surveys.map(&:id)
+    @assignment_lookup = if survey_ids.any? && @student
+                           SurveyAssignment
+                             .where(student_id: @student.student_id, survey_id: survey_ids)
+                             .index_by(&:survey_id)
+    else
+                           {}
+    end
+
+    @current_semester_label = ProgramSemester.current_name.presence || fallback_semester_label
   end
 
   # Presents the survey form, pre-populating answers and required flags.

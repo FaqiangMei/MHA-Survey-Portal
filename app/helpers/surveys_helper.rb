@@ -43,4 +43,29 @@ module SurveysHelper
 
           nil
      end
+
+     def survey_assignment_status(assignment)
+          if assignment&.completed_at?
+               [ "Completed", "success" ]
+          elsif assignment.present?
+               [ "In Progress", "info" ]
+          else
+               [ "Not Started", "muted" ]
+          end
+     end
+
+     def survey_due_badge_text(assignment)
+          return "No due date" unless assignment&.due_date.present?
+
+          due_date = assignment.due_date.to_date
+          today = Time.zone.today
+
+          if due_date < today
+               "Overdue · #{l(due_date, format: :long)}"
+          elsif due_date == today
+               "Due today"
+          else
+               "Due #{l(due_date, format: :long)}"
+          end
+     end
 end

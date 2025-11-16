@@ -191,12 +191,27 @@ class DashboardsController < ApplicationController
       end
     end
 
+    log_metadata = { successes: successful_updates, failures: failed_updates }.reject { |_k, v| v.blank? }
+
     if successful_updates.present?
       message = "Updated #{successful_updates.size} user role#{'s' if successful_updates.size > 1}."
       message += " Failures: #{failed_updates.join(', ')}" if failed_updates.present?
+      AdminActivityLog.record!(
+        admin: current_user,
+        action: "role_update",
+        description: message,
+        metadata: log_metadata
+      ) if log_metadata.present?
       redirect_to manage_members_path, notice: message
     elsif failed_updates.present?
-      redirect_to manage_members_path, alert: "Role update errors: #{failed_updates.join(', ')}"
+      error_message = "Role update errors: #{failed_updates.join(', ')}"
+      AdminActivityLog.record!(
+        admin: current_user,
+        action: "role_update",
+        description: error_message,
+        metadata: log_metadata
+      ) if log_metadata.present?
+      redirect_to manage_members_path, alert: error_message
     else
       redirect_to manage_members_path, notice: "No role changes were needed."
     end
@@ -275,7 +290,18 @@ class DashboardsController < ApplicationController
   # @return [void]
   def update_student_advisor
     @student = Student.find(params[:id])
+    previous_advisor = @student.advisor
     if @student.update(student_params)
+      AdminActivityLog.record!(
+        admin: current_user,
+        action: "advisor_assignment",
+        description: "Updated advisor for #{@student.user&.email || @student.student_id} from #{previous_advisor&.display_name || 'Unassigned'} to #{@student.advisor&.display_name || 'Unassigned'}",
+        subject: @student,
+        metadata: {
+          previous_advisor_id: previous_advisor&.advisor_id,
+          new_advisor_id: @student.advisor_id
+        }
+      )
       redirect_to manage_students_path, notice: "Advisor updated successfully."
     else
       redirect_to manage_students_path, alert: "Failed to update advisor."
@@ -332,12 +358,27 @@ class DashboardsController < ApplicationController
       end
     end
 
+    log_metadata = { successes: successes, failures: failures }.reject { |_k, v| v.blank? }
+
     if successes.present?
       message = "Updated #{successes.size} student advisor assignment#{'s' if successes.size != 1}."
       message += " Failures: #{failures.join(', ')}" if failures.present?
+      AdminActivityLog.record!(
+        admin: current_user,
+        action: "bulk_advisor_assignment",
+        description: message,
+        metadata: log_metadata
+      ) if log_metadata.present?
       redirect_to manage_students_path, notice: message
     elsif failures.present?
-      redirect_to manage_students_path, alert: "Advisor update errors: #{failures.join(', ')}"
+      error_message = "Advisor update errors: #{failures.join(', ')}"
+      AdminActivityLog.record!(
+        admin: current_user,
+        action: "bulk_advisor_assignment",
+        description: error_message,
+        metadata: log_metadata
+      ) if log_metadata.present?
+      redirect_to manage_students_path, alert: error_message
     else
       redirect_to manage_students_path, notice: "No advisor changes were needed."
     end
@@ -481,6 +522,36 @@ class DashboardsController < ApplicationController
           title: "#{action_label}: #{survey_title}",
           subtitle: log.description.presence || "#{admin_name} (#{log.action})",
           url: log.survey ? admin_survey_path(log.survey) : nil
+        }
+      end
+
+    AdminActivityLog
+      .includes(:admin, :subject)
+      .order(created_at: :desc)
+      .limit(15)
+      .each do |activity|
+        admin_name = activity.admin&.display_name.presence || activity.admin&.email || "Admin"
+
+        icon = case activity.action
+        when "role_update" then "🛡️"
+        when "advisor_assignment", "bulk_advisor_assignment" then "👥"
+        else
+          "⚙️"
+        end
+
+        url = case activity.action
+        when "role_update" then manage_members_path
+        when "advisor_assignment", "bulk_advisor_assignment" then manage_students_path
+        else
+          admin_dashboard_path
+        end
+
+        entries << {
+          timestamp: activity.created_at,
+          icon: icon,
+          title: activity.description.presence || "Admin action recorded",
+          subtitle: admin_name,
+          url: url
         }
       end
 

@@ -51,9 +51,23 @@
 
           <% if category.questions.any? %>
             <div class="space-y-5">
+              <% excluded_categories = ["Semester", "Mentor Relationships (RMHA Only)", "Volunteering/Service"] %>
               <% category.questions.ordered.each_with_index do |question, index| %>
-                <% answer = existing_answers[question.id] %>
-                <% display = answer.is_a?(Array) ? answer.join(", ") : answer %>
+                <% if question.question_type == 'evidence' && excluded_categories.include?(question.category&.name.to_s) %>
+                  <% next %>
+                <% end %>
+                  <% raw_answer = existing_answers[question.id] %>
+                  <%# Normalize stored shapes: prefer `text`/`answer`/`link` fields for display and `rating` for self-rating %>
+                  <% answer_text = nil %>
+                  <% rating_val = nil %>
+                  <% if raw_answer.is_a?(Hash) %>
+                    <% answer_text = raw_answer["text"] || raw_answer["answer"] || raw_answer["link"] %>
+                    <% rating_val = raw_answer["rating"] %>
+                  <% elsif raw_answer.is_a?(Array) %>
+                    <% answer_text = raw_answer.join(", ") %>
+                  <% else %>
+                    <% answer_text = raw_answer %>
+                  <% end %>
 
                 <article class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <header class="flex items-start gap-3">
@@ -76,12 +90,47 @@
                     </div>
                   </header>
 
+                  <span class="ml-2 align-middle">
+                    <% competency_descriptions = {
+                      'Public and Population Health Assessment' => 'Historic, current, and anticipated future characteristics and requirements for health care at local, state, regional, and national markets.',
+                      'Delivery, Organization, and Financing of Health Services and Health Systems' => 'Resources, structure, process, and outcomes associated with providing health care informed by theory, data, and analytic methods.',
+                      'Policy Analysis' => 'Creation, analysis, and implications for the rules governing health care structures and delivery systems',
+                      'Legal & Ethical Bases for Health Services and Health Systems' => 'Laws, regulations, and social or other norms that formally or informally provide guidance for health care delivery',
+                      'Ethics, Accountability, and Self-Assessment' => 'Professional and personal values and responsibilities that result in ongoing self-reflection, professional awareness, learning, and development.',
+                      'Organizational Dynamics' => 'Organizational behavior methods and human resource strategies to maximize individual and team development while ensuring cultural awareness and inclusiveness.',
+                      'Problem Solving, Decision Making, and Critical Thinking' => 'Data, analytic methods, and judgment used in support of leadership decisions',
+                      'Team Building and Collaboration' => 'Partnerships that result in functional, motivated, skill-based groups formed to accomplish identifiable goals',
+                      'Strategic Planning' => 'Market and community needs served by defined alternatives, goals, and programs which are supported by appropriate implementation methods.',
+                      'Business Planning' => 'Develop and manage budgets, conduct financial analysis; identify opportunities and threats to organizations using relevant information.',
+                      'Communication' => 'Verbal and non-verbal communication to effectively convey pertinent information',
+                      'Financial Management' => 'Read, understand, and analyze financial statements and audited financial reports',
+                      'Performance Improvement' => 'Data, information, analytic tools, and judgment used to guide goal setting for individuals, teams, and organizations',
+                      'Project Management' => 'Design, plan, execute, and assess tasks and develop appropriate timelines related to performance, structure, and outcomes in the pursuit of stated goals',
+                      'Systems Thinking' => 'Interrelationships between and among constituent parts of an organization',
+                      'Data Analysis and Information Management' => 'Data, information, technology, and supporting structures used in completing assigned tasks',
+                      'Quantitative Methods for Health Services Delivery' => 'Economic, financial, statistical, and other discipline-specific techniques needed to understand, model, assess, and inform health care decision making and address health care questions'
+                    } %>
+                    <% q_text = question.question_text.to_s.strip %>
+                    <% desc = competency_descriptions[q_text] %>
+                    <%# Fallback: substring/case-insensitive matches for variants like 'Delivery' or 'Legal and Ethical' %>
+                    <% if desc.blank? %>
+                      <% down = q_text.downcase %>
+                      <% if down.include?('delivery') || down.include?('financing') || down.include?('health systems') %>
+                        <% desc = competency_descriptions.find { |k,_| k.downcase.include?('delivery') }&.last %>
+                      <% elsif down.include?('legal') || down.include?('ethical') %>
+                        <% desc = competency_descriptions.find { |k,_| k.downcase.include?('legal') }&.last %>
+                      <% end %>
+                    <% end %>
+                    <% if desc.present? %>
+                      <%= render 'shared/proficiency_icon', text: desc, only_text: true %>
+                    <% end %>
+                  </span>
                   <% case question.question_type %>
                   <% when "short_answer" %>
-                    <%= text_area_tag nil, (display || ""), rows: 3, class: "w-full max-w-full break-words rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 shadow-inner focus:outline-none", disabled: true %>
+                    <%= text_area_tag nil, (answer_text || ""), rows: 3, class: "w-full max-w-full break-words rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 shadow-inner focus:outline-none", disabled: true %>
                   <% when "multiple_choice" %>
                     <% options = question.answer_options_list %>
-                    <% selected = display.to_s %>
+                    <% selected = answer_text.to_s %>
                     <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Options">
                       <% options.each do |opt| %>
                         <% checked = selected.casecmp?(opt.to_s) %>
@@ -93,34 +142,60 @@
                     </div>
                   <% when "scale" %>
                     <%= select_tag nil,
-                                    options_for_select((1..5).map(&:to_s), display&.to_s),
+                                    options_for_select((1..5).map(&:to_s), answer_text&.to_s),
                                     include_blank: true,
                                     class: "w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none",
                                     disabled: true %>
                   <% when "evidence" %>
-                    <% link_value = (answer.is_a?(Hash) ? answer["link"] : display) %>
-                    <% rating_value = (answer.is_a?(Hash) ? answer["rating"] : nil) %>
-                    <div class="space-y-3">
-                      <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-600">Evidence link</label>
-                        <%= text_field_tag nil, (link_value || ""), class: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none", disabled: true %>
-                        <% if link_value.present? %>
-                          <a class="mt-1 block truncate text-[#500000] underline hover:text-[#330000]" href="<%= link_value %>" target="_blank" rel="noopener noreferrer"><%= link_value %></a>
+                    <% excluded_categories = ["Semester", "Mentor Relationships (RMHA Only)", "Volunteering/Service"] %>
+                    <% if excluded_categories.exclude?(question.category&.name.to_s) %>
+                      <% link_value = answer_text %>
+                      <% rating_value = rating_val %>
+                      <div class="space-y-3">
+                        <div>
+                          <label class="mb-1 block text-xs font-medium text-slate-600">Evidence link</label>
+                          <%= text_field_tag nil, (link_value || ""), class: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none", disabled: true %>
+                          <% if link_value.present? %>
+                              <a class="mt-1 block truncate text-[#500000] underline hover:text-[#330000]" href="<%= link_value %>" target="_blank" rel="noopener noreferrer"><%= link_value %></a>
+                            <% end %>
+                        </div>
+                        <%# Only show saved self-rating on read-only pages for the competency questions (desc present) %>
+                        <% if desc.present? && !(question.category&.name.to_s == "Employment Information") %>
+                          <div>
+                            <label class="mb-1 block text-xs font-medium text-slate-600">
+                              <span class="inline-flex items-center gap-2">
+                                <span>Self-rating</span>
+                                <%= render 'shared/proficiency_icon' %>
+                              </span>
+                            </label>
+                              <%= select_tag nil,
+                                              options_for_select((1..5).map(&:to_s), rating_value&.to_s),
+                                              include_blank: true,
+                                              class: "w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:outline-none",
+                                              disabled: true %>
+                          </div>
                         <% end %>
                       </div>
-                      <% unless question.category&.name.to_s == "Employment Information" %>
-                        <div>
-                          <label class="mb-1 block text-xs font-medium text-slate-600">Self-rating</label>
-                          <%= select_tag nil,
-                                          options_for_select((1..5).map(&:to_s), rating_value&.to_s),
-                                          include_blank: true,
-                                          class: "w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:outline-none",
-                                          disabled: true %>
-                        </div>
-                      <% end %>
-                    </div>
+                    <% end %>
                   <% else %>
-                    <%= text_field_tag nil, (display || ""), class: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none", disabled: true %>
+                    <%= text_field_tag nil, (answer_text || ""), class: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none", disabled: true %>
+                  <% end %>
+
+                  <%# For competency questions (desc present) show saved self-rating for non-evidence types too %>
+                  <% if desc.present? && question.question_type != 'evidence' && !(question.category&.name.to_s == "Employment Information") %>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-slate-600">
+                        <span class="inline-flex items-center gap-2">
+                          <span>Self-rating</span>
+                          <%= render 'shared/proficiency_icon' %>
+                        </span>
+                      </label>
+                      <%= select_tag nil,
+                                      options_for_select((1..5).map(&:to_s), rating_val&.to_s),
+                                      include_blank: true,
+                                      class: "w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:outline-none",
+                                      disabled: true %>
+                    </div>
                   <% end %>
                 </article>
               <% end %>

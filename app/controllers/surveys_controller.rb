@@ -2,6 +2,7 @@
 class SurveysController < ApplicationController
   protect_from_forgery except: :save_progress
   before_action :set_survey, only: %i[show submit save_progress]
+  before_action :redirect_completed_assignment!, only: %i[show submit save_progress]
 
   # Lists active surveys ordered by display priority.
   #
@@ -33,9 +34,16 @@ class SurveysController < ApplicationController
       @existing_ratings = {}
       responses.each do |response|
         ans = response.answer
-        if response.question.question_type == "evidence" && ans.is_a?(Hash)
-          @existing_answers[response.question_id.to_s] = ans["link"]
-          @existing_ratings[response.question_id.to_s] = ans["rating"]
+        # Normalize stored shapes so views get a text answer and a separate rating when present
+        if ans.is_a?(Hash)
+          if response.question.question_type == "evidence" && ans["link"].present?
+            @existing_answers[response.question_id.to_s] = ans["link"]
+          else
+            # For competency/non-evidence questions we may store {"text"=>..., "rating"=>n}
+            @existing_answers[response.question_id.to_s] = ans["text"] || ans["answer"] || nil
+          end
+
+          @existing_ratings[response.question_id.to_s] = ans["rating"] if ans["rating"].present?
         else
           # Use string key to match view's expectation
           @existing_answers[response.question_id.to_s] = ans
@@ -125,15 +133,43 @@ class SurveysController < ApplicationController
         end
       end
 
-      # Require self-rating for evidence questions outside Employment Information
-      if question.question_type == "evidence"
-        category_name = (question.category&.name || "").to_s
-        rating_required = category_name != "Employment Information"
-        if rating_required
-          rating_val = params.dig(:answers_rating, question.id.to_s)
-          if rating_val.to_s.strip.blank?
-            missing_ratings << question
-          end
+      # Require self-rating only for competency questions (the mapped 17 competencies)
+      # Define the same competency title map used in the view and detect by question text
+      competency_titles = [
+        "Public and Population Health Assessment",
+        "Delivery, Organization, and Financing of Health Services and Health Systems",
+        "Policy Analysis",
+        "Legal & Ethical Bases for Health Services and Health Systems",
+        "Ethics, Accountability, and Self-Assessment",
+        "Organizational Dynamics",
+        "Problem Solving, Decision Making, and Critical Thinking",
+        "Team Building and Collaboration",
+        "Strategic Planning",
+        "Business Planning",
+        "Communication",
+        "Financial Management",
+        "Performance Improvement",
+        "Project Management",
+        "Systems Thinking",
+        "Data Analysis and Information Management",
+        "Quantitative Methods for Health Services Delivery"
+      ]
+
+      text = question.question_text.to_s.strip
+      is_competency = competency_titles.include?(text)
+      if !is_competency
+        down = text.downcase
+        if down.include?("delivery") || down.include?("financing") || down.include?("health systems")
+          is_competency = true
+        elsif down.include?("legal") || down.include?("ethical")
+          is_competency = true
+        end
+      end
+
+      if is_competency
+        rating_val = params.dig(:answers_rating, question.id.to_s)
+        if rating_val.to_s.strip.blank?
+          missing_ratings << question
         end
       end
     end
@@ -176,8 +212,17 @@ class SurveysController < ApplicationController
               record.destroy!
             end
           else
-            if submitted_value.present?
+            rating_value = params.dig(:answers_rating, question_id.to_s)
+            if submitted_value.present? && rating_value.present?
+              # Store both text and rating so one doesn't overwrite the other
+              combined = { "text" => submitted_value, "rating" => (rating_value.presence && rating_value.to_i) }.compact
+              record.answer = combined
+              record.save(validate: false)
+            elsif submitted_value.present?
               record.answer = submitted_value
+              record.save(validate: false)
+            elsif rating_value.present?
+              record.answer = { "rating" => (rating_value.presence && rating_value.to_i) }
               record.save(validate: false)
             elsif record.persisted?
               record.destroy!
@@ -205,8 +250,16 @@ class SurveysController < ApplicationController
             record.destroy!
           end
         else
-          if submitted_value.present?
+          rating_value = params.dig(:answers_rating, question_id.to_s)
+          if submitted_value.present? && rating_value.present?
+            combined = { "text" => submitted_value, "rating" => (rating_value.presence && rating_value.to_i) }.compact
+            record.answer = combined
+            record.save!
+          elsif submitted_value.present?
             record.answer = submitted_value
+            record.save!
+          elsif rating_value.present?
+            record.answer = { "rating" => (rating_value.presence && rating_value.to_i) }
             record.save!
           elsif record.persisted?
             record.destroy!
@@ -298,7 +351,17 @@ class SurveysController < ApplicationController
             Rails.logger.info "[SAVE_PROGRESS DEBUG] Destroyed empty evidence+rating for question #{question_id}"
           end
         else
-          if submitted_value.present?
+          rating_value = params.dig(:answers_rating, question_id.to_s)
+          if submitted_value.present? && rating_value.present?
+            combined = { "text" => submitted_value, "rating" => (rating_value.presence && rating_value.to_i) }.compact
+            record.answer = combined
+            if record.save(validate: false)
+              saved_count += 1
+              Rails.logger.info "[SAVE_PROGRESS DEBUG] Saved question #{question_id} with value+rating (validations skipped)"
+            else
+              Rails.logger.warn "[SAVE_PROGRESS DEBUG] Failed to save question #{question_id} during save_progress (validations skipped)"
+            end
+          elsif submitted_value.present?
             record.answer = submitted_value
             # Skip validations when saving progress; validations happen on submit
             if record.save(validate: false)
@@ -306,6 +369,14 @@ class SurveysController < ApplicationController
               Rails.logger.info "[SAVE_PROGRESS DEBUG] Saved question #{question_id} with value: #{submitted_value} (validations skipped)"
             else
               Rails.logger.warn "[SAVE_PROGRESS DEBUG] Failed to save question #{question_id} during save_progress (validations skipped)"
+            end
+          elsif rating_value.present?
+            record.answer = { "rating" => (rating_value.presence && rating_value.to_i) }
+            if record.save(validate: false)
+              saved_count += 1
+              Rails.logger.info "[SAVE_PROGRESS DEBUG] Saved self-rating for question #{question_id} (validations skipped)"
+            else
+              Rails.logger.warn "[SAVE_PROGRESS DEBUG] Failed to save self-rating for question #{question_id} during save_progress (validations skipped)"
             end
           elsif record.persisted?
             record.destroy!
@@ -326,6 +397,19 @@ class SurveysController < ApplicationController
   # @return [void]
   def set_survey
     @survey = Survey.includes(categories: :questions).find(params[:id])
+  end
+
+  # Prevents students from editing a survey that has already been submitted.
+  # Redirects them to the read-only SurveyResponse view instead.
+  def redirect_completed_assignment!
+    student = current_student
+    return unless student && @survey
+
+    assignment = SurveyAssignment.find_by(student_id: student.student_id, survey_id: @survey.id)
+    return unless assignment&.completed_at?
+
+    survey_response = SurveyResponse.build(student: student, survey: @survey)
+    redirect_to survey_response_path(survey_response), alert: "This survey has already been submitted and can only be viewed." and return
   end
 
   # Checks if a Google Drive/Docs link is publicly accessible.

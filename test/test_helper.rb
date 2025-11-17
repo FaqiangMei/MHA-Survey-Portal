@@ -6,14 +6,14 @@ require "shellwords"
 # `run_tests.rb` script sets ENV['COVERAGE']='1' when the -c/--coverage
 # flag is passed. Keep this block minimal to avoid loading SimpleCov in
 # normal development runs.
-if ENV['COVERAGE'] == '1'
+if ENV["COVERAGE"] == "1"
   begin
-    require 'simplecov'
+    require "simplecov"
     # Use the Rails profile and enable branch coverage for more accuracy.
-    SimpleCov.start 'rails' do
+    SimpleCov.start "rails" do
       enable_coverage :branch
-      add_filter '/test/'
-      add_group 'Services', 'app/services'
+      add_filter "/test/"
+      add_group "Services", "app/services"
     end
     puts "📊 SimpleCov: coverage enabled"
   rescue LoadError

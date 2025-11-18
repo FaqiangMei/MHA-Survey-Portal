@@ -2,6 +2,7 @@
 require "json"
 require "yaml"
 require "active_support/core_ext/numeric/time"
+require "set"
 
 puts "\n== Seeding Health sample data =="
 
@@ -125,6 +126,7 @@ survey_templates.each do |definition|
       Array(category_definition.fetch("questions", [])).each do |question_definition|
         category.questions.build(
           question_text: question_definition.fetch("text"),
+          description: question_definition["description"],
           question_order: question_definition.fetch("order"),
           question_type: question_definition.fetch("type"),
           is_required: question_definition.fetch("required", false),
@@ -196,14 +198,17 @@ drive_links = %w[
   https://docs.google.com/document/d/1SampleDocumentId/edit?usp=drive_link
 ]
 
-competency_category_names = [
-  "Health Care Environment and Community",
-  "Leadership Skills",
-  "Management Skills",
-  "Analytic and Technical Skills",
-  "Mentor Relationships (RMHA Only)",
-  "Semester"
-].freeze
+competency_titles = Reports::DataAggregator::COMPETENCY_TITLES
+competency_title_lookup = competency_titles.map { |title| title.to_s.strip }.to_set
+
+competency_rating_value = lambda do |high_performer:|
+  pool = if high_performer
+           [4, 4, 5, 5, 5]
+         else
+           [2, 3, 3, 4, 4, 5]
+         end
+  pool.sample(random: response_rng).to_s
+end
 
 students.each do |student|
   track_value = student.track.presence || student.read_attribute(:track)
@@ -216,62 +221,59 @@ students.each do |student|
 
       response_roll = response_rng.rand
       advisor_profile = student.advisor
+      question_label = question.question_text.to_s.strip
+      is_competency_question = competency_title_lookup.include?(question_label)
+      high_performer = high_performer_ids.include?(student.student_id)
 
-      # Decide whether this entry is captured as a student reflection or advisor evaluation
-      record.advisor_id = case response_roll
-                          when 0.0..0.20
-                            nil
-                          when 0.20..0.65
+      # Ensure competency metrics always capture a student self-rating entry
+      record.advisor_id = if is_competency_question
                             nil
                           else
-                            advisor_profile&.advisor_id
+                            case response_roll
+                            when 0.0..0.20
+                              nil
+                            when 0.20..0.65
+                              nil
+                            else
+                              advisor_profile&.advisor_id
+                            end
                           end
 
-      response_value = nil
-      if high_performer_ids.include?(student.student_id)
-        response_value = case question.question_type
-                         when "evidence"
-                           drive_links.first
-                         when "multiple_choice"
-                           "Yes"
-                         when "short_answer"
-                           if competency_category_names.include?(question.category.name) && question.question_order == 1
-                             "4.8"
-                           else
-                             "Delivered an exceptional outcome that exceeded expectations."
-                           end
-                         else
-                           "Completed with distinction."
+      response_value = case question.question_type
+                       when "evidence"
+                         high_performer ? drive_links.first : drive_links.sample(random: response_rng)
+                       when "multiple_choice"
+                         options = begin
+                           raw = question.answer_options.presence || "[]"
+                           parsed = JSON.parse(raw)
+                           Array.wrap(parsed)
+                         rescue JSON::ParserError
+                           []
                          end
-        record.advisor_id ||= advisor_profile&.advisor_id
-      else
-        case question.question_type
-        when "evidence"
-          response_value = drive_links.sample(random: response_rng)
-        when "multiple_choice"
-          options = begin
-            raw = question.answer_options.presence || "[]"
-            parsed = JSON.parse(raw)
-            Array.wrap(parsed)
-          rescue JSON::ParserError
-            []
-          end
-          response_value = options.sample(random: response_rng).presence || "Yes"
-        when "short_answer"
-          if competency_category_names.include?(question.category.name) && question.question_order == 1
-            # First question in competency-style categories drives numeric analytics
-            min, max = record.advisor_id.present? ? [3.2, 4.9] : [2.5, 4.5]
-            response_value = sample_numeric.call(min:, max:)
-          else
-            response_value = sample_text.call(question)
-          end
-        else
-          response_value = sample_text.call(question)
-        end
-      end
+
+                         if is_competency_question
+                           rating_value = competency_rating_value.call(high_performer: high_performer)
+                           options.include?(rating_value) ? rating_value : (options.sample(random: response_rng).presence || rating_value || "3")
+                         else
+                           preferred = high_performer ? "Yes" : nil
+                           selection = options.sample(random: response_rng).presence
+                           fallback = preferred && options.include?(preferred) ? preferred : selection
+                           fallback.presence || preferred || options.first || "Yes"
+                         end
+                       when "short_answer"
+                         if is_competency_question
+                           competency_rating_value.call(high_performer: high_performer)
+                         else
+                           high_performer ? "Delivered an exceptional outcome that exceeded expectations." : sample_text.call(question)
+                         end
+                       else
+                         high_performer ? "Completed with distinction." : sample_text.call(question)
+                       end
+
+      record.advisor_id ||= advisor_profile&.advisor_id if high_performer && !is_competency_question
 
       # Introduce the occasional "not assessed" entry for advisors (skip top performers)
-      if record.advisor_id.present? && response_roll < 0.28 && !high_performer_ids.include?(student.student_id)
+      if !is_competency_question && record.advisor_id.present? && response_roll < 0.28 && !high_performer_ids.include?(student.student_id)
         response_value = nil
       end
 

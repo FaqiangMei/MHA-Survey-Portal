@@ -90,6 +90,8 @@ class Admin::QuestionsController < Admin::BaseController
   def question_params
     permitted = params.require(:question).permit(
       :question,
+      :question_text,
+      :description,
       :question_type,
       :question_order,
       :answer_options,
@@ -99,7 +101,9 @@ class Admin::QuestionsController < Admin::BaseController
 
     # Support legacy multi-select params by coalescing the first selected value
     # into the single category_id attribute used by the model.
-    permitted[:category_id] = permitted[:category_id].presence
+      permitted[:category_id] = permitted[:category_id].presence
+      question_alias = permitted.delete(:question)
+      permitted[:question_text] = question_alias.presence || permitted[:question_text]
 
     if permitted[:category_id].blank? && permitted.key?(:category_ids)
       first_selected_id = Array(permitted.delete(:category_ids)).map(&:presence).compact.first

@@ -173,10 +173,28 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [void]
   def preview
-    @categories = @survey.categories.includes(:questions).order(:id)
+    @category_groups = @survey.categories.includes(:questions).order(:id)
+    @categories = @category_groups
     @questions = @survey.questions.includes(:category).order(:question_order)
-    @category_names = @categories.map(&:name)
+    @category_names = @category_groups.map(&:name)
     @track_list = @survey.track_list
+    @excluded_categories = ["Semester", "Mentor Relationships (RMHA Only)", "Volunteering/Service"]
+    @computed_required = {}
+
+    @category_groups.each do |category|
+      category.questions.each do |question|
+        required = question.is_required?
+
+        if !required && question.question_type_multiple_choice?
+          options = question.answer_options_list.map(&:strip).map(&:downcase)
+          is_flexibility_scale = (options == %w[1 2 3 4 5]) &&
+                                 question.question_text.to_s.downcase.include?("flexible")
+          required = !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
+        end
+
+        @computed_required[question.id] = required
+      end
+    end
     @survey.log_change!(admin: current_user, action: "preview", description: "Previewed from admin panel")
   end
 
@@ -207,6 +225,7 @@ class Admin::SurveysController < Admin::BaseController
         questions_attributes: [
           :id,
           :question_text,
+          :description,
           :question_type,
           :question_order,
           :answer_options,

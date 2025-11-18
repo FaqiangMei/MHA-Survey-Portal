@@ -529,8 +529,8 @@ module Reports
     def build_competency_detail
       buckets = Hash.new do |hash, key|
         hash[key] = {
-          student_scores: [],
-          advisor_scores: [],
+          student_rows: [],
+          advisor_rows: [],
           domain_name: nil,
           domain_slug: nil
         }
@@ -544,17 +544,24 @@ module Reports
         bucket[:domain_name] ||= row[:category_name]
         bucket[:domain_slug] ||= category_id_to_slug[row[:category_id]] || normalize_domain_slug(row[:category_name])
         if row[:advisor_entry]
-          bucket[:advisor_scores] << row[:score]
+          bucket[:advisor_rows] << row
         else
-          bucket[:student_scores] << row[:score]
+          bucket[:student_rows] << row
         end
       end
 
       items = COMPETENCY_TITLES.map do |title|
         slug = competency_slug(title)
         bucket = buckets[slug]
-        student_avg = average(bucket[:student_scores]) if bucket
-        advisor_avg = average(bucket[:advisor_scores]) if bucket
+        student_rows = bucket&.dig(:student_rows) || []
+        advisor_rows = bucket&.dig(:advisor_rows) || []
+
+        student_avg = average(student_rows.map { |row| row[:score] })
+        advisor_avg = average(advisor_rows.map { |row| row[:score] })
+
+        student_group = group_student_rows(student_rows)
+        attainment_counts = attainment_counts_for_group(student_group)
+        attainment_percentages = attainment_percentages(attainment_counts)
 
         {
           id: slug,
@@ -563,7 +570,14 @@ module Reports
           domain_name: bucket&.dig(:domain_name),
           student_average: student_avg,
           advisor_average: advisor_avg,
-          gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil
+          gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil,
+          achieved_count: attainment_counts[:achieved_count],
+          not_met_count: attainment_counts[:not_met_count],
+          not_assessed_count: attainment_counts[:not_assessed_count],
+          achieved_percent: attainment_percentages[:achieved_percent],
+          not_met_percent: attainment_percentages[:not_met_percent],
+          not_assessed_percent: attainment_percentages[:not_assessed_percent],
+          total_students: attainment_counts[:total_students]
         }
       end
 

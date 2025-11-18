@@ -87,6 +87,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
 
   create_table "questions", force: :cascade do |t|
     t.string "question_text", null: false
+    t.text "description"
     t.integer "question_order", null: false
     t.boolean "is_required", default: false, null: false
     t.string "question_type", null: false

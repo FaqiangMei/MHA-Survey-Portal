@@ -1051,6 +1051,23 @@ const ReportsApp = ({ exportUrls = {} }) => {
     }
   }, [ competencyDetail, competencyDetailDomain ])
 
+  const competencyAchievementItems = useMemo(() => {
+    if (!Array.isArray(competencyDetail?.items)) return []
+
+    return competencyDetail.items.map((item) => {
+      const achieved = Number(item?.achieved_count)
+      const notMet = Number(item?.not_met_count)
+      const notAssessed = Number(item?.not_assessed_count)
+
+      return {
+        ...item,
+        achieved_count: Number.isFinite(achieved) ? achieved : 0,
+        not_met_count: Number.isFinite(notMet) ? notMet : 0,
+        not_assessed_count: Number.isFinite(notAssessed) ? notAssessed : 0
+      }
+    })
+  }, [ competencyDetail ])
+
   const summaryCards = Array.isArray(benchmark?.cards) ? benchmark.cards : []
   const timeline = Array.isArray(benchmark?.timeline) ? benchmark.timeline : []
   const studentSelectionRequired = viewMode === "student" && (filters.student_id === "all")
@@ -1106,6 +1123,19 @@ const ReportsApp = ({ exportUrls = {} }) => {
     })
 
     tabs.push({
+      key: "competency",
+      label: "Competency",
+      title: "Num Achieved by Competency",
+      description: "Stacked counts of students meeting, missing, or not yet assessed for each individual competency.",
+      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "competency" }),
+      content: h(CompetencyAchievementChart, { items: competencyAchievementItems }),
+      footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
+        "Students can appear multiple times across competencies; totals reflect attainment per competency.",
+        filtersDescription && filtersDescription !== "None" ? h("span", { className: "block" }, `Filters applied: ${filtersDescription}`) : null
+      ].filter(Boolean))
+    })
+
+    tabs.push({
       key: "course",
       label: "Course",
       title: "% All Competency Achieved by Course",
@@ -1118,7 +1148,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
     })
 
     return tabs
-  }, [ alignment, alignmentAvailable, competencies, courses, filtersDescription, handleExport, handleViewModeChange, singleStudentDisabled, studentSelectionRequired, timeline, viewMode ])
+  }, [ alignment, alignmentAvailable, competencies, competencyAchievementItems, courses, filtersDescription, handleExport, handleViewModeChange, singleStudentDisabled, studentSelectionRequired, timeline, viewMode ])
 
   useEffect(() => {
     if (!Array.isArray(chartTabs) || chartTabs.length === 0) return

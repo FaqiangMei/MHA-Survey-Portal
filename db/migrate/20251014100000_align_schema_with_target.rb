@@ -100,6 +100,7 @@ class AlignSchemaWithTarget < ActiveRecord::Migration[8.0]
   create_table :questions do |t|
       t.references :category, null: false, foreign_key: { to_table: :categories, on_delete: :cascade }
       t.string :question_text, null: false
+      t.text :description
       t.integer :question_order, null: false
       t.boolean :is_required, null: false, default: false
       t.enum :question_type, enum_type: :question_types, null: false

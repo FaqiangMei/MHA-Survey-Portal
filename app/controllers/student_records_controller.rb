@@ -27,10 +27,12 @@ class StudentRecordsController < ApplicationController
   # @return [ActiveRecord::Relation<Student>]
   def load_students
     has_admin_privileges = current_user&.role_admin? || current_user&.admin_profile.present?
-    advisor_can_view_all = current_user&.role_advisor?
+    advisor_id = current_user&.advisor_profile&.advisor_id
 
-    scope = if has_admin_privileges || advisor_can_view_all
+    scope = if has_admin_privileges
       Student.all
+    elsif advisor_id.present?
+      Student.where(advisor_id: advisor_id)
     else
       Student.none
     end

@@ -2,7 +2,12 @@
   <div class="w-full max-w-5xl space-y-6">
     <header class="space-y-2">
       <h1 class="text-3xl font-semibold text-[#500000]">Student Records</h1>
-      <p class="text-sm text-slate-600">Browse survey progress by semester for your assigned students.</p>
+      <% intro_text = if current_user&.respond_to?(:role_advisor?) && current_user.role_advisor?
+        "Browse survey progress across all students. Surveys you do not advise remain read-only."
+      else
+        "Browse survey progress by semester for your assigned students."
+      end %>
+      <p class="text-sm text-slate-600"><%= intro_text %></p>
     </header>
 
     <% if @students.blank? %>

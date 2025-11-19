@@ -63,6 +63,7 @@
               <% flash.each do |key, value| %>
                 <% messages = Array(value).map(&:to_s) %>
                 <section class="<%= flash_classes(key) %>" role="alert">
+                  <%= flash_icon(key) %>
                   <div class="flex-1">
                     <p class="text-xs font-semibold uppercase tracking-wide"><%= flash_title(key) %></p>
                     <div class="mt-1 text-sm leading-relaxed">

@@ -11,11 +11,13 @@ function setupHighContrastToggle() {
     if (on) {
       body.classList.add("high-contrast");
       toggle.setAttribute("aria-pressed", "true");
-      toggle.textContent = "High Contrast: On";
+      toggle.setAttribute("aria-label", "Disable high contrast mode");
+      toggle.textContent = "High Contrast Mode: ON";
     } else {
       body.classList.remove("high-contrast");
       toggle.setAttribute("aria-pressed", "false");
-      toggle.textContent = "High Contrast: Off";
+      toggle.setAttribute("aria-label", "Enable high contrast mode");
+      toggle.textContent = "High Contrast Mode: OFF";
     }
   };
 

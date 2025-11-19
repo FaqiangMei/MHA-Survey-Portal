@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
+ActiveRecord::Schema[8.0].define(version: 2025_11_18_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -55,8 +55,10 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
     t.string "comments"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "question_id"
     t.index ["advisor_id"], name: "index_feedback_on_advisor_id"
     t.index ["category_id"], name: "index_feedback_on_category_id"
+    t.index ["question_id"], name: "index_feedback_on_question_id"
     t.index ["student_id"], name: "index_feedback_on_student_id"
     t.index ["survey_id"], name: "index_feedback_on_survey_id"
   end
@@ -199,6 +201,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_14_100000) do
   add_foreign_key "categories", "surveys"
   add_foreign_key "feedback", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "feedback", "categories", on_delete: :cascade
+  add_foreign_key "feedback", "questions"
   add_foreign_key "feedback", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "feedback", "surveys", on_delete: :cascade
   add_foreign_key "notifications", "users", on_delete: :cascade

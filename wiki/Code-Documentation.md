@@ -28,7 +28,7 @@ This page links the major areas of the Rails codebase to the functionality descr
 - `advisors/base_controller.rb` – Guards advisor-only flows while permitting admin oversight.
 - `advisors/surveys_controller.rb` – Track-aware assignment/unassignment tools and due-date management.
 - `advisors/students_controller.rb` – Advisor-specific student details and updates.
-- `api/reports_controller.rb` – JSON API powering the analytics dashboard (filters, benchmark, competency, course, alignment endpoints).
+- `api/reports_controller.rb` – JSON API powering the analytics dashboard (filters, benchmark, competency, course endpoints).
 - `accounts_controller.rb`, `settings_controller.rb`, and Devise controllers support all namespaces.
 
 ## Models
@@ -46,7 +46,7 @@ This page links the major areas of the Rails codebase to the functionality descr
 
 ## Services & Modules
 
-- `Reports::DataAggregator` – Central analytics service calculating filters, benchmarks, competency summaries, course outcomes, and alignment data based on the current user’s scope.
+- `Reports::DataAggregator` – Central analytics service calculating filters, benchmarks, competency summaries, and course outcomes based on the current user’s scope.
 - `Reports::ExcelExporter` – Builds XLSX dashboards from aggregator payloads using Axlsx.
 - `CompositeReportGenerator` – Produces cached composite assessment PDFs by merging student answers and advisor feedback (requires WickedPdf).
 - `CompositeReportCache` – Lightweight cache wrapper keyed by survey response fingerprint.
@@ -78,7 +78,7 @@ This page links the major areas of the Rails codebase to the functionality descr
 
 - `/api/reports/filters` – Filter metadata for the analytics app.
 - `/api/reports/benchmark` – Cohort benchmark statistics.
-- `/api/reports/competency-summary`, `/course-summary`, `/alignment` – Data for charts and tables rendered in React.
+- `/api/reports/competency-summary`, `/course-summary` – Data for charts and tables rendered in React.
 - `/evidence/check_access` – JSON endpoint to validate Google Drive URLs.
 - `/up` – Rails health check consumed by uptime monitors.
 

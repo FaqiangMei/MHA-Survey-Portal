@@ -207,6 +207,7 @@ class AlignSchemaWithTarget < ActiveRecord::Migration[8.0]
       t.references :advisor, null: false, foreign_key: { to_table: :advisors, primary_key: :advisor_id, on_delete: :cascade }
       t.references :category, null: false, foreign_key: { to_table: :categories, on_delete: :cascade }
       t.references :survey, null: false, foreign_key: { to_table: :surveys, on_delete: :cascade }
+      t.references :question, foreign_key: { to_table: :questions }, index: true
       t.float :average_score
       t.string :comments
       t.timestamps

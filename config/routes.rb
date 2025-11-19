@@ -113,7 +113,6 @@ Rails.application.routes.draw do
 
   namespace :api do
     get "reports/filters", to: "reports#filters"
-    get "reports/alignment", to: "reports#alignment"
     get "reports/competency-summary", to: "reports#competency_summary"
     get "reports/competency-detail", to: "reports#competency_detail"
     get "reports/course-summary", to: "reports#course_summary"

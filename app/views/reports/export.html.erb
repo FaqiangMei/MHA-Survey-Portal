@@ -8,7 +8,7 @@
 <% show_benchmark = selected_section.blank? || selected_section == "benchmark" %>
 <% show_competency = selected_section.blank? || selected_section == "competency" %>
 <% show_course = selected_section.blank? || selected_section == "course" %>
-<% show_alignment = selected_section.blank? || selected_section == "alignment" %>
+
 <% filters_text = payload.fetch(:filters, {}).map { |label, value| "#{label.to_s.titleize}: #{value.presence || 'All'}" }.join(", ") %>
 
 <section class="report-export">
@@ -166,11 +166,11 @@
 
   <% if show_course %>
     <section class="report-export__section">
-      <h2>Course Achievement</h2>
+      <h2>Track Achievement</h2>
       <% courses = Array(payload[:course_summary]) %>
       <% if courses.any? %>
         <div class="chart-block">
-          <h3>% All Competency Achieved by Course</h3>
+          <h3>% All Competency Achieved by Track</h3>
           <div class="chart-legend">
             <span class="chart-legend__item">
               <span class="chart-legend__swatch chart-segment--achieved"></span>
@@ -212,7 +212,7 @@
           </div>
         </div>
       <% else %>
-        <p class="report-export__note">No course data available for the selected filters.</p>
+        <p class="report-export__note">No track data available for the selected filters.</p>
       <% end %>
       <table class="report-export__table">
         <thead>
@@ -257,74 +257,7 @@
     </section>
   <% end %>
 
-  <% if show_alignment %>
-    <section class="report-export__section">
-      <h2>Competency Alignment</h2>
-      <% alignment_labels = Array(payload.dig(:alignment, :labels)) %>
-      <% student_values = Array(payload.dig(:alignment, :student)) %>
-      <% advisor_values = Array(payload.dig(:alignment, :advisor)) %>
-      <% if alignment_labels.any? %>
-        <div class="chart-block">
-          <h3>Student vs Advisor Comparison</h3>
-          <div class="chart-legend">
-            <span class="chart-legend__item">
-              <span class="chart-legend__swatch chart-segment--student"></span>
-              Student Average
-            </span>
-            <span class="chart-legend__item">
-              <span class="chart-legend__swatch chart-segment--advisor"></span>
-              Advisor Average
-            </span>
-          </div>
-          <div class="chart-comparison">
-            <% alignment_labels.each_with_index do |label, index| %>
-              <% student_raw = student_values[index] %>
-              <% advisor_raw = advisor_values[index] %>
-              <% student_score = student_raw.nil? ? nil : student_raw.to_f %>
-              <% advisor_score = advisor_raw.nil? ? nil : advisor_raw.to_f %>
-              <% student_width = student_score ? [[(student_score / 5.0) * 100.0, 0.0].max, 100.0].min : 0.0 %>
-              <% advisor_width = advisor_score ? [[(advisor_score / 5.0) * 100.0, 0.0].max, 100.0].min : 0.0 %>
-              <div class="chart-comparison__row">
-                <div class="chart-comparison__label"><%= label %></div>
-                <div class="chart-comparison__bars">
-                  <div class="chart-comparison__series">
-                    <div class="chart-comparison__bar chart-segment--student" style="width: <%= format('%.2f', student_width) %>%"></div>
-                    <span class="chart-comparison__value"><%= student_score.nil? ? "—" : number_with_precision(student_score, precision: 2) %></span>
-                  </div>
-                  <div class="chart-comparison__series">
-                    <div class="chart-comparison__bar chart-segment--advisor" style="width: <%= format('%.2f', advisor_width) %>%"></div>
-                    <span class="chart-comparison__value"><%= advisor_score.nil? ? "—" : number_with_precision(advisor_score, precision: 2) %></span>
-                  </div>
-                </div>
-              </div>
-            <% end %>
-          </div>
-        </div>
-      <% else %>
-        <p class="report-export__note">No alignment data available for the selected filters.</p>
-      <% end %>
-      <table class="report-export__table">
-        <thead>
-          <tr>
-            <th>Competency</th>
-            <th>Student Avg</th>
-            <th>Advisor Avg</th>
-            <th>Gap</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% Array(payload.dig(:alignment, :labels)).each_with_index do |label, index| %>
-            <tr>
-              <td><%= label %></td>
-              <td><%= number_with_precision(Array(payload.dig(:alignment, :student))[index], precision: 2) %></td>
-              <td><%= number_with_precision(Array(payload.dig(:alignment, :advisor))[index], precision: 2) %></td>
-              <td><%= number_with_precision(Array(payload.dig(:alignment, :gap))[index], precision: 2) %></td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </section>
-  <% end %>
+
 
   <% if show_benchmark %>
     <section class="report-export__section">

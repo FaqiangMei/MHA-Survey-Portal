@@ -30,6 +30,12 @@ module Reports
     "Data Analysis and Information Management",
     "Quantitative Methods for Health Services Delivery"
   ].freeze
+  REPORT_DOMAINS = [
+    "Health Care Environment and Community",
+    "Leadership Skills",
+    "Management Skills",
+    "Analytic and Technical Skills"
+  ].freeze
     RECENT_WINDOW = 90.days
     DATASET_SELECT = [
       "student_questions.id",
@@ -37,6 +43,23 @@ module Reports
       "student_questions.response_value",
       "student_questions.advisor_id",
       "student_questions.updated_at",
+      "categories.id AS category_id",
+      "categories.name AS category_name",
+      "questions.question_text AS question_text",
+      "surveys.id AS survey_id",
+      "surveys.title AS survey_title",
+      "surveys.semester AS survey_semester",
+      "students.track AS student_track",
+      "students.student_id AS student_primary_id",
+      "students.advisor_id AS owning_advisor_id"
+    ].freeze
+
+    FEEDBACK_SELECT = [
+      "feedback.id",
+      "feedback.id AS student_question_id",
+      "feedback.average_score AS response_value",
+      "feedback.advisor_id",
+      "feedback.updated_at",
       "categories.id AS category_id",
       "categories.name AS category_name",
       "questions.question_text AS question_text",
@@ -86,11 +109,6 @@ module Reports
       @course_summary ||= build_course_summary
     end
 
-    # Student vs advisor comparison dataset for the bar chart.
-    def alignment
-      @alignment ||= build_alignment_payload
-    end
-
     # Cards for quick overview tiles (alias for convenience).
     def summary_cards
       benchmark[:cards]
@@ -104,8 +122,7 @@ module Reports
         benchmark: benchmark,
         competency_summary: competency_summary,
         competency_detail: competency_detail,
-        course_summary: course_summary,
-        alignment: alignment
+        course_summary: course_summary
       }
     end
 
@@ -225,11 +242,53 @@ module Reports
       scope
     end
 
+    def feedback_scope
+      Feedback
+        .joins(:student)
+        .merge(accessible_student_relation)
+        .joins(:question)
+        .joins(question: { category: :survey })
+        .where.not(average_score: nil)
+    end
+
+    def filtered_feedback_scope
+      scope = feedback_scope
+      if filters[:track]
+        scope = scope.where(students: { track: filters[:track] })
+      end
+      if filters[:semester]
+        scope = scope.where("LOWER(surveys.semester) = ?", filters[:semester].downcase)
+      end
+      if filters[:survey_id]
+        scope = scope.where(surveys: { id: filters[:survey_id] })
+      end
+      category_ids = selected_category_ids
+      scope = scope.where(categories: { id: category_ids }) if category_ids.present?
+      if filters[:competency]
+        competency_name = competency_lookup[filters[:competency]]&.dig(:name)
+        if competency_name.present?
+          scope = scope.where("LOWER(questions.question_text) = ?", competency_name.downcase)
+        end
+      end
+      if filters[:student_id]
+        scope = scope.where(feedback: { student_id: filters[:student_id] })
+      end
+      if filters[:advisor_id]
+        scope = scope.where(feedback: { advisor_id: filters[:advisor_id] })
+      end
+      scope
+    end
+
     def dataset_rows
       @dataset_rows ||= begin
         rows = []
         filtered_scope.select(DATASET_SELECT).find_each(batch_size: 1_000) do |record|
-          next unless (row = build_dataset_row(record))
+          next unless (row = build_dataset_row(record, is_advisor_entry: false))
+
+          rows << row
+        end
+        filtered_feedback_scope.select(FEEDBACK_SELECT).find_each(batch_size: 1_000) do |record|
+          next unless (row = build_dataset_row(record, is_advisor_entry: true))
 
           rows << row
         end
@@ -484,7 +543,7 @@ module Reports
           total_students: attainment_counts[:total_students],
           courses: course_breakdown
         }
-      end.compact.sort_by { |entry| -(entry[:student_average] || 0.0) }
+      end.compact.select { |entry| REPORT_DOMAINS.include?(entry[:name]) }.sort_by { |entry| -(entry[:student_average] || 0.0) }
     end
 
     def percent_change_for_category(rows)
@@ -501,30 +560,7 @@ module Reports
       ((recent_avg - previous_avg) / previous_avg) * 100.0
     end
 
-    def build_alignment_payload
-      categories = dataset_rows.group_by { |row| row[:category_name] }
-      labels = categories.keys.sort
 
-      student = []
-      advisor = []
-      gap = []
-
-      labels.each do |label|
-        rows = categories[label]
-        student_avg = average(rows.reject { |row| row[:advisor_entry] }.map { |row| row[:score] })
-        advisor_avg = average(rows.select { |row| row[:advisor_entry] }.map { |row| row[:score] })
-        student << student_avg
-        advisor << advisor_avg
-        gap << (student_avg && advisor_avg ? (advisor_avg - student_avg) : nil)
-      end
-
-      {
-        labels: labels,
-        student: student,
-        advisor: advisor,
-        gap: gap
-      }
-    end
 
     def build_competency_detail
       buckets = Hash.new do |hash, key|
@@ -654,6 +690,7 @@ module Reports
     def available_categories
       category_group_lookup
         .values
+        .select { |entry| REPORT_DOMAINS.include?(entry[:name]) }
         .map { |entry| { id: entry[:id], name: entry[:name], category_ids: entry[:ids] } }
         .sort_by { |entry| entry[:name].to_s.downcase }
     end
@@ -771,8 +808,15 @@ module Reports
       competency_slug(value).presence
     end
 
+    def normalized_competency_title(value)
+      text = value.to_s.strip
+      return text if text.blank?
+
+      text.sub(/\s+Reflection\z/i, "")
+    end
+
     def competency_slug(value)
-      value.to_s.parameterize(separator: "_")
+      normalized_competency_title(value).to_s.parameterize(separator: "_")
     end
 
     def export_filters
@@ -846,14 +890,14 @@ module Reports
       end.sort_by { |competency| competency[:name].to_s.downcase }
     end
 
-    def build_dataset_row(record)
+    def build_dataset_row(record, is_advisor_entry: false)
       value = parse_numeric(record.response_value)
       return nil unless value
 
       {
         id: record.student_question_id,
         score: value,
-        advisor_entry: record.advisor_id.present?,
+        advisor_entry: is_advisor_entry,
         updated_at: record.updated_at,
         category_id: record.category_id,
         category_name: record.category_name,

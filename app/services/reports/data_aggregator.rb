@@ -572,7 +572,7 @@ module Reports
           courses: course_breakdown
         }
       end.compact.select { |entry| REPORT_DOMAINS.include?(entry[:name]) }.sort_by { |entry| -(entry[:student_average] || 0.0) }
-      
+
       Rails.logger.debug "Generated competency summary: #{summary.inspect}"
       summary
     end

@@ -42,4 +42,3 @@ class SurveyAssignmentNotifierTest < ActiveJob::TestCase
     assert_equal "Hello", notification.title
   end
 end
-

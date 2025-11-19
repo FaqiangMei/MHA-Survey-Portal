@@ -5,6 +5,6 @@ class ApplicationControllerTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
   end
-  
-  # ApplicationController is the base controller - main tests are in specific controller tests
+
+     # ApplicationController is the base controller - main tests are in specific controller tests
 end

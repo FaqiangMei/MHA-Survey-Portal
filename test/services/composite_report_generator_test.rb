@@ -28,18 +28,22 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     had = Object.const_defined?(:WickedPdf)
     old = WickedPdf if had
     $wicked_calls = 0
-    fake = Class.new do
-      def pdf_from_string(_html)
-        $wicked_calls += 1
-        "PDFDATA-#{$wicked_calls}"
-      end
+    fake_instance = Object.new
+    def fake_instance.pdf_from_string(_html, _options = {})
+      $wicked_calls += 1
+      "PDFDATA-#{$wicked_calls}"
     end
-    Object.const_set(:WickedPdf, fake)
+    fake_class = Class.new do
+      define_singleton_method(:new) { fake_instance }
+    end
+    Object.send(:remove_const, :WickedPdf) if had
+    Object.const_set(:WickedPdf, fake_class)
 
-    ApplicationController.stub :render, "<html>ok</html>" do
-      sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
-      gen = CompositeReportGenerator.new(survey_response: sr)
+    sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
+    gen = CompositeReportGenerator.new(survey_response: sr)
 
+    # Stub the render_html method instead of ApplicationController.render
+    gen.stub :render_html, "<html>ok</html>" do
       first = gen.render
       assert_equal "PDFDATA-1", first
 
@@ -49,7 +53,7 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
       assert_equal 1, $wicked_calls
     end
   ensure
-    Object.send(:remove_const, :WickedPdf) if !had && Object.const_defined?(:WickedPdf)
+    Object.send(:remove_const, :WickedPdf) if Object.const_defined?(:WickedPdf)
     Object.const_set(:WickedPdf, old) if had
   end
 
@@ -57,17 +61,21 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     had = Object.const_defined?(:WickedPdf)
     old = WickedPdf if had
 
-    fake = Class.new do
-      def pdf_from_string(_)
-        raise StandardError, "boom"
-      end
+    fake_instance = Object.new
+    def fake_instance.pdf_from_string(_, _options = {})
+      raise StandardError, "boom"
     end
-    Object.const_set(:WickedPdf, fake)
+    fake_class = Class.new do
+      define_singleton_method(:new) { fake_instance }
+    end
+    Object.send(:remove_const, :WickedPdf) if had
+    Object.const_set(:WickedPdf, fake_class)
 
-    ApplicationController.stub :render, "<html>bad</html>" do
-      sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
-      gen = CompositeReportGenerator.new(survey_response: sr)
+    sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
+    gen = CompositeReportGenerator.new(survey_response: sr)
 
+    # Stub the render_html method
+    gen.stub :render_html, "<html>bad</html>" do
       logged = nil
       Rails.logger.stub :error, ->(msg) { logged = msg } do
         err = assert_raises(CompositeReportGenerator::GenerationError) { gen.render }
@@ -76,7 +84,7 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
       end
     end
   ensure
-    Object.send(:remove_const, :WickedPdf) if !had && Object.const_defined?(:WickedPdf)
+    Object.send(:remove_const, :WickedPdf) if Object.const_defined?(:WickedPdf)
     Object.const_set(:WickedPdf, old) if had
   end
 
@@ -118,16 +126,19 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
   test "feedback_scope returns all feedback when advisor is nil" do
     sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
     gen = CompositeReportGenerator.new(survey_response: sr)
-    
+
     # stub advisor method to return nil to exercise the else branch at line 142
     gen.stub :advisor, nil do
       scope = gen.send(:feedback_scope)
       assert_not_nil scope
-      # when advisor is nil, feedback_scope should return base scope without advisor filter
+         # when advisor is nil, feedback_scope should return base scope without advisor filter
     end
   end
 
   test "feedback_summary returns nil average_score when no scored entries" do
+    # Delete any existing feedback for this student/survey to ensure clean state
+    Feedback.where(student: students(:student), survey: surveys(:fall_2025)).destroy_all
+
     # create feedback without average_score
     Feedback.create!(student: students(:student), advisor: advisors(:advisor), category: categories(:clinical_skills), survey: surveys(:fall_2025), average_score: nil, comments: "no score")
     sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
@@ -140,18 +151,21 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
   end
 
   test "feedbacks_by_category sorts entries by timestamp" do
+    # Delete any existing feedback for this student/survey/category to ensure clean state
+    Feedback.where(student: students(:student), survey: surveys(:fall_2025), category: categories(:clinical_skills)).destroy_all
+
     # create multiple feedbacks for the same category at different times
     travel_to Time.zone.parse("2025-01-01 12:00:00") do
       Feedback.create!(student: students(:student), advisor: advisors(:advisor), category: categories(:clinical_skills), survey: surveys(:fall_2025), average_score: 3.0, comments: "older")
     end
-    
+
     travel_to Time.zone.parse("2025-01-02 12:00:00") do
       Feedback.create!(student: students(:student), advisor: advisors(:advisor), category: categories(:clinical_skills), survey: surveys(:fall_2025), average_score: 4.0, comments: "newer")
     end
-    
+
     sr = SurveyResponse.build(student: students(:student), survey: surveys(:fall_2025))
     gen = CompositeReportGenerator.new(survey_response: sr)
-    
+
     by_cat = gen.send(:feedbacks_by_category)
     assert by_cat.key?(categories(:clinical_skills).id)
     feedbacks = by_cat[categories(:clinical_skills).id]

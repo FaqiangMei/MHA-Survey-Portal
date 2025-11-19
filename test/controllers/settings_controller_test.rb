@@ -15,7 +15,7 @@ class SettingsControllerTest < ActionController::TestCase
 
   test "update success redirects back or to root with notice" do
     # Ensure referer fallback path branch is exercised
-    @request.env['HTTP_REFERER'] = nil
+    @request.env["HTTP_REFERER"] = nil
 
     patch :update, params: { user: { language: "en", notifications_enabled: true, text_scale_percent: 100 } }
 

@@ -99,7 +99,10 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
   test "index shows current semester badge" do
     sign_in @student_user
 
-    ProgramSemester.current.update!(name: "Winter 2099")
+    current_semester = ProgramSemester.find_or_create_by!(current: true) do |s|
+      s.name = "Winter 2099"
+    end
+    current_semester.update!(name: "Winter 2099")
 
     get surveys_path
 

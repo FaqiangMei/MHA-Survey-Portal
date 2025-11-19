@@ -28,14 +28,19 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     had = Object.const_defined?(:WickedPdf)
     old = WickedPdf if had
     $wicked_calls = 0
+
     fake_instance = Object.new
     def fake_instance.pdf_from_string(_html, _options = {})
       $wicked_calls += 1
-      "PDFDATA-#{$wicked_calls}"
+      # Return a string that looks like PDF data
+      "%PDF-1.4\nPDFDATA-#{$wicked_calls}"
     end
+
     fake_class = Class.new do
+      define_method(:initialize) { |*args| }
       define_singleton_method(:new) { fake_instance }
     end
+
     Object.send(:remove_const, :WickedPdf) if had
     Object.const_set(:WickedPdf, fake_class)
 
@@ -45,7 +50,7 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     # Stub the render_html method instead of ApplicationController.render
     gen.stub :render_html, "<html>ok</html>" do
       first = gen.render
-      assert_equal "PDFDATA-1", first
+      assert_match /PDFDATA-1/, first
 
       # second render should come from cache and not increment WickedPdf calls
       second = gen.render
@@ -65,9 +70,12 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     def fake_instance.pdf_from_string(_, _options = {})
       raise StandardError, "boom"
     end
+
     fake_class = Class.new do
+      define_method(:initialize) { |*args| }
       define_singleton_method(:new) { fake_instance }
     end
+
     Object.send(:remove_const, :WickedPdf) if had
     Object.const_set(:WickedPdf, fake_class)
 

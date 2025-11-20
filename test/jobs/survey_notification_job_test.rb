@@ -388,7 +388,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
         metadata: {}
       )
     end
-    
+
     # Should have notified participants
     assert Notification.count >= 2
   end

@@ -24,10 +24,6 @@ module Api
       render json: aggregator.course_summary
     end
 
-    def alignment
-      render json: aggregator.alignment
-    end
-
     private
 
     def ensure_reports_access!

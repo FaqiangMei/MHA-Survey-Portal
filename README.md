@@ -151,7 +151,7 @@ The GitHub Wiki is the authoritative knowledge base:
 ## Credits & Acknowledgements
 
 - **Program sponsor** – Texas A&M School of Public Health (MHA leadership).
-- **Faculty mentors** – Pauline Wade & Tee Li.
+- **Faculty mentors** – Carla Stebbins, Ruoqi Wei, Hye Chung Kum.
 - **Engineering team** – CSCE 431 Fall 2025 Health cohort (see git history for contributors).
 - **AI contributions** – GitHub Copilot Chat powered by **GPT-5.1-Codex (Preview)** assisted with refactors, documentation wording, and linting suggestions; humans reviewed all commits before merge.
 

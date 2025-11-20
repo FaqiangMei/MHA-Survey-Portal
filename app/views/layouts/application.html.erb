@@ -47,6 +47,10 @@
         <% when "admin" %>
           <%= render "shared/admin_navbar", active_page: @active_nav %>
         <% end %>
+      <% elsif content_for?(:header) %>
+        <header class="w-full">
+          <%= yield :header %>
+        </header>
       <% end %>
 
       <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">

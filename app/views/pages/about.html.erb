@@ -1,6 +1,8 @@
 <% content_for :title, "About the Portal" %>
 
-<%= render "shared/login_navbar" %>
+<% content_for :header do %>
+  <%= render "shared/login_navbar" %>
+<% end %>
 
 <main class="about-page px-4 py-16">
   <div class="about-container mx-auto max-w-6xl space-y-16">

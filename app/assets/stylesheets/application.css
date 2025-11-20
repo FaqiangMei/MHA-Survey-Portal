@@ -3321,6 +3321,38 @@ body.high-contrast .role-badge {
   border: 2px solid #ffffff !important;
 }
 
+/* =========================================================
+   Survey "Open" button and all button-like links
+   ========================================================= */
+
+/* Open button and all survey/feedback links - white text on black */
+body.high-contrast .survey-list-card .btn,
+body.high-contrast .survey-list-card .btn-primary,
+body.high-contrast .survey-list-card .btn-secondary,
+body.high-contrast .survey-list-card button,
+body.high-contrast .survey-list-card a,
+body.high-contrast a[class*="button"],
+body.high-contrast a[class*="btn"] {
+  background-color: #000000 !important;  /* black background */
+  color: #ffffff !important;             /* white text */
+  border: 2px solid #ffffff !important;  /* white border */
+  text-decoration: none !important;
+}
+
+/* Hover state: yellow background with black text */
+body.high-contrast .survey-list-card .btn:hover,
+body.high-contrast .survey-list-card .btn-primary:hover,
+body.high-contrast .survey-list-card .btn-secondary:hover,
+body.high-contrast .survey-list-card button:hover,
+body.high-contrast .survey-list-card a:hover,
+body.high-contrast a[class*="button"]:hover,
+body.high-contrast a[class*="btn"]:hover {
+  background-color: #ffff00 !important;  /* yellow background */
+  color: #000000 !important;             /* black text */
+  border: 2px solid #000000 !important;  /* black border */
+  text-decoration: none !important;
+}
+
 /* --------------------------------------------------------
    Account settings page overrides
    -------------------------------------------------------- */

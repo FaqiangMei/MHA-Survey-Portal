@@ -11,18 +11,7 @@
       </div>
 
       <nav class="nav-links" aria-label="Primary">
-        <!-- Clicking these will submit a POST to the Google OAuth path with role=student/advisor -->
-        <a href="#"
-           class="nav-link"
-           data-login-role="student">
-          Students
-        </a>
-
-        <a href="#"
-           class="nav-link"
-           data-login-role="advisor">
-          Advisors
-        </a>
+        <%= link_to "Home", root_path, class: "nav-link" %>
 
         <!-- About page (documentation landing) -->
         <%= link_to "About the Portal", about_path, class: "nav-link" %>

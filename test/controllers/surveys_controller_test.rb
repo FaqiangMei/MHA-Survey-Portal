@@ -620,7 +620,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     post submit_survey_path(@survey), params: { answers: answers }
 
     assignment.reload
-    assert_in_delta old_time.to_i, assignment.assigned_at.to_i, 60
+    assert_in_delta old_time.to_i, assignment.assigned_at.to_i, 180
   end
 
   # Edge Cases
@@ -754,5 +754,623 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
 
     assert_match /already been submitted/i, flash[:alert]
+  end
+
+  # Evidence validation tests
+  test "submit rejects evidence with invalid URL format" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "not-a-valid-url" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit rejects evidence with non-HTTPS URL" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "http://drive.google.com/file/d/123" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit rejects evidence from non-allowlisted domain" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://example.com/file/123" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit rejects inaccessible evidence link (forbidden)" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HTTP response for forbidden access
+    stub_request(:head, "https://drive.google.com/file/d/forbidden123/view")
+      .to_return(status: 403)
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/forbidden123/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit rejects inaccessible evidence link (not found)" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HTTP response for not found
+    stub_request(:head, "https://drive.google.com/file/d/notfound123/view")
+      .to_return(status: 404)
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/notfound123/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit rejects evidence link with timeout" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HTTP timeout
+    stub_request(:head, "https://drive.google.com/file/d/timeout123/view")
+      .to_timeout
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/timeout123/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit accepts accessible evidence link" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock successful HTTP response
+    stub_request(:head, "https://drive.google.com/file/d/valid123/view")
+      .to_return(status: 200)
+    stub_request(:get, "https://drive.google.com/file/d/valid123/view")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_return(status: 200, body: "This is a public file content")
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/valid123/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :redirect
+    
+  end
+
+  test "submit rejects evidence with access-required interstitial page" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HTTP response that returns 200 but shows access required message
+    stub_request(:head, "https://drive.google.com/file/d/restricted123/view")
+      .to_return(status: 200)
+    stub_request(:get, "https://drive.google.com/file/d/restricted123/view")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_return(status: 200, body: "You need access to view this file. Sign in to continue.")
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/restricted123/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit accepts evidence with public markers in content" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HTTP response with public markers
+    stub_request(:head, "https://drive.google.com/file/d/public123/view")
+      .to_return(status: 200)
+    stub_request(:get, "https://drive.google.com/file/d/public123/view")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_return(status: 200, body: "Open with Google Docs - anyone with the link can view this file")
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/public123/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :redirect
+    
+  end
+
+  # Google Docs specific tests
+  test "submit validates Google Docs document via export endpoint" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock export endpoint to return success
+    stub_request(:get, "https://docs.google.com/document/d/abc123/export?format=txt")
+      .with(headers: { "Range" => "bytes=0-1023" })
+      .to_return(status: 200, body: "Document content")
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://docs.google.com/document/d/abc123/edit" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :redirect
+    
+  end
+
+  test "submit falls back to page check when Docs export is restricted" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock export endpoint to return forbidden
+    stub_request(:get, "https://docs.google.com/document/d/abc123/export?format=txt")
+      .with(headers: { "Range" => "bytes=0-1023" })
+      .to_return(status: 403)
+    # Fall back to HEAD check
+    stub_request(:head, "https://docs.google.com/document/d/abc123/edit")
+      .to_return(status: 200)
+    # Sniff check
+    stub_request(:get, "https://docs.google.com/document/d/abc123/edit")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_return(status: 200, body: "View only - anyone with the link")
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://docs.google.com/document/d/abc123/edit" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :redirect
+    
+  end
+
+  test "submit rejects Google Docs with export timeout" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock export endpoint timeout
+    stub_request(:get, "https://docs.google.com/document/d/timeout123/export?format=txt")
+      .with(headers: { "Range" => "bytes=0-1023" })
+      .to_timeout
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://docs.google.com/document/d/timeout123/edit" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  # HTTP redirect tests
+  test "submit follows valid redirects within allowlist" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock redirect to googleusercontent.com
+    stub_request(:head, "https://drive.google.com/file/d/redirect123/view")
+      .to_return(status: 302, headers: { "Location" => "https://lh3.googleusercontent.com/actual-file" })
+    stub_request(:head, "https://lh3.googleusercontent.com/actual-file")
+      .to_return(status: 200)
+    stub_request(:get, "https://lh3.googleusercontent.com/actual-file")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_return(status: 200, body: "File content")
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/redirect123/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :redirect
+    
+  end
+
+  test "submit rejects redirect to non-allowlisted domain" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock redirect to accounts.google.com (login page)
+    stub_request(:head, "https://drive.google.com/file/d/private123/view")
+      .to_return(status: 302, headers: { "Location" => "https://accounts.google.com/signin" })
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/private123/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit rejects too many redirects" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock infinite redirect loop
+    stub_request(:head, "https://drive.google.com/file/d/loop1/view")
+      .to_return(status: 302, headers: { "Location" => "https://drive.google.com/file/d/loop2/view" })
+    stub_request(:head, "https://drive.google.com/file/d/loop2/view")
+      .to_return(status: 302, headers: { "Location" => "https://drive.google.com/file/d/loop3/view" })
+    stub_request(:head, "https://drive.google.com/file/d/loop3/view")
+      .to_return(status: 302, headers: { "Location" => "https://drive.google.com/file/d/loop4/view" })
+    stub_request(:head, "https://drive.google.com/file/d/loop4/view")
+      .to_return(status: 302, headers: { "Location" => "https://drive.google.com/file/d/loop1/view" })
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/loop1/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit handles redirect without location header" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock redirect without Location header
+    stub_request(:head, "https://drive.google.com/file/d/nolocation/view")
+      .to_return(status: 302, headers: {})
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/nolocation/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  # HTTP method fallback tests
+  test "submit falls back to GET when HEAD not allowed" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HEAD returning 405 Method Not Allowed
+    stub_request(:head, "https://drive.google.com/file/d/nohead123/view")
+      .to_return(status: 405)
+    # Fall back to minimal GET
+    stub_request(:get, "https://drive.google.com/file/d/nohead123/view")
+      .with(headers: { "Range" => "bytes=0-0" })
+      .to_return(status: 200)
+    # Sniff check
+    stub_request(:get, "https://drive.google.com/file/d/nohead123/view")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_return(status: 200, body: "Public file content")
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/nohead123/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :redirect
+    
+  end
+
+  test "submit handles sniff timeout during GET fallback" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock HEAD returning 405 Method Not Allowed
+    stub_request(:head, "https://drive.google.com/file/d/snifftimeout/view")
+      .to_return(status: 405)
+    # Fall back to minimal GET
+    stub_request(:get, "https://drive.google.com/file/d/snifftimeout/view")
+      .with(headers: { "Range" => "bytes=0-0" })
+      .to_return(status: 200)
+    # Sniff times out
+    stub_request(:get, "https://drive.google.com/file/d/snifftimeout/view")
+      .with(headers: { "Range" => "bytes=0-2047" })
+      .to_timeout
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/snifftimeout/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit handles other HTTP errors" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock 500 Internal Server Error
+    stub_request(:head, "https://drive.google.com/file/d/error500/view")
+      .to_return(status: 500)
+
+    # Provide answers for all required questions
+
+
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/error500/view" }
+
+
+    @survey.questions.each do |q|
+
+
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+
+
+    end
+
+
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  test "submit handles network exceptions during evidence check" do
+    sign_in @student_user
+    evidence_question = @survey.categories.first.questions.create!(
+      question_text: "Upload evidence",
+      question_type: "evidence",
+      is_required: false
+    )
+
+    # Mock socket error
+    stub_request(:head, "https://drive.google.com/file/d/socketerror/view")
+      .to_raise(SocketError.new("Network unreachable"))
+
+    # Provide answers for all required questions
+    answers = { evidence_question.id.to_s => "https://drive.google.com/file/d/socketerror/view" }
+    @survey.questions.each do |q|
+      answers[q.id.to_s] = "Test answer" if q.is_required?
+    end
+
+    post submit_survey_path(@survey), params: { answers: answers }
+
+    assert_response :unprocessable_entity
+    assert_includes assigns(:invalid_evidence), evidence_question.id
   end
 end

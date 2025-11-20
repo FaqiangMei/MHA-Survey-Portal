@@ -39,6 +39,10 @@ require "rails/test_help"
 require "minitest/mock"
 require "factory_bot_rails"
 
+# Load WebMock for HTTP stubbing in tests
+require "webmock/minitest"
+WebMock.disable_net_connect!(allow_localhost: true)
+
 class ActiveSupport::TestCase
   include FactoryBot::Syntax::Methods
   parallelize(workers: 1)

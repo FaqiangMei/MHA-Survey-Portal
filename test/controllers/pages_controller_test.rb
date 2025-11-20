@@ -241,14 +241,14 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     get about_path
 
     assert_response :success
-    # Page should work without any session data
+       # Page should work without any session data
   end
 
   test "faq page does not require session" do
     get faq_path
 
     assert_response :success
-    # Page should work without any session data
+       # Page should work without any session data
   end
 
   # Edge case tests
@@ -335,14 +335,14 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     get about_path
 
     assert_response :success
-    # If template is missing, would get 500 or error
+       # If template is missing, would get 500 or error
   end
 
   test "faq action renders without error" do
     get faq_path
 
     assert_response :success
-    # If template is missing, would get 500 or error
+       # If template is missing, would get 500 or error
   end
 
   # Public access verification

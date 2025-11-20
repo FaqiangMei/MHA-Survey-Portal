@@ -409,7 +409,11 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     @admin.reload
     # Language change should not be persisted due to validation failure
-    assert_equal original_language, @admin.language
+    if original_language.nil?
+      assert_nil @admin.language
+    else
+      assert_equal original_language, @admin.language
+    end
   end
 
   # Current User Tests

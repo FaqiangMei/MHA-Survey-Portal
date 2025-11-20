@@ -381,7 +381,7 @@ class QuestionsControllerTest < ActionDispatch::IntegrationTest
 
   test "update changes question_type" do
     sign_in @admin
-    
+
     patch question_path(@question), params: {
       question: {
         question_type: "multiple_choice"

@@ -243,11 +243,11 @@ class EvidenceControllerTest < ActionDispatch::IntegrationTest
     [ @student, @advisor, @admin ].each do |user|
       sign_in user
       get evidence_check_access_path(url: @valid_drive_url), as: :json
-      
+
       assert_response :success
       json_response = JSON.parse(@response.body)
       assert json_response.key?("ok")
-      
+
       sign_out user
     end
   end
@@ -263,7 +263,7 @@ class EvidenceControllerTest < ActionDispatch::IntegrationTest
 
     invalid_urls.each do |url|
       get evidence_check_access_path(url: url), as: :json
-      
+
       json_response = JSON.parse(@response.body)
       assert_equal false, json_response["ok"]
       assert_equal "invalid_url", json_response["reason"]
@@ -282,7 +282,7 @@ class EvidenceControllerTest < ActionDispatch::IntegrationTest
 
     valid_urls.each do |url|
       get evidence_check_access_path(url: url), as: :json
-      
+
       json_response = JSON.parse(@response.body)
       refute_equal "invalid_url", json_response["reason"]
     end
@@ -355,7 +355,7 @@ class EvidenceControllerTest < ActionDispatch::IntegrationTest
     assert_kind_of String, json_response["reason"]
   end
 
-  # Status code verification  
+  # Status code verification
   test "check_access returns nil status for invalid url" do
     sign_in @student
 
@@ -380,7 +380,7 @@ class EvidenceControllerTest < ActionDispatch::IntegrationTest
   # Path variations
   test "check_access accepts various Google Drive path formats" do
     sign_in @student
-    
+
     paths = [
       "/file/d/123/view",
       "/drive/folders/abc",
@@ -393,7 +393,7 @@ class EvidenceControllerTest < ActionDispatch::IntegrationTest
     paths.each do |path|
       url = "https://drive.google.com#{path}"
       get evidence_check_access_path(url: url), as: :json
-      
+
       json_response = JSON.parse(@response.body)
       refute_equal "invalid_url", json_response["reason"]
     end

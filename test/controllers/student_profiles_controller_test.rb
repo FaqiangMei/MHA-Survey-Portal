@@ -533,7 +533,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
   test "update accepts valid track values" do
     sign_in @student_user
     original_track = @student.track
-    valid_tracks = ["Residential", "Executive"]
+    valid_tracks = [ "Residential", "Executive" ]
 
     valid_tracks.each do |track|
       patch student_profile_path, params: {

@@ -42,7 +42,7 @@ class OmniauthCallbacksControllerTest < ActionDispatch::IntegrationTest
     get user_google_oauth2_omniauth_callback_path, params: { role: "student" }
 
     assert_redirected_to student_dashboard_path
-    
+
     # Clean up
     User.find_by(email: email)&.destroy
   end
@@ -55,7 +55,7 @@ class OmniauthCallbacksControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to student_dashboard_path
     # The sessions controller ensure_track_survey_assignment is called via after_sign_in_path_for
-    
+
     # Clean up
     User.find_by(email: email)&.destroy
   end

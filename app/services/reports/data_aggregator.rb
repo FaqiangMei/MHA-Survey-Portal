@@ -30,6 +30,12 @@ module Reports
     "Data Analysis and Information Management",
     "Quantitative Methods for Health Services Delivery"
   ].freeze
+  REPORT_DOMAINS = [
+    "Health Care Environment and Community",
+    "Leadership Skills",
+    "Management Skills",
+    "Analytic and Technical Skills"
+  ].freeze
     RECENT_WINDOW = 90.days
     DATASET_SELECT = [
       "student_questions.id",
@@ -37,6 +43,23 @@ module Reports
       "student_questions.response_value",
       "student_questions.advisor_id",
       "student_questions.updated_at",
+      "categories.id AS category_id",
+      "categories.name AS category_name",
+      "questions.question_text AS question_text",
+      "surveys.id AS survey_id",
+      "surveys.title AS survey_title",
+      "surveys.semester AS survey_semester",
+      "students.track AS student_track",
+      "students.student_id AS student_primary_id",
+      "students.advisor_id AS owning_advisor_id"
+    ].freeze
+
+    FEEDBACK_SELECT = [
+      "feedback.id",
+      "feedback.id AS student_question_id",
+      "feedback.average_score AS response_value",
+      "feedback.advisor_id",
+      "feedback.updated_at",
       "categories.id AS category_id",
       "categories.name AS category_name",
       "questions.question_text AS question_text",
@@ -86,9 +109,9 @@ module Reports
       @course_summary ||= build_course_summary
     end
 
-    # Student vs advisor comparison dataset for the bar chart.
-    def alignment
-      @alignment ||= build_alignment_payload
+    # Track-level aggregate details used by exports.
+    def track_summary
+      @track_summary ||= build_track_summary
     end
 
     # Cards for quick overview tiles (alias for convenience).
@@ -105,7 +128,7 @@ module Reports
         competency_summary: competency_summary,
         competency_detail: competency_detail,
         course_summary: course_summary,
-        alignment: alignment
+        track_summary: track_summary
       }
     end
 
@@ -225,16 +248,81 @@ module Reports
       scope
     end
 
+    def feedback_scope
+      Feedback
+        .joins(:student)
+        .merge(accessible_student_relation)
+        .joins(:question)
+        .joins(question: { category: :survey })
+        .where.not(average_score: nil)
+    end
+
+    def filtered_feedback_scope
+      scope = feedback_scope
+      if filters[:track]
+        scope = scope.where(students: { track: filters[:track] })
+      end
+      if filters[:semester]
+        scope = scope.where("LOWER(surveys.semester) = ?", filters[:semester].downcase)
+      end
+      if filters[:survey_id]
+        scope = scope.where(surveys: { id: filters[:survey_id] })
+      end
+      category_ids = selected_category_ids
+      scope = scope.where(categories: { id: category_ids }) if category_ids.present?
+      if filters[:competency]
+        competency_name = competency_lookup[filters[:competency]]&.dig(:name)
+        if competency_name.present?
+          scope = scope.where("LOWER(questions.question_text) = ?", competency_name.downcase)
+        end
+      end
+      if filters[:student_id]
+        scope = scope.where(feedback: { student_id: filters[:student_id] })
+      end
+      if filters[:advisor_id]
+        scope = scope.where(feedback: { advisor_id: filters[:advisor_id] })
+      end
+      scope
+    end
+
     def dataset_rows
       @dataset_rows ||= begin
         rows = []
         filtered_scope.select(DATASET_SELECT).find_each(batch_size: 1_000) do |record|
-          next unless (row = build_dataset_row(record))
+          next unless (row = build_dataset_row(record, is_advisor_entry: false))
+
+          rows << row
+        end
+        filtered_feedback_scope.select(FEEDBACK_SELECT).find_each(batch_size: 1_000) do |record|
+          next unless (row = build_dataset_row(record, is_advisor_entry: true))
 
           rows << row
         end
         rows
       end
+    end
+
+    def student_response_groups
+      @student_response_groups ||= group_student_rows(dataset_rows.reject { |row| row[:advisor_entry] })
+    end
+
+    def student_survey_response_pairs
+      @student_survey_response_pairs ||= begin
+        filtered_scope
+          .distinct
+          .pluck("student_questions.student_id", "surveys.id")
+          .each_with_object({}) do |(student_id, survey_id), memo|
+            next unless student_id && survey_id
+
+            memo[[ student_id, survey_id ]] = true
+          end
+      end
+    end
+
+    def assignment_pair_key(student_id, survey_id)
+      return nil if student_id.blank? || survey_id.blank?
+
+      [ student_id, survey_id ]
     end
 
     def parse_numeric(value)
@@ -267,6 +355,10 @@ module Reports
     end
 
     def build_benchmark_payload
+      Rails.logger.debug "--- Starting build_benchmark_payload ---"
+      Rails.logger.debug "Filters applied: #{@raw_params.inspect}"
+      Rails.logger.debug "Dataset rows count: #{dataset_rows.size}"
+
       student_scores = dataset_rows.reject { |row| row[:advisor_entry] }.map { |row| row[:score] }
       advisor_scores = dataset_rows.select { |row| row[:advisor_entry] }.map { |row| row[:score] }
 
@@ -309,6 +401,9 @@ module Reports
         sample_size: completion_stats[:total_assignments]
       )
 
+      goal_metric = competency_goal_metric
+      Rails.logger.debug "Competency Goal Metric: #{goal_metric.inspect}"
+
       if (goal_metric = competency_goal_metric)
         cards << build_card(
           key: "competency_goal_attainment",
@@ -327,19 +422,10 @@ module Reports
         )
       end
 
-      if (top = competency_summary.first)
-        cards << build_card(
-          key: "top_competency",
-          title: "Leading Competency",
-          value: top[:student_average],
-          unit: "score",
-          precision: 1,
-          change: top[:change],
-          description: "Highest-rated competency across filtered data.",
-          sample_size: top[:student_sample],
-          meta: { name: top[:name], advisor_average: top[:advisor_average], gap: top[:gap] }
-        )
-      end
+      competency_summary_data = competency_summary
+      Rails.logger.debug "Competency Summary (for Leading Competency card): #{competency_summary_data.first.inspect}"
+
+      Rails.logger.debug "--- Finished build_benchmark_payload ---"
 
       {
         student_average: student_avg,
@@ -440,6 +526,7 @@ module Reports
     end
 
     def build_competency_summary
+      Rails.logger.debug "--- Building Competency Summary ---"
       grouped = Hash.new { |hash, key| hash[key] = { rows: [], category_ids: [] } }
 
       dataset_rows.each do |row|
@@ -450,7 +537,7 @@ module Reports
         entry[:name] ||= category_group_lookup[slug]&.dig(:name) || row[:category_name] || "Domain"
       end
 
-      grouped.map do |slug, data|
+      summary = grouped.map do |slug, data|
         rows = data[:rows]
         next if rows.blank?
 
@@ -484,7 +571,10 @@ module Reports
           total_students: attainment_counts[:total_students],
           courses: course_breakdown
         }
-      end.compact.sort_by { |entry| -(entry[:student_average] || 0.0) }
+      end.compact.select { |entry| REPORT_DOMAINS.include?(entry[:name]) }.sort_by { |entry| -(entry[:student_average] || 0.0) }
+
+      Rails.logger.debug "Generated competency summary: #{summary.inspect}"
+      summary
     end
 
     def percent_change_for_category(rows)
@@ -501,32 +591,10 @@ module Reports
       ((recent_avg - previous_avg) / previous_avg) * 100.0
     end
 
-    def build_alignment_payload
-      categories = dataset_rows.group_by { |row| row[:category_name] }
-      labels = categories.keys.sort
 
-      student = []
-      advisor = []
-      gap = []
-
-      labels.each do |label|
-        rows = categories[label]
-        student_avg = average(rows.reject { |row| row[:advisor_entry] }.map { |row| row[:score] })
-        advisor_avg = average(rows.select { |row| row[:advisor_entry] }.map { |row| row[:score] })
-        student << student_avg
-        advisor << advisor_avg
-        gap << (student_avg && advisor_avg ? (advisor_avg - student_avg) : nil)
-      end
-
-      {
-        labels: labels,
-        student: student,
-        advisor: advisor,
-        gap: gap
-      }
-    end
 
     def build_competency_detail
+      Rails.logger.debug "--- Building Competency Detail ---"
       buckets = Hash.new do |hash, key|
         hash[key] = {
           student_rows: [],
@@ -581,10 +649,12 @@ module Reports
         }
       end
 
-      {
+      detail = {
         domains: available_categories.map { |entry| { id: entry[:id], name: entry[:name] } },
         items: items
       }
+      Rails.logger.debug "Generated competency detail: #{detail.inspect}"
+      detail
     end
 
     def build_course_summary
@@ -625,26 +695,89 @@ module Reports
       end.compact.sort_by { |entry| -(entry[:student_average] || 0.0) }
     end
 
+    def build_track_summary
+      tracks = dataset_rows.group_by { |row| row[:track] }
+
+      tracks.map do |track_name, rows|
+        next if rows.blank?
+
+        student_rows = rows.reject { |row| row[:advisor_entry] }
+        advisor_rows = rows.select { |row| row[:advisor_entry] }
+
+        student_avg = average(student_rows.map { |row| row[:score] })
+        advisor_avg = average(advisor_rows.map { |row| row[:score] })
+
+        student_by_person = group_student_rows(student_rows)
+        attainment_counts = attainment_counts_for_group(student_by_person)
+        attainment_percentages = attainment_percentages(attainment_counts)
+
+        {
+          id: track_name.parameterize(separator: "_")
+            .presence || "track_#{track_name.object_id}",
+          track: track_name,
+          student_average: student_avg,
+          advisor_average: advisor_avg,
+          gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil,
+          submissions: student_by_person.size,
+          achieved_count: attainment_counts[:achieved_count],
+          not_met_count: attainment_counts[:not_met_count],
+          not_assessed_count: attainment_counts[:not_assessed_count],
+          achieved_percent: attainment_percentages[:achieved_percent],
+          not_met_percent: attainment_percentages[:not_met_percent],
+          not_assessed_percent: attainment_percentages[:not_assessed_percent],
+          total_students: attainment_counts[:total_students]
+        }
+      end.compact.sort_by { |entry| entry[:track].to_s }
+    end
+
     def completion_stats
       return @completion_stats if defined?(@completion_stats)
 
-      scope = scoped_assignment_scope
+      assignments = scoped_assignment_scope
+                    .select(:student_id, :survey_id, :completed_at)
+                    .distinct
+                    .to_a
 
-      total = scope.distinct.count("survey_assignments.id")
-      completed = scope.where.not(completed_at: nil).distinct.count("survey_assignments.id")
-      rate = total.zero? ? nil : (completed.to_f / total * 100.0)
+      assignment_pairs = assignments.each_with_object({}) do |assignment, memo|
+        key = assignment_pair_key(assignment.student_id, assignment.survey_id)
+        memo[key] = assignment if key
+      end
 
-      @completion_stats = {
+      response_pairs = student_survey_response_pairs
+      combined_keys = (assignment_pairs.keys + response_pairs.keys).uniq
+
+      if assignment_pairs.empty?
+        total = scoped_student_ids.size
+        completed = student_response_groups.keys.size
+      else
+        total = combined_keys.size
+        total = scoped_student_ids.size if total.zero?
+        completed = combined_keys.count do |key|
+          assignment = assignment_pairs[key]
+          assignment&.completed_at.present? || response_pairs[key]
+        end
+      end
+
+      rate = total.to_f.zero? ? nil : (completed.to_f / total.to_f * 100.0)
+
+      stats = {
         total_assignments: total,
         completed_assignments: completed,
         completion_rate: rate,
         trend: nil
       }
+      Rails.logger.debug "Completion Stats: #{stats.inspect}"
+      @completion_stats = stats
     end
 
     def available_tracks
       raw_tracks = accessible_student_relation.where.not(track: [ nil, "" ]).pluck(:track)
       sanitize_tracks(raw_tracks)
+    end
+
+    def normalized_track_name(value)
+      text = value.to_s.strip
+      text.presence || "Unspecified Track"
     end
 
     def available_semesters
@@ -654,6 +787,7 @@ module Reports
     def available_categories
       category_group_lookup
         .values
+        .select { |entry| REPORT_DOMAINS.include?(entry[:name]) }
         .map { |entry| { id: entry[:id], name: entry[:name], category_ids: entry[:ids] } }
         .sort_by { |entry| entry[:name].to_s.downcase }
     end
@@ -771,8 +905,15 @@ module Reports
       competency_slug(value).presence
     end
 
+    def normalized_competency_title(value)
+      text = value.to_s.strip
+      return text if text.blank?
+
+      text.sub(/\s+Reflection\z/i, "")
+    end
+
     def competency_slug(value)
-      value.to_s.parameterize(separator: "_")
+      normalized_competency_title(value).to_s.parameterize(separator: "_")
     end
 
     def export_filters
@@ -846,14 +987,14 @@ module Reports
       end.sort_by { |competency| competency[:name].to_s.downcase }
     end
 
-    def build_dataset_row(record)
+    def build_dataset_row(record, is_advisor_entry: false)
       value = parse_numeric(record.response_value)
       return nil unless value
 
       {
         id: record.student_question_id,
         score: value,
-        advisor_entry: record.advisor_id.present?,
+        advisor_entry: is_advisor_entry,
         updated_at: record.updated_at,
         category_id: record.category_id,
         category_name: record.category_name,
@@ -923,57 +1064,66 @@ module Reports
     end
 
     def competency_goal_metric
+      Rails.logger.debug "--- Calculating competency_goal_metric ---"
       student_ids = scoped_student_ids
+      Rails.logger.debug "Scoped student IDs for goal metric: #{student_ids.inspect}"
       return nil if student_ids.blank?
 
-      competency_ids = competency_ids_for_goal
-      total_competencies = competency_ids.size
+      averages = student_competency_averages
+      Rails.logger.debug "Student competency averages for goal: #{averages.inspect}"
+      competency_slugs = competency_ids_for_goal(averages)
+      Rails.logger.debug "Competency slugs for goal: #{competency_slugs.inspect}"
+      total_competencies = competency_slugs.size
       return nil if total_competencies.zero?
 
-      averages = student_competency_averages
       students_meeting_goal = student_ids.count do |student_id|
-        category_avgs = averages[student_id] || {}
-        achieved = competency_ids.count do |category_id|
-          avg = category_avgs[category_id]
+        competency_avgs = averages[student_id] || {}
+        achieved = competency_slugs.count do |slug|
+          avg = competency_avgs[slug]
           avg && avg >= TARGET_SCORE
         end
         ratio = achieved.to_f / total_competencies
+        Rails.logger.debug "Student #{student_id} achieved ratio: #{ratio}"
         ratio >= GOAL_THRESHOLD
       end
 
       percent = safe_percent(students_meeting_goal, student_ids.size)
 
-      {
+      result = {
         percent: percent,
         goal_percent: PROGRAM_GOAL_PERCENT,
         goal_threshold: GOAL_THRESHOLD,
         total_students: student_ids.size,
         students_meeting_goal: students_meeting_goal
       }
+      Rails.logger.debug "Final competency_goal_metric result: #{result.inspect}"
+      result
     end
 
     def student_competency_averages
       @student_competency_averages ||= begin
-        per_student = Hash.new { |hash, key| hash[key] = Hash.new { |inner, category| inner[category] = [] } }
+        per_student = Hash.new { |hash, key| hash[key] = Hash.new { |inner, slug| inner[slug] = [] } }
 
         dataset_rows.each do |row|
           next if row[:advisor_entry]
-          per_student[row[:student_id]][row[:category_id]] << row[:score]
+          slug = competency_slug(row[:question_text])
+          next unless slug && competency_lookup.key?(slug)
+
+          per_student[row[:student_id]][slug] << row[:score]
         end
 
-        per_student.transform_values do |categories|
-          categories.transform_values { |scores| average(scores) }
+        per_student.transform_values do |competencies|
+          competencies.transform_values { |scores| average(scores) }
         end
       end
     end
 
-    def competency_ids_for_goal
-      if filters[:category_id]
-        ids = selected_category_ids
-        return ids if ids.present?
-      end
+    def competency_ids_for_goal(averages = nil)
+      return [ filters[:competency] ] if filters[:competency]
 
-      @competency_ids_for_goal ||= Category.order(:id).pluck(:id)
+      averages ||= student_competency_averages
+      present_slugs = averages.values.flat_map(&:keys).uniq.compact
+      present_slugs.presence || competency_lookup.keys
     end
 
     def scoped_assignment_scope

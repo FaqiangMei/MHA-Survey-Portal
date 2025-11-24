@@ -125,7 +125,19 @@
 
           </article>
         <% end %>
+
+        <%# After Employment Information category, insert MHA Competency Self-Assessment description for students %>
+        <% if category.name.to_s.strip.downcase == 'employment information' %>
+          <section class="mb-6 p-4 bg-slate-50 rounded border">
+            <h4 class="text-lg font-semibold">MHA Competency Self-Assessment</h4>
+            <p class="mt-2 text-sm text-slate-700"><em>Instructions:</em> Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale.</p>
+          </section>
+        <% end %>
+
       </section>
+
+
+
     <% end %>
 
     <div class="flex items-center justify-between gap-3">

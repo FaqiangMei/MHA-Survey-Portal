@@ -4,12 +4,7 @@
 <article class="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
          data-section-entry
          data-section-form-uid="<%= form_uid %>"
-         data-section-new-record="<%= section.persisted? ? 'false' : 'true' %>"
-         data-survey-structure-target="panel"
-         data-panel-type="section"
-         data-panel-key="section-<%= form_uid %>"
-         data-section-uid="<%= form_uid %>"
-         data-panel-label="<%= section.title.presence || 'Untitled section' %>">
+         data-section-new-record="<%= section.persisted? ? 'false' : 'true' %>">
   <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
     <div class="flex-1 space-y-2">
       <%= section_fields.hidden_field :id %>
@@ -18,9 +13,8 @@
 
       <%= section_fields.label :title, "Section title", class: "block text-sm font-medium text-slate-700" %>
       <%= section_fields.text_field :title,
-                class: input_classes,
-                placeholder: "Student Experience",
-                data: { action: "input->survey-structure#syncPanelLabel" } %>
+            class: input_classes,
+            placeholder: "Student Experience" %>
     </div>
 
     <button type="button"

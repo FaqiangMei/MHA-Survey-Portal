@@ -343,7 +343,7 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_difference ["Survey.count", "SurveySection.count"], 1 do
+    assert_difference [ "Survey.count", "SurveySection.count" ], 1 do
       post admin_surveys_path, params: params
     end
 
@@ -688,6 +688,25 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to admin_surveys_path
     @survey.reload
     refute @survey.is_active?
+  end
+
+  test "archive removes incomplete assignments but keeps completed records" do
+    incomplete_assignment = survey_assignments(:residential_assignment)
+    completed_assignment = survey_assignments(:completed_residential_assignment)
+    question = questions(:fall_q1)
+
+    assert_nil incomplete_assignment.completed_at
+    assert_not_nil completed_assignment.completed_at
+    assert StudentQuestion.exists?(student_id: incomplete_assignment.student_id, question_id: question.id)
+    assert StudentQuestion.exists?(student_id: completed_assignment.student_id, question_id: question.id)
+
+    patch archive_admin_survey_path(@survey)
+
+    assert_redirected_to admin_surveys_path
+    refute SurveyAssignment.exists?(incomplete_assignment.id)
+    refute StudentQuestion.exists?(student_id: incomplete_assignment.student_id, question_id: question.id)
+    assert SurveyAssignment.exists?(completed_assignment.id)
+    assert StudentQuestion.exists?(student_id: completed_assignment.student_id, question_id: question.id)
   end
 
   # === Activate Action ===

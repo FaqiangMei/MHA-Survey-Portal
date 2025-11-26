@@ -38,10 +38,12 @@ mha_competency_tooltip: &mha_competency_tooltip |
   - Advisor only option for cases where a rating cannot be provided.
 
 surveys:
-  - title: "Executive Survey"
+  - &executive_survey_base
+    title: "Executive Survey"
     semester: "Fall 2025"
     description: "Executive cohort semester activity and competency tracking."
     is_active: true
+    seed_auto_assign_students: true
     tracks:
       - "Executive"
     categories:
@@ -323,10 +325,12 @@ surveys:
             type: "evidence"
             required: true
 
-  - title: "Residential Survey"
+  - &residential_survey_base
+    title: "Residential Survey"
     semester: "Fall 2025"
     description: "Residential cohort competency and experience tracking."
     is_active: true
+    seed_auto_assign_students: true
     tracks:
       - "Residential"
     categories:
@@ -606,3 +610,10 @@ surveys:
             text: "Please provide a Google Drive or Google Sites link as evidence for this section."
             type: "evidence"
             required: true
+  - <<: *executive_survey_base
+    semester: "Spring 2025"
+    seed_auto_assign_students: false
+
+  - <<: *residential_survey_base
+    semester: "Spring 2025"
+    seed_auto_assign_students: false

@@ -157,14 +157,35 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [void]
   def archive
-    if @survey.update(is_active: false)
-      @survey.assign_tracks!([])
-      @survey.log_change!(admin: current_user, action: "archive", description: "Survey archived and unassigned from all tracks")
-      SurveyNotificationJob.perform_later(event: :survey_archived, survey_id: @survey.id)
-      redirect_to admin_surveys_path, notice: "Survey archived."
-    else
-      redirect_to edit_admin_survey_path(@survey), alert: @survey.errors.full_messages.to_sentence
+    removed_assignments = 0
+
+    begin
+      Survey.transaction do
+        @survey.lock!
+        removed_assignments = purge_incomplete_assignments!(@survey)
+        @survey.update!(is_active: false)
+        @survey.assign_tracks!([])
+      end
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+      redirect_to edit_admin_survey_path(@survey), alert: e.message and return
     end
+
+    summary = "Survey archived and unassigned from all tracks"
+    if removed_assignments.positive?
+      assignment_label = removed_assignments == 1 ? "assignment" : "assignments"
+      summary += "; removed #{removed_assignments} pending #{assignment_label}"
+    end
+
+    @survey.log_change!(admin: current_user, action: "archive", description: summary)
+    SurveyNotificationJob.perform_later(event: :survey_archived, survey_id: @survey.id)
+
+    notice = "Survey archived."
+    if removed_assignments.positive?
+      assignment_label = removed_assignments == 1 ? "assignment" : "assignments"
+      notice = "#{notice} Removed #{removed_assignments} pending #{assignment_label}."
+    end
+
+    redirect_to admin_surveys_path, notice: notice
   end
 
   # Reactivates a previously archived survey and records the action.
@@ -215,6 +236,22 @@ class Admin::SurveysController < Admin::BaseController
   # @return [void]
   def set_survey
     @survey = Survey.includes(:sections, categories: :section).find(params[:id])
+  end
+
+  def purge_incomplete_assignments!(survey)
+    assignments = survey.survey_assignments.incomplete
+    return 0 unless assignments.exists?
+
+    question_ids = survey.questions.select(:id)
+    removed = 0
+
+    assignments.find_each do |assignment|
+      StudentQuestion.where(student_id: assignment.student_id, question_id: question_ids).delete_all
+      assignment.destroy!
+      removed += 1
+    end
+
+    removed
   end
 
   # Strong parameters for survey creation/update, including nested category and
@@ -426,7 +463,7 @@ class Admin::SurveysController < Admin::BaseController
       if section.persisted?
         category.section = section
       else
-        pending_category_section_links << [category, section]
+        pending_category_section_links << [ category, section ]
       end
     end
   end

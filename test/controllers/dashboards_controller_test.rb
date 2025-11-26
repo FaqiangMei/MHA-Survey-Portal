@@ -231,7 +231,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Welcome"
   end
 
-  test "student dashboard only shows surveys for student's track" do
+  test "student dashboard only shows surveys assigned to the student" do
     sign_in @student
 
     get student_dashboard_path

@@ -3,8 +3,25 @@ require "json"
 require "yaml"
 require "active_support/core_ext/numeric/time"
 require "set"
+require "active_record/tasks/database_tasks"
 
 puts "\n== Seeding Health sample data =="
+
+def ensure_schema_loaded!
+  connection = ActiveRecord::Base.connection
+
+  return if connection.data_source_exists?("users")
+
+  puts "• Database schema missing — running schema load before seeding"
+  ActiveRecord::Tasks::DatabaseTasks.load_schema_current
+  ActiveRecord::Base.connection_pool.disconnect!
+  ActiveRecord::Base.establish_connection
+rescue StandardError => e
+  warn "Unable to load schema automatically: #{e.message}"
+  raise
+end
+
+ensure_schema_loaded!
 
 previous_queue_adapter = ActiveJob::Base.queue_adapter
 seed_async_adapter = nil
@@ -36,9 +53,7 @@ end
 
 puts "• Creating administrative accounts"
 admin_accounts = [
-  { email: "health-admin1@tamu.edu", name: "Health Admin One" },
-  { email: "health-admin2@tamu.edu", name: "Health Admin Two" },
-  { email: "health-admin3@tamu.edu", name: "Health Admin Three" }
+  # { email: "health-admin1@tamu.edu", name: "Health Admin One" }
 ]
 
 admin_users = admin_accounts.map do |attrs|
@@ -93,6 +108,24 @@ end
 template_data = YAML.safe_load_file(survey_template_path, aliases: true)
 survey_templates = Array(template_data.fetch("surveys"))
 
+preferred_seed_current_semester = "Fall 2025"
+semester_names = survey_templates.map { |definition| definition["semester"].to_s.strip.presence }.compact.uniq
+if semester_names.blank?
+  semester_names = [Time.zone.now.strftime("%B %Y")]
+end
+
+existing_current_semester = ProgramSemester.current_name.to_s.strip.presence
+target_current_semester = existing_current_semester ||
+                          semester_names.find { |name| name.casecmp?(preferred_seed_current_semester) } ||
+                          semester_names.last
+
+target_current_semester ||= semester_names.first
+
+unless semester_names.include?(target_current_semester)
+  semester_names << target_current_semester
+  semester_names.uniq!
+end
+
 answer_options_for = lambda do |options|
   return nil if options.blank?
 
@@ -113,8 +146,23 @@ survey_templates.each do |definition|
     survey.description = definition["description"]
     survey.is_active = definition.fetch("is_active", true)
 
-    survey.categories.destroy_all if survey.persisted?
-    survey.categories.reset
+    if survey.persisted?
+      stale_category_ids = survey.categories.ids
+      stale_question_ids = survey.questions.ids
+
+      if stale_category_ids.any?
+        survey.feedbacks.where(category_id: stale_category_ids).delete_all
+      end
+
+      if stale_question_ids.any?
+        survey.feedbacks.where(question_id: stale_question_ids).delete_all
+      end
+
+      survey.categories.destroy_all
+      survey.categories.reset
+    else
+      survey.categories.reset
+    end
 
     sections_supported = SurveySection.table_exists?
     if sections_supported
@@ -188,31 +236,35 @@ survey_templates.each do |definition|
       end
     end
 
+    seed_auto_assign_students = definition.fetch("seed_auto_assign_students", true)
     tracks = Array(definition.fetch("tracks", [])).map(&:to_s)
     survey.assign_tracks!(tracks)
 
     created_surveys << survey
-    tracks.each do |track|
-      normalized_track = track.to_s.strip.downcase
-      surveys_by_track[normalized_track] << survey
+
+    semester_matches_current = target_current_semester.present? && semester.to_s.casecmp?(target_current_semester)
+
+    if seed_auto_assign_students && semester_matches_current
+      tracks.each do |track|
+        normalized_track = track.to_s.strip.downcase
+        surveys_by_track[normalized_track] << survey
+      end
+    elsif seed_auto_assign_students
+      puts "     ↳ Skipping student auto-assignment during seeding (#{semester} is not the current semester #{target_current_semester})"
+    else
+      puts "     ↳ Skipping student auto-assignment during seeding"
     end
   end
 end
 
-semester_names = survey_templates.map { |definition| definition["semester"].to_s.strip.presence }.compact.uniq
-if semester_names.blank?
-  semester_names = [Time.zone.now.strftime("%B %Y")]
-end
-
 puts "• Syncing program semesters"
 ProgramSemester.transaction do
-  target_current = semester_names.last
   semester_names.each do |name|
     ProgramSemester.find_or_create_by!(name: name)
   end
 
-  ProgramSemester.where.not(name: target_current).update_all(current: false)
-  ProgramSemester.find_by(name: target_current)&.update!(current: true)
+  ProgramSemester.where.not(name: target_current_semester).update_all(current: false)
+  ProgramSemester.find_or_create_by!(name: target_current_semester).update!(current: true)
 end
 
 puts "• Assigning surveys to each student"

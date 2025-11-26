@@ -1,15 +1,12 @@
 <% category = category_fields.object %>
-<% panel_dom_id = category.instance_variable_get(:@panel_dom_id) %>
-<% panel_dom_id ||= "category-panel-#{category.object_id}" %>
-<% category.instance_variable_set(:@panel_dom_id, panel_dom_id) %>
-<% section_uid = category.respond_to?(:section_form_uid) ? category.section_form_uid.presence : nil %>
+<% section_options = local_assigns[:section_options] || [["No section", ""]] %>
+<% selected_section_key = category.section_form_uid.presence %>
+<% if selected_section_key.blank? && category.respond_to?(:survey_section_id) && category.survey_section_id.present? %>
+  <% selected_section_key = "section-#{category.survey_section_id}" %>
+  <% category.section_form_uid = selected_section_key if category.respond_to?(:section_form_uid=) %>
+<% end %>
 <article class="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-         data-category-fields-target="item"
-         data-survey-structure-target="panel"
-         data-panel-type="category"
-         data-panel-key="<%= panel_dom_id %>"
-         data-panel-label="<%= category.name.presence || 'Untitled category' %>"
-         data-section-uid="<%= section_uid %>">
+         data-category-fields-target="item">
   <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
     <div class="flex-1 space-y-2">
       <%= category_fields.hidden_field :id %>
@@ -17,16 +14,17 @@
       <%= category_fields.text_field :name,
                                      required: true,
                                      class: input_classes,
-                                     placeholder: "Leadership",
-                                     data: { action: "input->survey-structure#syncPanelLabel" } %>
-      <%= category_fields.hidden_field :section_form_uid,
-                                       value: section_uid,
-                                       data: { survey_structure_target: "assignmentField", panel_key: panel_dom_id } %>
-      <p class="text-xs text-slate-500"
-         data-survey-structure-target="assignmentLabel"
-         data-panel-key="<%= panel_dom_id %>">
-        <%= section_uid.present? ? "Linked to section" : "No section selected" %>
-      </p>
+                                     placeholder: "Leadership" %>
+
+      <div class="space-y-2">
+        <%= category_fields.label :section_form_uid, "Section assignment", class: "block text-sm font-medium text-slate-700" %>
+        <%= category_fields.select :section_form_uid,
+                                   options_for_select(section_options, selected_section_key),
+                                   { include_blank: false },
+                                   class: input_classes,
+                                   data: { category_fields_target: "sectionSelect" } %>
+        <p class="text-xs text-slate-500">Choose the section this category belongs to or select "No section".</p>
+      </div>
     </div>
 
     <% if category.persisted? %>

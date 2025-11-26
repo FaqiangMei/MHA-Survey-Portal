@@ -112,13 +112,13 @@ class SurveysController < ApplicationController
 
     raw_answers = params[:answers]
     answers = case raw_answers
-              when ActionController::Parameters
+    when ActionController::Parameters
                 raw_answers.to_unsafe_h
-              when Hash
+    when Hash
                 raw_answers
-              else
+    else
                 {}
-              end
+    end
     answers = answers.stringify_keys
     @first_error_question_id = nil
     @first_error_section_dom_id = nil
@@ -191,11 +191,11 @@ class SurveysController < ApplicationController
         first_error_section = first_error_category&.section
         @first_error_section_dom_id = if first_error_section.present?
                                         "survey-section-#{first_error_section.id}"
-                                      elsif first_error_category.present?
+        elsif first_error_category.present?
                                         "survey-category-#{first_error_category.id}"
-                                      end
+        end
       end
-      alert_parts = ["Unable to submit your responses."]
+      alert_parts = [ "Unable to submit your responses." ]
       alert_parts << "Please answer all required questions." if missing_required.any?
       if invalid_links.any?
         alert_parts << "Please fix the highlighted evidence links by setting sharing to 'Anyone with the link can view.'"

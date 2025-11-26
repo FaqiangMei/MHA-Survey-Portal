@@ -479,13 +479,12 @@ class DashboardsController < ApplicationController
   end
 
   def surveys_for_student(student)
-    track_value = student&.track.to_s
-    return Survey.none if track_value.blank?
+    return Survey.none unless student&.student_id
 
     Survey
       .includes(:questions)
-      .joins(:track_assignments)
-      .where("LOWER(survey_track_assignments.track) = ?", track_value.downcase)
+      .joins(:survey_assignments)
+      .where(survey_assignments: { student_id: student.student_id })
       .distinct
       .ordered
   end

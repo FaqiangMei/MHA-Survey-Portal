@@ -1,4 +1,6 @@
-<div class="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm" data-question-fields-target="item">
+<% question = question_fields.object %>
+<div class="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+  data-question-fields-target="item">
   <%= question_fields.hidden_field :id %>
   <%= question_fields.hidden_field :_destroy, value: 0 %>
 
@@ -8,7 +10,9 @@
   <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
     <div class="flex-1 space-y-2">
       <%= question_fields.label :question_text, "Prompt", class: "block text-sm font-medium text-slate-700" %>
-      <%= question_fields.text_area :question_text, class: textarea_classes, placeholder: "Describe the competency being assessed." %>
+      <%= question_fields.text_area :question_text,
+            class: textarea_classes,
+            placeholder: "Describe the competency being assessed." %>
       <% if supports_description %>
         <%= question_fields.label :description, "Question description (optional)", class: "block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
         <%= question_fields.text_area :description, class: textarea_classes, placeholder: "Shown under the prompt for everyone completing the survey." %>
@@ -32,7 +36,7 @@
 
   <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
     <div class="flex min-w-[6rem] flex-col gap-1">
-      <%= question_fields.label :question_order, "Order", class: "block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= question_fields.label :question_order, "Display order", class: "block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
       <%= question_fields.number_field :question_order, in: 1..200, class: input_classes %>
     </div>
 

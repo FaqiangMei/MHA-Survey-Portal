@@ -183,7 +183,8 @@ class SurveysController < ApplicationController
       @computed_required = {}
       @invalid_evidence = invalid_links.map(&:id)
       error_candidates = (missing_required + invalid_links).map(&:id)
-      ordered_ids = @survey.questions.order(:question_order).pluck(:id)
+      ordered_ids = question_ids_in_display_order(@category_groups)
+      ordered_ids = @survey.questions.order(:question_order).pluck(:id) if ordered_ids.blank?
       @first_error_question_id = (ordered_ids & error_candidates).first || error_candidates.first
       if @first_error_question_id
         first_error_question = questions_map[@first_error_question_id]
@@ -346,6 +347,20 @@ class SurveysController < ApplicationController
   # @return [void]
   def set_survey
     @survey = Survey.includes(categories: %i[section questions]).find(params[:id])
+  end
+
+  def question_ids_in_display_order(category_groups)
+    Array(category_groups).flat_map do |category|
+      next [] unless category
+
+      questions = category.questions
+      ordered_questions = if questions.respond_to?(:loaded?) && questions.loaded?
+                            questions.sort_by(&:question_order)
+      else
+                            questions.order(:question_order).to_a
+      end
+      ordered_questions.map(&:id)
+    end
   end
 
   # Prevents students from editing a survey that has already been submitted.

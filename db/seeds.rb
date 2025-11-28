@@ -318,6 +318,8 @@ students.each do |student|
   next if normalized_student_track.blank?
 
   Array(surveys_by_track[normalized_student_track]).each do |survey|
+    latest_response_timestamp = nil
+
     survey.questions.order(:question_order).each do |question|
       record = StudentQuestion.find_or_initialize_by(student_id: student.student_id, question_id: question.id)
 
@@ -383,6 +385,7 @@ students.each do |student|
       timestamp = sample_timestamp.call
       record.created_at ||= timestamp
       record.updated_at = timestamp
+      latest_response_timestamp = [ latest_response_timestamp, timestamp ].compact.max
 
       record.response_value = response_value
       record.save!
@@ -391,6 +394,17 @@ students.each do |student|
     puts "   • Prepared #{survey.questions.count} questions for #{student.user.name} (#{track_value})"
     puts "     ↳ High performer calibration applied" if high_performer_ids.include?(student.student_id)
     puts "     ↳ Track auto-assign will create survey tasks on next profile update"
+
+    completion_time = latest_response_timestamp || Time.zone.now
+    assigned_time = completion_time - 10.days
+    due_time = assigned_time + 14.days
+
+    assignment = SurveyAssignment.find_or_initialize_by(student_id: student.student_id, survey_id: survey.id)
+    assignment.advisor_id ||= student.advisor_id
+    assignment.assigned_at ||= assigned_time
+    assignment.due_date ||= due_time
+    assignment.save!
+    assignment.mark_completed!(completion_time)
   end
 end
 

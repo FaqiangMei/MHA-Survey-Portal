@@ -37,6 +37,32 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_equal question.id, assigns(:first_error_question_id)
   end
 
+  test "submit highlights earliest rendered question even when order differs" do
+    sign_in @student_user
+
+    primary_category = @survey.categories.first || @survey.categories.create!(name: "Primary", description: "", survey: @survey)
+    leading_question = primary_category.questions.first || primary_category.questions.create!(
+      question_text: "Primary question",
+      question_order: 5,
+      question_type: "short_answer",
+      is_required: true
+    )
+    leading_question.update!(question_order: 5, is_required: true)
+
+    later_category = @survey.categories.create!(name: "Later Category")
+    later_category.questions.create!(
+      question_text: "Secondary question",
+      question_order: 0,
+      question_type: "short_answer",
+      is_required: true
+    )
+
+    post submit_survey_path(@survey), params: { answers: {} }
+
+    assert_response :unprocessable_entity
+    assert_equal leading_question.id, assigns(:first_error_question_id)
+  end
+
   test "submit persists answers and redirects on success" do
     sign_in @student_user
     answers = {}

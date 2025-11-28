@@ -18,8 +18,8 @@
     <p class="text-sm text-slate-600">
       Semester: <%= @survey.semester.presence || "TBD" %> · Tracks: <%= @survey.track_list.presence&.join(", ") || "Unassigned" %>
     </p>
-    <p class="text-xs text-slate-500">*
-      required to answer
+    <p class="text-xs text-slate-500">
+      Questions marked with an asterisk (*) are required.
     </p>
   </header>
 

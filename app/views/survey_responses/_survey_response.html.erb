@@ -4,6 +4,7 @@
 
 <div class="space-y-8 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
   <% survey_name = survey&.title.presence || "Survey ##{survey&.id}" %>
+  <% progress = sr&.progress_summary || {} %>
 
   <h1 class="text-2xl font-semibold text-[#500000]"><%= survey_name %></h1>
 
@@ -27,6 +28,21 @@
     <div class="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
       <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted</dt>
       <dd class="mt-2 text-base font-medium text-slate-900"><%= sr&.completion_date ? sr.completion_date.strftime("%Y-%m-%d") : "—" %></dd>
+    </div>
+    <div class="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+      <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Questions Answered</dt>
+      <% total_questions = progress[:total_questions].to_i %>
+      <% answered_total = progress[:answered_total].to_i %>
+      <dd class="mt-2 text-base font-medium text-slate-900">
+        <% if total_questions.positive? %>
+          <%= answered_total %>/<%= total_questions %>
+          <% if progress[:total_required].to_i.positive? %>
+            <span class="ml-1 text-sm text-slate-600">(required <%= progress[:answered_required] %>/<%= progress[:total_required] %>)</span>
+          <% end %>
+        <% else %>
+          —
+        <% end %>
+      </dd>
     </div>
   </dl>
 

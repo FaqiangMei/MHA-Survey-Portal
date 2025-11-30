@@ -271,14 +271,19 @@ class SurveysController < ApplicationController
 
       Rails.logger.info "[SUBMIT] Building survey response"
       survey_response = SurveyResponse.build(student: student, survey: @survey)
+      progress_summary = survey_response.progress_summary
       survey_response_id = survey_response.id
+      notice_message = build_progress_notice(
+        prefix: "Survey submitted successfully!",
+        progress: progress_summary
+      )
 
       Rails.logger.info "[SUBMIT] Redirecting to survey response path with ID: #{survey_response_id}"
       begin
-        redirect_to survey_response_path(survey_response_id), notice: "Survey submitted successfully!"
+        redirect_to survey_response_path(survey_response_id), notice: notice_message
       rescue ActionController::UrlGenerationError => url_error
         Rails.logger.error "[SUBMIT] URL generation failed: #{url_error.message}"
-        redirect_to student_dashboard_path, notice: "Survey submitted successfully!"
+        redirect_to student_dashboard_path, notice: notice_message
       end
     rescue StandardError => e
       Rails.logger.error "[SUBMIT ERROR] Failed to complete survey submission: #{e.class}: #{e.message}"
@@ -337,7 +342,15 @@ class SurveysController < ApplicationController
     end
 
     Rails.logger.info "[SAVE_PROGRESS DEBUG] Total saved: #{saved_count} answers"
-    redirect_to survey_path(@survey), notice: "Progress saved! You can continue later."
+
+    survey_response = SurveyResponse.build(student: student, survey: @survey)
+    progress_summary = survey_response.progress_summary
+    notice_message = build_progress_notice(
+      prefix: "Progress saved! You can continue later.",
+      progress: progress_summary
+    )
+
+    redirect_to survey_path(@survey), notice: notice_message
   end
 
   private
@@ -545,5 +558,19 @@ class SurveysController < ApplicationController
         return [ false, :error ]
       end
     end
+  end
+
+  def build_progress_notice(prefix:, progress: {})
+    total_questions = progress[:total_questions].to_i
+    answered_total = progress[:answered_total].to_i
+    return prefix if total_questions.zero?
+
+    description = [
+      "#{answered_total}/#{total_questions} questions answered",
+      progress[:total_required].to_i.positive? ? "(#{progress[:answered_required]}/#{progress[:total_required]} required)" : nil
+    ].compact.join(" ")
+
+    message = [ prefix.to_s.strip, description ].reject(&:blank?).join(" ").strip
+    message.ends_with?(".") ? message : "#{message}."
   end
 end

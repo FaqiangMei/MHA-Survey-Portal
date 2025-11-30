@@ -39,6 +39,9 @@
   <div class="metric-card">
     <div class="metric-label">Questions Answered</div>
     <div class="metric-value"><%= answered_count %> / <%= total_questions %></div>
+    <% if required_total_questions.to_i.positive? %>
+      <div class="metric-subtext">Required: <%= required_answered_count %> / <%= required_total_questions %></div>
+    <% end %>
   </div>
   <div class="metric-card">
     <div class="metric-label">Advisor Feedback Entries</div>

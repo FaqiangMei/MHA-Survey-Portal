@@ -76,6 +76,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/survey_responses/\d+-\d+}, location
     follow_redirect!
     assert_match /Survey submitted successfully!/, response.body
+    assert_match /\d+\/\d+ questions answered/i, response.body
   end
 
   test "show redirects students with completed surveys to survey response" do
@@ -344,7 +345,8 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     post save_progress_survey_path(@survey), params: { answers: answers }
 
     assert_redirected_to survey_path(@survey)
-    assert_equal "Progress saved! You can continue later.", flash[:notice]
+    assert_match /Progress saved! You can continue later\./, flash[:notice]
+    assert_match /\d+\/\d+ questions answered/i, flash[:notice]
   end
 
   test "save_progress allows blank required fields" do
@@ -776,7 +778,8 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     post save_progress_survey_path(@survey), params: { answers: {} }
 
-    assert_equal "Progress saved! You can continue later.", flash[:notice]
+    assert_match /Progress saved! You can continue later\./, flash[:notice]
+    assert_match /\d+\/\d+ questions answered/i, flash[:notice]
   end
 
   test "submit redirects on success" do

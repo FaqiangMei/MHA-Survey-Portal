@@ -96,10 +96,19 @@
                   <% end %>
                 </div>
               <% when "scale" %>
-                <div class="flex items-center gap-3">
-                  <span class="text-xs text-slate-500">Low</span>
-                  <input type="range" min="1" max="5" value="3" disabled class="w-full" />
-                  <span class="text-xs text-slate-500">High</span>
+                <% scale_labels = scale_labels_for(question) %>
+                <% scale_steps = [scale_labels.size, 1].max %>
+                <div class="space-y-1">
+                  <div class="flex items-center gap-3">
+                    <span class="text-xs text-slate-500"><%= scale_labels.first || "Low" %></span>
+                    <input type="range" min="1" max="<%= scale_steps %>" value="<%= ((scale_steps + 1) / 2.0).ceil %>" disabled class="w-full" />
+                    <span class="text-xs text-slate-500"><%= scale_labels.last || "High" %></span>
+                  </div>
+                  <div class="flex justify-between text-[0.7rem] text-slate-500">
+                    <% scale_labels.each do |label| %>
+                      <span><%= label %></span>
+                    <% end %>
+                  </div>
                 </div>
               <% when "evidence" %>
                 <div class="space-y-1">

@@ -151,11 +151,24 @@
                       <% end %>
                     </div>
                   <% when "scale" %>
-                    <%= select_tag nil,
-                                    options_for_select((1..5).map(&:to_s), answer_text&.to_s),
-                                    include_blank: true,
-                                    class: "w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none",
-                                    disabled: true %>
+                    <% scale_labels = scale_labels_for(question) %>
+                    <% selected_value = answer_text.to_s.presence %>
+                    <% display_label = scale_label_for_value(question, selected_value) if selected_value.present? %>
+                    <div class="space-y-1">
+                      <div class="text-sm font-medium text-slate-800">
+                        <% if selected_value.present? %>
+                          <%= display_label %>
+                          <span class="ml-1 text-xs text-slate-500">(Value <%= selected_value %> of <%= scale_labels.size %>)</span>
+                        <% else %>
+                          <span class="text-slate-500">Not answered</span>
+                        <% end %>
+                      </div>
+                      <div class="flex justify-between text-[0.7rem] text-slate-500">
+                        <% scale_labels.each do |label| %>
+                          <span><%= label %></span>
+                        <% end %>
+                      </div>
+                    </div>
                   <% when "evidence" %>
                     <% link_value = answer_text %>
                     <% rating_value = rating_val %>

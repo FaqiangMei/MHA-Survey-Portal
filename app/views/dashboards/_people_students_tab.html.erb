@@ -1,0 +1,524 @@
+<section class="c-card u-stack u-stack--lg">
+  <div class="u-responsive-split">
+    <div class="u-responsive-row">
+      <h2 class="c-section-title c-heading-inline">Student Advisor Management</h2>
+      <div class="c-muted">
+        <%= pluralize(@students.size, "student") %>
+      </div>
+    </div>
+    <p class="c-lede">Review advisees and assign advisors, tracks, and assignment groups across the program.</p>
+  </div>
+
+  <div class="c-stats-grid c-stats-grid--one-row">
+    <div class="c-stat c-stat--info">
+      <div class="c-stat__label">Total Students</div>
+      <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:total] %></div>
+    </div>
+
+    <div class="c-stat c-stat--success">
+      <div class="c-stat__label">Assigned</div>
+      <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:assigned] %></div>
+    </div>
+
+    <div class="c-stat c-stat--warning">
+      <div class="c-stat__label">Unassigned</div>
+      <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:unassigned] %></div>
+    </div>
+
+    <div class="c-stat c-stat--info">
+      <div class="c-stat__label">Current</div>
+      <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:current] %></div>
+    </div>
+
+    <div class="c-stat c-stat--muted">
+      <div class="c-stat__label">Graduated</div>
+      <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:graduated] %></div>
+    </div>
+
+    <div class="c-stat c-stat--muted">
+      <div class="c-stat__label">Archived</div>
+      <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:archived] %></div>
+    </div>
+  </div>
+
+  <% if @student_profile_warnings.present? %>
+    <div class="c-callout c-callout--warning u-stack u-stack--sm" role="alert">
+      <div>
+        <div class="c-callout__title">Student profile data needs attention</div>
+        <p class="c-help">These current students are missing fields used for advisor assignment, reports, grade imports, and notifications.</p>
+      </div>
+
+      <div class="u-grid u-grid--dense" style="--u-grid-min: 220px">
+        <% @student_profile_warnings.each do |warning| %>
+          <div class="u-stack u-stack--xs">
+            <div class="u-actions u-actions--start u-gap-xs">
+              <span class="c-pill c-pill--muted"><%= pluralize(warning[:count], "student") %></span>
+              <span class="c-strong"><%= warning[:label] %></span>
+            </div>
+            <p class="c-help"><%= warning[:students].join(", ") %><%= warning[:count] > warning[:students].size ? ", and #{warning[:count] - warning[:students].size} more" : "" %></p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="c-callout">
+    <div class="c-callout__title">Search students</div>
+    <form class="c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" action="<%= people_management_path %>" accept-charset="UTF-8" method="get">
+      <input type="hidden" name="tab" value="students">
+      <div class="c-toolbar__item u-relative u-flex-1">
+        <label class="sr-only" for="q">Search</label>
+        <input type="text" name="q" id="q" value="<%= params[:q].to_s %>" placeholder="Search by name, email, UIN, student ID, or class year" class="c-input c-search-input u-w-full">
+      </div>
+      <div class="c-toolbar__item">
+        <label class="sr-only" for="student_status">Student status</label>
+        <%= select_tag :student_status,
+              options_for_select(@student_status_options, @student_status_filter),
+              class: "c-select" %>
+      </div>
+      <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
+        <button name="button" type="submit" class="btn btn-secondary">Search</button>
+        <% if params[:q].present? || @student_status_filter != "current" %>
+          <%= link_to "Reset", people_management_path(tab: "students"), class: "btn btn-subtle" %>
+        <% end %>
+      </div>
+    </form>
+  </div>
+
+  <% if @students.blank? %>
+    <div class="c-empty-state">
+      <p class="c-empty-state__body">No students were found for your account.</p>
+    </div>
+  <% elsif @can_manage %>
+    <%= form_with url: update_student_advisors_path, method: :patch, local: true, id: "advisor-management-form", data: { turbo: false }, remote: false do |form| %>
+      <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+      <% track_select_options = [["Select track", ""]] + @track_select_options %>
+      <% program_year_select_options = [["Select class year", ""]] + @program_year_select_options %>
+      <% status_select_options = @lifecycle_status_select_options %>
+
+      <div class="c-callout u-stack u-stack--sm">
+        <div class="u-responsive-split">
+          <div>
+            <div class="c-callout__title">Bulk lifecycle update</div>
+            <p class="c-lede">Select students below, choose a status, then save changes. Current views hide graduated and archived students by default.</p>
+          </div>
+          <span class="c-pill c-pill--muted" id="bulk-lifecycle-count">0 selected</span>
+        </div>
+        <div class="c-toolbar__row c-toolbar__row--airy u-w-full">
+          <div class="c-toolbar__item">
+            <label class="c-label" for="bulk_status">Set selected students to</label>
+            <%= select_tag :bulk_status,
+                  options_for_select([["No bulk status change", ""]] + status_select_options),
+                  class: "c-select",
+                  id: "bulk_status" %>
+          </div>
+          <div class="c-toolbar__item u-flex-1">
+            <label class="c-label" for="lifecycle_reason">Lifecycle note</label>
+            <%= text_field_tag :lifecycle_reason,
+                  nil,
+                  class: "c-input u-w-full",
+                  id: "lifecycle_reason",
+                  placeholder: "Optional note, used as archive reason when archiving" %>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-card c-card--flush c-table-wrapper">
+        <table class="c-table">
+          <thead>
+            <tr>
+              <th class="table-header-actions">
+                <label class="u-inline-flex u-items-center u-gap-xs">
+                  <input type="checkbox" id="select_all_students">
+                  <span class="sr-only">Select all students</span>
+                </label>
+              </th>
+              <th class="table-header-avatar">Avatar</th>
+              <th class="table-header-name" style="min-width: 15rem;">Student</th>
+              <th class="table-header-current-role" style="min-width: 12rem;">Status</th>
+              <th class="table-header-track" style="min-width: 14rem;">Track</th>
+              <th class="table-header-track" style="min-width: 12rem;">Class Year</th>
+              <th class="table-header-current-role" style="min-width: 16rem;">Advisor</th>
+              <th class="table-header-actions" style="min-width: 12rem;">Changes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @students.each do |student| %>
+              <% user = student.user %>
+              <% current_advisor = student.advisor %>
+              <% current_advisor_name = current_advisor&.display_name || "Unassigned" %>
+              <% current_advisor_id = student.advisor_id.present? ? student.advisor_id.to_s : "" %>
+              <% track_key = student.track_key.presence || "" %>
+              <% track_label = student.track.presence || "Unassigned" %>
+              <% program_year_value = student.program_year.present? ? student.program_year.to_s : "" %>
+              <% program_year_label = program_year_value.presence || "Unassigned" %>
+              <% status_key = student.status.to_s.presence || "active" %>
+              <% status_label = student.lifecycle_label %>
+              <tr class="c-table-row" data-student-row="<%= student.student_id %>">
+                <td>
+                  <label class="u-inline-flex u-items-center u-gap-xs">
+                    <%= check_box_tag "selected_student_ids[]",
+                          student.student_id,
+                          false,
+                          class: "student-select-checkbox",
+                          data: { student_id: student.student_id } %>
+                    <span class="sr-only">Select <%= user&.name || "student ##{student.student_id}" %></span>
+                  </label>
+                </td>
+
+                <td>
+                  <div class="c-table-avatar"
+                       <% if user&.avatar_url.present? %>
+                         style="background-image: url('<%= user.avatar_url %>');"
+                       <% end %>>
+                    <% unless user&.avatar_url.present? %>👤<% end %>
+                  </div>
+                </td>
+
+                <td class="user-name-cell" style="min-width: 15rem;">
+                  <div class="c-value"><%= user&.name || "Unknown Student" %></div>
+                  <div class="c-table__meta">
+                    <% if user&.email.present? %>
+                      Email: <%= user.email %>
+                    <% else %>
+                      Email: —
+                    <% end %>
+                  </div>
+                </td>
+
+                <td class="user-current-role-cell" style="min-width: 12rem;">
+                  <%= select_tag "status_updates[#{student.student_id}]",
+                          options_for_select(status_select_options, status_key),
+                          class: "c-select c-select--compact u-w-full status-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_status: status_key,
+                            original_status_name: status_label,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "status_select_#{student.student_id}" %>
+                </td>
+
+                <td class="user-track-cell" style="min-width: 14rem;">
+                  <%= select_tag "track_updates[#{student.student_id}]",
+                          options_for_select(track_select_options, track_key),
+                          class: "c-select c-select--compact u-w-full track-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_track: track_key,
+                            original_track_name: track_label,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "track_select_#{student.student_id}" %>
+                </td>
+
+                <td class="user-track-cell" style="min-width: 12rem;">
+                  <%= select_tag "program_year_updates[#{student.student_id}]",
+                          options_for_select(program_year_select_options, program_year_value),
+                          class: "c-select c-select--compact u-w-full program-year-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_program_year: program_year_value,
+                            original_program_year_name: program_year_label,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "program_year_select_#{student.student_id}" %>
+                </td>
+
+                <td class="user-current-role-cell" style="min-width: 16rem;">
+                  <%= select_tag "advisor_updates[#{student.student_id}]",
+                          options_for_select(@advisor_select_options, current_advisor_id),
+                          class: "c-select c-select--compact u-w-full advisor-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_advisor: current_advisor_id,
+                            original_advisor_name: current_advisor_name,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "advisor_select_#{student.student_id}" %>
+                </td>
+
+                <td class="user-actions-cell" style="min-width: 12rem;">
+                  <span class="c-change-indicator" data-student-id="<%= student.student_id %>">
+                    No changes
+                  </span>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="c-toolbar u-mt-lg">
+        <div class="c-toolbar__row u-items-center u-w-full u-gap-md u-justify-end">
+          <div class="u-flex-1">
+            <div class="c-lede" id="student-changes-summary" style="display: none;">
+              <span id="student-changes-count" class="c-change-indicator changed">0 changes pending</span>
+            </div>
+          </div>
+          <div class="u-actions">
+            <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
+            <%= form.submit "Save Changes", class: button_classes(:primary), id: "advisor-save-btn", disabled: true %>
+          </div>
+        </div>
+      </div>
+    <% end %>
+  <% else %>
+    <div class="c-card c-card--flush c-table-wrapper">
+      <table class="c-table">
+        <thead>
+          <tr>
+            <th class="table-header-avatar">Avatar</th>
+            <th class="table-header-name" style="min-width: 15rem;">Student</th>
+            <th class="table-header-current-role" style="min-width: 10rem;">Status</th>
+            <th class="table-header-track" style="min-width: 8rem;">Track</th>
+            <th class="table-header-track" style="min-width: 8rem;">Class Year</th>
+            <th class="table-header-current-role">Advisor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @students.each do |student| %>
+            <% user = student.user %>
+            <% current_advisor = student.advisor %>
+            <tr class="c-table-row">
+              <td>
+                <div class="c-table-avatar"
+                     <% if user&.avatar_url.present? %>
+                       style="background-image: url('<%= user.avatar_url %>');"
+                     <% end %>>
+                  <% unless user&.avatar_url.present? %>👤<% end %>
+                </div>
+              </td>
+              <td class="user-name-cell" style="min-width: 15rem;">
+                <div class="c-value"><%= user&.name || "Unknown Student" %></div>
+                <div class="c-table__meta">
+                  <% if user&.email.present? %>
+                    Email: <%= user.email %>
+                  <% else %>
+                    Email: —
+                  <% end %>
+                </div>
+              </td>
+              <td class="user-current-role-cell" style="min-width: 10rem;">
+                <span class="c-role-badge c-role-badge--track"><%= student.lifecycle_label %></span>
+              </td>
+              <td class="user-track-cell" style="min-width: 8rem;">
+                <span class="c-role-badge c-role-badge--track"><%= student.track.present? ? student.track.titleize : "Unassigned" %></span>
+              </td>
+              <td class="user-track-cell" style="min-width: 8rem;">
+                <span class="c-role-badge c-role-badge--track"><%= student.program_year.presence || "Unassigned" %></span>
+              </td>
+              <td class="user-current-role-cell" style="min-width: 12rem;">
+                <span class="c-role-badge c-role-badge--advisor"><%= current_advisor&.display_name || "Unassigned" %></span>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>
+
+<script>
+  (function() {
+    function initAdvisorManagement() {
+      const form = document.getElementById('advisor-management-form');
+      if (!form || form.dataset.initialized === 'true') {
+        return;
+      }
+
+      form.dataset.initialized = 'true';
+
+      const saveButton = document.getElementById('advisor-save-btn');
+      const changesSummary = document.getElementById('student-changes-summary');
+      const changesCount = document.getElementById('student-changes-count');
+      const bulkStatusSelect = document.getElementById('bulk_status');
+      const bulkLifecycleCount = document.getElementById('bulk-lifecycle-count');
+      const selectAllStudents = document.getElementById('select_all_students');
+      const studentCheckboxes = Array.from(form.querySelectorAll('.student-select-checkbox'));
+
+      if (!saveButton || !changesSummary || !changesCount) {
+        return;
+      }
+
+      const changeRegistry = new Map();
+
+      function indicatorFor(studentId) {
+        return form.querySelector(`.c-change-indicator[data-student-id="${studentId}"]`);
+      }
+
+      function rowFor(studentId) {
+        return form.querySelector(`.c-table-row[data-student-row="${studentId}"]`);
+      }
+
+      function updateIndicator(studentId) {
+        const indicator = indicatorFor(studentId);
+        if (!indicator) {
+          return;
+        }
+
+        const row = rowFor(studentId);
+        const entry = changeRegistry.get(studentId);
+        const messages = [];
+
+        if (entry && entry.advisor) {
+          messages.push(`Advisor: ${entry.advisor.from} → ${entry.advisor.to}`);
+        }
+
+        if (entry && entry.track) {
+          messages.push(`Track: ${entry.track.from} → ${entry.track.to}`);
+        }
+
+        if (entry && entry.programYear) {
+          messages.push(`Class year: ${entry.programYear.from} → ${entry.programYear.to}`);
+        }
+
+        if (entry && entry.assignmentGroup) {
+          messages.push(`Group: ${entry.assignmentGroup.from} → ${entry.assignmentGroup.to}`);
+        }
+
+        if (entry && entry.status) {
+          messages.push(`Status: ${entry.status.from} → ${entry.status.to}`);
+        }
+
+        if (messages.length > 0) {
+          indicator.textContent = messages.join(' | ');
+          indicator.className = 'c-change-indicator changed';
+          if (row) {
+            row.classList.add('c-table-row--changed');
+          }
+        } else {
+          indicator.textContent = 'No changes';
+          indicator.className = 'c-change-indicator';
+          if (row) {
+            row.classList.remove('c-table-row--changed');
+          }
+        }
+      }
+
+      function updateUI() {
+        const selectedCount = selectedLifecycleCount();
+        const bulkLifecycleReady = bulkStatusSelect && bulkStatusSelect.value && selectedCount > 0;
+        const changeCount = changeRegistry.size;
+
+        if (bulkLifecycleCount) {
+          bulkLifecycleCount.textContent = `${selectedCount} selected`;
+        }
+
+        if (selectAllStudents) {
+          selectAllStudents.checked = studentCheckboxes.length > 0 && selectedCount === studentCheckboxes.length;
+          selectAllStudents.indeterminate = selectedCount > 0 && selectedCount < studentCheckboxes.length;
+        }
+
+        if (changeCount > 0 || bulkLifecycleReady) {
+          saveButton.disabled = false;
+          saveButton.style.opacity = '1';
+          saveButton.style.cursor = 'pointer';
+          changesSummary.style.display = 'block';
+          const parts = [];
+          if (changeCount > 0) {
+            parts.push(`${changeCount} row change${changeCount > 1 ? 's' : ''}`);
+          }
+          if (bulkLifecycleReady) {
+            const statusLabel = bulkStatusSelect.options[bulkStatusSelect.selectedIndex]?.text || 'selected status';
+            parts.push(`${selectedCount} bulk status update${selectedCount > 1 ? 's' : ''} to ${statusLabel}`);
+          }
+          changesCount.textContent = `${parts.join(' and ')} pending`;
+        } else {
+          saveButton.disabled = true;
+          saveButton.style.opacity = '0.5';
+          saveButton.style.cursor = 'not-allowed';
+          changesSummary.style.display = 'none';
+        }
+      }
+
+      function selectedLifecycleCount() {
+        return studentCheckboxes.filter(checkbox => checkbox.checked).length;
+      }
+
+      function normalizeLabel(value, fallback) {
+        return value && value.trim().length > 0 ? value : fallback;
+      }
+
+      function updateRegistry(studentId, key, fromLabel, toLabel) {
+        const entry = changeRegistry.get(studentId) || {};
+        if (fromLabel === toLabel) {
+          delete entry[key];
+        } else {
+          entry[key] = { from: fromLabel, to: toLabel };
+        }
+
+        if (Object.keys(entry).length === 0) {
+          changeRegistry.delete(studentId);
+        } else {
+          changeRegistry.set(studentId, entry);
+        }
+
+        updateIndicator(studentId);
+        updateUI();
+      }
+
+      form.querySelectorAll('.advisor-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const studentId = select.dataset.studentId;
+          const fromLabel = normalizeLabel(select.dataset.originalAdvisorName, 'Unassigned');
+          const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
+
+          updateRegistry(studentId, 'advisor', fromLabel, toLabel);
+        });
+      });
+
+      form.querySelectorAll('.track-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const studentId = select.dataset.studentId;
+          const fromLabel = normalizeLabel(select.dataset.originalTrackName, 'Unassigned');
+          const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
+
+          updateRegistry(studentId, 'track', fromLabel, toLabel);
+        });
+      });
+
+      form.querySelectorAll('.program-year-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const studentId = select.dataset.studentId;
+          const fromLabel = normalizeLabel(select.dataset.originalProgramYearName, 'Unassigned');
+          const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
+
+          updateRegistry(studentId, 'programYear', fromLabel, toLabel);
+        });
+      });
+
+      form.querySelectorAll('.status-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const studentId = select.dataset.studentId;
+          const fromLabel = normalizeLabel(select.dataset.originalStatusName, 'Active');
+          const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Active');
+
+          updateRegistry(studentId, 'status', fromLabel, toLabel);
+        });
+      });
+
+      studentCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateUI);
+      });
+
+      if (bulkStatusSelect) {
+        bulkStatusSelect.addEventListener('change', updateUI);
+      }
+
+      if (selectAllStudents) {
+        selectAllStudents.addEventListener('change', () => {
+          studentCheckboxes.forEach(checkbox => {
+            checkbox.checked = selectAllStudents.checked;
+          });
+          updateUI();
+        });
+      }
+
+      updateUI();
+    }
+
+    document.addEventListener('turbo:load', initAdvisorManagement);
+    document.addEventListener('DOMContentLoaded', initAdvisorManagement);
+  })();
+</script>

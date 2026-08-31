@@ -1,4 +1,4 @@
-ENV["RAILS_ENV"] ||= "test"
+ENV["RAILS_ENV"] = "test"
 
 require "shellwords"
 
@@ -12,6 +12,7 @@ if ENV["COVERAGE"] == "1"
     # Use the Rails profile and enable branch coverage for more accuracy.
     SimpleCov.start "rails" do
       enable_coverage :branch
+      minimum_coverage 95
       add_filter "/test/"
       add_group "Services", "app/services"
     end
@@ -39,6 +40,21 @@ require "rails/test_help"
 require "minitest/mock"
 require "factory_bot_rails"
 
+# When using dockerized Postgres, the DB volume can persist between runs.
+# Some tables are not covered by fixtures, so stale rows can cause FK
+# validation failures during fixture load. Start each test run from a clean DB.
+if Rails.env.test? && ENV["SKIP_TEST_DB_CLEAN"].to_s.empty?
+  connection = ActiveRecord::Base.connection
+  tables_to_truncate = connection.tables - %w[schema_migrations ar_internal_metadata]
+
+  connection.disable_referential_integrity do
+    tables_to_truncate.each do |table|
+      quoted = connection.quote_table_name(table)
+      connection.execute("TRUNCATE TABLE #{quoted} RESTART IDENTITY CASCADE")
+    end
+  end
+end
+
 # Load WebMock for HTTP stubbing in tests
 require "webmock/minitest"
 # Allow real HTTP connections to Google domains for evidence validation tests
@@ -55,15 +71,17 @@ class ActiveSupport::TestCase
   include FactoryBot::Syntax::Methods
   parallelize(workers: 1)
   fixtures :admins,
+           :advisor_feedback_submissions,
+           :advisor_meeting_recaps,
            :advisors,
            :categories,
+           :program_semesters,
            :questions,
            :feedbacks,
            :students,
            :surveys,
            :survey_track_assignments,
            :survey_assignments,
-           :program_semesters,
            :users,
            :survey_change_logs,
            :student_questions,

@@ -15,3 +15,45 @@ fall_2025_executive_track:
   track: Executive
   created_at: <%= Time.zone.now %>
   updated_at: <%= Time.zone.now %>
+
+spring_2026_residential_track:
+  survey: spring_2026_residential
+  track: Residential
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>
+
+spring_2026_executive_track:
+  survey: spring_2026_executive
+  track: Executive
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>
+
+rmha_initial_spring_2026_track:
+  survey: rmha_initial_spring_2026
+  track: Residential
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>
+
+rmha_midpoint_spring_2026_track:
+  survey: rmha_midpoint_spring_2026
+  track: Residential
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>
+
+rmha_final_spring_2026_track:
+  survey: rmha_final_spring_2026
+  track: Residential
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>
+
+emha_midpoint_spring_2026_track:
+  survey: emha_midpoint_spring_2026
+  track: Executive
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>
+
+emha_final_spring_2026_track:
+  survey: emha_final_spring_2026
+  track: Executive
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

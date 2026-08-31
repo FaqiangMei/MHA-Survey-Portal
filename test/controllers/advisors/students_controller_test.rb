@@ -17,9 +17,13 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
   test "update changes track with valid input" do
     sign_in @advisor_user
 
-    patch advisors_student_path(@student), params: { student: { track: "executive" } }
+    I18n.stub(:l, ->(*) { raise I18n::MissingTranslationData.new(:en, :time) }) do
+      patch advisors_student_path(@student), params: { student: { track: "executive" } }
+    end
+
     assert_redirected_to advisors_student_path(@student)
-    assert_equal "executive", @student.reload.track
+    assert_equal "executive", @student.reload.track_key
+    assert_equal "Executive", @student.track
     assert_match "Track changed", flash[:notice]
   ensure
     @student.update!(track: "residential")
@@ -29,15 +33,15 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
     sign_in @advisor_user
 
     patch advisors_student_path(@student), params: { student: { track: "" } }
-    assert_redirected_to student_records_path
-    assert_match "Unable to change track", flash[:alert]
+    assert_redirected_to survey_records_path
+    assert_match "We could not change the track", flash[:alert]
   end
 
   test "update handles missing student" do
     sign_in @advisor_user
 
     patch advisors_student_path("missing"), params: { student: { track: "executive" } }
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_equal "Student not found.", flash[:alert]
   end
 
@@ -46,6 +50,6 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
 
     get advisors_student_path(@student)
     assert_redirected_to dashboard_path
-    assert_equal "Advisor access required.", flash[:alert]
+    assert_equal ApplicationController::ADVISOR_ONLY_MESSAGE, flash[:alert]
   end
 end

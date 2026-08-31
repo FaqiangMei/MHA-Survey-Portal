@@ -1,32 +1,37 @@
 <% welcome_source = @student&.user&.name.presence || current_user&.name.presence || current_user&.email.presence %>
 <% welcome_name = welcome_source.to_s.split(/\s+/).first.presence || "Welcome" %>
-<div class="surveys-page">
-  <section class="survey-hero">
-    <div>
-      <p class="eyebrow">My Surveys</p>
-      <h1><%= welcome_name %>, here's what's waiting for you</h1>
-      <% if @student&.track.present? %>
-        <p class="subtitle">You are viewing surveys for the <strong><%= @student.track %></strong> track.</p>
-      <% else %>
-        <p class="subtitle">Select your program track so we can curate the correct surveys for you.</p>
-      <% end %>
-    </div>
-    <div class="survey-hero__badge">
-      <span>Semester</span>
-      <strong><%= @current_semester_label %></strong>
-    </div>
-  </section>
+<main class="c-main">
+  <div class="c-container c-page">
+    <section class="c-hero c-hero--maroon">
+      <div class="c-page-header">
+        <div class="u-stack u-stack--sm">
+          <p class="c-eyebrow c-eyebrow--inverse">My Surveys</p>
+          <h1 class="c-h2 c-h2--inverse"><%= welcome_name %>, here's what's waiting for you</h1>
+          <% if @student&.track.present? %>
+            <p class="c-lede c-lede--inverse">You are viewing surveys for the <strong><%= @student.track %></strong> track.</p>
+          <% else %>
+            <p class="c-lede c-lede--inverse">Select your program track so we can curate the correct surveys for you.</p>
+          <% end %>
+        </div>
 
-  <% if @student&.track.blank? %>
-    <section class="empty-state-card">
-      <h2>Finish setting up your profile</h2>
-      <p>We need to know your track before we can display the correct surveys. Head over to your profile and select Residential or Executive.</p>
-      <%= link_to "Complete Profile", edit_student_profile_path, class: "btn btn-primary" %>
+        <dl class="c-kv c-kv--inverse c-kv--compact u-text-right">
+          <dt class="c-eyebrow c-eyebrow--inverse">Semester</dt>
+          <dd class="c-value c-value--xl c-value--inverse"><%= @current_semester_label %></dd>
+        </dl>
+      </div>
     </section>
-  <% elsif @surveys.any? %>
-    <div class="survey-board" role="list">
+
+    <% if @student&.track.blank? %>
+      <section class="c-card c-card--spacious u-stack">
+        <h2 class="c-h2">Finish setting up your profile</h2>
+        <p class="c-lede">We need to know your track before we can display the correct surveys. Head over to your profile and select Residential or Executive.</p>
+        <%= link_to "Complete Profile", edit_account_path, class: button_classes(:primary) %>
+      </section>
+    <% elsif @surveys.any? %>
+      <div class="u-grid u-grid--cards" role="list">
       <% @surveys.each do |survey| %>
         <% assignment = @assignment_lookup[survey.id] %>
+        <% offering = @offerings_by_survey_id[survey.id] %>
         <% status_label, status_variant = if assignment&.completed_at?
             ["Completed", "success"]
           elsif assignment.present?
@@ -34,32 +39,25 @@
           else
             ["Not Started", "muted"]
           end %>
-        <% due_note = if assignment&.due_date.present?
-            due_date = assignment.due_date.to_date
-            today = Time.zone.today
-            if due_date < today
-              "Overdue · #{l(due_date, format: :long)}"
-            elsif due_date == today
-              "Due today"
-            else
-              "Due #{l(due_date, format: :long)}"
-            end
-          else
-            "No due date"
-          end %>
-        <article class="survey-card" role="listitem">
-          <header class="survey-card__header">
+        <% due_note = survey_availability_note(assignment&.available_until) %>
+        <article class="c-card c-card--interactive c-resource-card" role="listitem">
+          <header class="c-resource-card__header">
             <div>
-              <p class="survey-card__semester"><%= survey.semester.presence || "Semester TBD" %></p>
-              <h2><%= link_to survey.title, survey_path(survey) %></h2>
+              <p class="c-resource-card__eyebrow"><%= survey.semester.presence || "Semester TBD" %></p>
+              <h2 class="c-h3"><%= link_to survey.title, survey_path(survey) %></h2>
+              <% if (review_note = review_meetings_note(offering)).present? %>
+                <p class="c-help">
+                  Review meetings: <%= review_note %>
+                </p>
+              <% end %>
             </div>
-            <div class="survey-card__status">
-              <span class="status-badge status-badge--<%= status_variant %>"><%= status_label %></span>
-              <span class="status-note"><%= due_note %></span>
+            <div class="c-resource-card__status">
+              <span class="c-status-badge c-status-badge--<%= status_variant %>"><%= status_label %></span>
+              <span class="c-muted-meta"><%= due_note %></span>
             </div>
           </header>
 
-          <ul class="survey-card__stats">
+          <ul class="c-resource-card__stats">
             <li>
               <span>Questions</span>
               <strong><%= survey.questions.count %></strong>
@@ -74,21 +72,47 @@
             </li>
           </ul>
 
-          <p class="survey-card__description"><%= survey.description.presence || "Complete this survey to capture your latest progress." %></p>
+          <p class="c-resource-card__description"><%= survey.description.presence || "Complete this survey to capture your latest progress." %></p>
 
-          <footer class="survey-card__footer">
-            <%= link_to(assignment&.completed_at? ? "View Submission" : "Open Survey", survey_path(survey), class: "btn btn-primary") %>
+          <footer class="c-resource-card__footer">
+            <% if assignment&.completed_at? %>
+              <% survey_response = SurveyResponse.build(student: @student, survey: survey) %>
+              <% can_edit = survey.is_active? && (assignment.available_until.blank? || assignment.available_until >= Time.current) %>
+              <% edit_disabled_hint = survey.is_active? ? "Edit disabled: deadline has passed." : "Edit disabled: this survey is archived." %>
+              <%= link_to "View Submission", survey_response_path(survey_response), class: button_classes(:secondary) %>
+              <%= link_to "Download PDF",
+                          download_survey_response_path(survey_response),
+                          class: button_classes(:secondary),
+                          data: { turbo_confirm: ferpa_export_confirmation("student survey response data") } %>
+              <% if can_edit %>
+                <%= link_to "Edit", survey_path(survey), class: button_classes(:primary) %>
+              <% else %>
+                <span
+                  role="button"
+                  aria-disabled="true"
+                  tabindex="0"
+                  aria-describedby="edit-disabled-hint<%= survey.id %>"
+                  class="<%= button_classes(:primary) %> u-disabled"
+                >
+                  Edit
+                </span>
+                <span id="edit-disabled-hint<%= survey.id %>" class="sr-only"><%= edit_disabled_hint %></span>
+              <% end %>
+            <% else %>
+              <%= link_to "Open Survey", survey_path(survey), class: button_classes(:primary) %>
+            <% end %>
           </footer>
         </article>
       <% end %>
     </div>
-  <% else %>
-    <section class="empty-state-card">
-      <h2>No surveys assigned (yet)</h2>
-      <p>Your advisor hasn't published surveys for the <%= @student.track %> track. We'll notify you as soon as one arrives.</p>
-      <%= link_to "Back to dashboard", student_dashboard_path, class: "btn btn-secondary" %>
-    </section>
-  <% end %>
-</div>
+    <% else %>
+      <section class="c-card c-card--spacious u-stack">
+        <h2 class="c-h2">No surveys assigned (yet)</h2>
+        <p class="c-lede">Your advisor hasn't published surveys for the <%= @student.track %> track. We'll notify you as soon as one arrives.</p>
+        <%= link_to "Back to dashboard", student_dashboard_path, class: button_classes(:secondary) %>
+      </section>
+    <% end %>
+  </div>
+</main>
 
 

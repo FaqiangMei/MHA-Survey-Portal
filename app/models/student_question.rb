@@ -10,11 +10,16 @@ class StudentQuestion < ApplicationRecord
   validates :question, presence: true
   validates :question_id, uniqueness: { scope: :student_id }
   validate :validate_evidence_link, if: :evidence_question?
+  validate :validate_text_lengths
+  validate :validate_integer_response, if: :integer_question?
 
   before_save :normalize_response_value
 
-  # Pattern used to validate Google-hosted links (Drive, Docs, Sites, etc.) for evidence responses.
-  GOOGLE_URL_REGEX = %r{\Ahttps?://(?:(?:drive|docs|sites)\.google\.com|(?:[a-z0-9-]+\.)?googleusercontent\.com)(?:/|$)\S*}i
+  # Maximum allowed length for student-entered free-text fields.
+  TEXT_MAX_LENGTH = 1000
+
+  # Pattern used to validate Google Sites links for evidence responses.
+  GOOGLE_URL_REGEX = %r{\Ahttps?://sites\.google\.com(?:/|$)\S*}i
 
   # Returns the deserialized answer for the question, handling stored JSON.
   #
@@ -48,8 +53,69 @@ class StudentQuestion < ApplicationRecord
 
   private
 
+  def validate_text_lengths
+    value = answer
+    validate_value_text_lengths(value)
+  end
+
+  def validate_value_text_lengths(value)
+    case value
+    when String
+      validate_string_length(value)
+    when Array
+      value.each { |item| validate_value_text_lengths(item) }
+    when Hash
+      value.each_value { |item| validate_value_text_lengths(item) }
+    end
+  end
+
+  def validate_string_length(str)
+    return if str.blank?
+    return unless str.length > TEXT_MAX_LENGTH
+
+    errors.add(:response_value, "must be #{TEXT_MAX_LENGTH} characters or fewer")
+  end
+
   def evidence_question?
     question.present? && question.question_type == "evidence"
+  end
+
+  def integer_question?
+    question.present? && question.question_type == "integer"
+  end
+
+  def validate_integer_response
+    value = answer
+    candidate = case value
+    when String
+                  value.strip
+    when Numeric
+                  value.to_i.to_s
+    when Hash
+                  (value["answer"] || value[:answer] || value["text"] || value[:text] || value["value"] || value[:value]).to_s.strip
+    else
+                  value.to_s.strip
+    end
+
+    return if candidate.blank?
+    unless candidate.match?(/\A\d+\z/)
+      errors.add(:response_value, "must be a whole number")
+      return
+    end
+
+    numeric_value = candidate.to_i
+    min = question.respond_to?(:integer_min_value) ? question.integer_min_value : 1
+    max = question.respond_to?(:integer_max_value) ? question.integer_max_value : nil
+
+    if numeric_value < min
+      errors.add(:response_value, "must be greater than or equal to #{min}")
+      return
+    end
+
+    return if max.nil?
+    return if numeric_value <= max
+
+    errors.add(:response_value, "must be less than or equal to #{max}")
   end
 
   def normalize_response_value
@@ -80,6 +146,6 @@ class StudentQuestion < ApplicationRecord
     end
 
     return if link_str.blank?
-    errors.add(:response_value, "must be a publicly shareable Google link") unless link_str =~ GOOGLE_URL_REGEX
+    errors.add(:response_value, "must be a published Google Sites link") unless link_str =~ GOOGLE_URL_REGEX
   end
 end

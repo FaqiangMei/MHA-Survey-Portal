@@ -1,7 +1,7 @@
-<%= form_with(model: question, local: true) do |form| %>
+<%= form_with(model: question, local: true, data: { controller: "markdown-editor" }) do |form| %>
   <% if question.errors.any? %>
     <div style="color: red">
-      <h2><%= pluralize(question.errors.count, "error") %> prohibited this question from being saved:</h2>
+      <h2 class="c-panel-title"><%= pluralize(question.errors.count, "error") %> prohibited this question from being saved:</h2>
 
       <ul>
         <% question.errors.each do |error| %>
@@ -13,7 +13,7 @@
 
   <div>
     <%= form.label :category_id, style: "display: block" %>
-    <%= form.collection_select :category_id, Category.order(:name), :id, :name, include_blank: true %>
+    <%= form.collection_select :category_id, Category.order(:name), :id, :name, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>
@@ -40,7 +40,7 @@
 
   <div>
     <%= form.label :question_type, style: "display: block" %>
-    <%= form.select :question_type, Question.question_types.keys.map { |key| [key.titleize, key] }, include_blank: true %>
+    <%= form.select :question_type, Question.question_types.keys.map { |key| [key.titleize, key] }, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>
@@ -48,6 +48,13 @@
     <%= form.text_field :answer_options %>
     <small>Comma-separated list for multiple choice and scale questions.</small>
   </div>
+
+  <% if form.object.respond_to?(:has_feedback) %>
+    <div>
+      <%= form.label :has_feedback, "Advisor feedback required?", style: "display: block" %>
+      <%= form.check_box :has_feedback %>
+    </div>
+  <% end %>
 
   <div>
     <% if question.persisted? %>

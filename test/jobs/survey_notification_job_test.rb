@@ -24,16 +24,19 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
 
     notification = Notification.last
     assert_equal @assignment.student.user, notification.user
-    assert_equal "New Survey Assigned", notification.title
-    assert_match @assignment.survey.title, notification.message
+    assert_equal "New Competency Survey Assigned", notification.title
+    assert_equal "You were assigned the competency survey '#{@assignment.survey.title}'.", notification.message
+    assert_equal "survey.assigned", notification.event_key
+    assert_equal "survey.assigned:survey_assignment:#{@assignment.id}", notification.dedupe_key
+    assert_equal @assignment.survey_id, notification.metadata["survey_id"]
   end
 
-  test "assigned event includes advisor name in message" do
+  test "assigned event does not include advisor name in message" do
     SurveyNotificationJob.perform_now(event: :assigned, survey_assignment_id: @assignment.id)
 
     notification = Notification.last
     advisor_name = @assignment.advisor.user.display_name
-    assert_match advisor_name, notification.message
+    refute_match advisor_name, notification.message
   end
 
   test "assigned event handles missing advisor gracefully" do
@@ -41,7 +44,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
       survey: @survey,
       advisor: nil,
       assigned_at: 2.days.ago,
-      due_date: 3.days.from_now
+      available_until: 3.days.from_now
     )
 
     assert_difference -> { Notification.count }, 1 do
@@ -49,46 +52,40 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     end
 
     notification = Notification.last
-    assert_includes notification.message, "Your advisor"
-  end
-
-
-  # Test :completed event
-  test "completed event notifies advisor" do
-    assert_difference -> { Notification.count }, 1 do
-      SurveyNotificationJob.perform_now(event: :completed, survey_assignment_id: @assignment.id)
-    end
-
-    notification = Notification.last
-    assert_equal @assignment.advisor.user, notification.user
-    assert_equal "Student Survey Completed", notification.title
-    assert_match @assignment.student.full_name, notification.message
-    assert_match @assignment.survey.title, notification.message
-  end
-
-  test "completed event does not notify if no advisor" do
-    assignment_without_advisor = create_assignment_for(
-      survey: @survey,
-      advisor: nil,
-      assigned_at: 1.week.ago,
-      due_date: 1.week.from_now
-    )
-
-    assert_no_difference -> { Notification.count } do
-      SurveyNotificationJob.perform_now(event: :completed, survey_assignment_id: assignment_without_advisor.id)
-    end
+    assert_equal "You were assigned the competency survey '#{assignment_without_advisor.survey.title}'.", notification.message
   end
 
   # Test :response_submitted event
-  test "response submitted event thanks student" do
-    assert_difference -> { Notification.count }, 1 do
+  test "response submitted event thanks student and notifies advisor" do
+    assert_difference -> { Notification.count }, 2 do
       SurveyNotificationJob.perform_now(event: :response_submitted, survey_assignment_id: @assignment.id)
     end
 
-    notification = Notification.last
-    assert_equal @assignment.student.user, notification.user
-    assert_equal "Survey Submitted", notification.title
-    assert_match @assignment.survey.title, notification.message
+    student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Submitted", notifiable: @assignment)
+    assert_match @assignment.survey.title, student_notification.message
+    assert_equal "survey.response.submitted", student_notification.event_key
+
+    advisor_notification = Notification.find_by!(user: @assignment.advisor.user, title: "Advisee Survey Submitted", notifiable: @assignment)
+    assert_match @assignment.student.full_name, advisor_notification.message
+    assert_match @assignment.survey.title, advisor_notification.message
+    assert_equal "advisee.response.submitted", advisor_notification.event_key
+  end
+
+  test "response submitted event labels advisor notification as edited for revisions" do
+    assert_difference -> { Notification.count }, 2 do
+      SurveyNotificationJob.perform_now(
+        event: :response_submitted,
+        survey_assignment_id: @assignment.id,
+        metadata: { revision: true }
+      )
+    end
+
+    student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Revision Received", notifiable: @assignment)
+    assert_match "updated responses", student_notification.message
+    assert_equal "survey.response.revised", student_notification.event_key
+
+    advisor_notification = Notification.find_by!(user: @assignment.advisor.user, title: "Advisee Survey Edited", notifiable: @assignment)
+    assert_match "updated", advisor_notification.message
   end
 
   test "response submitted event does not notify if no student user" do
@@ -109,31 +106,127 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     end
   end
 
-  # Test :due_soon event
-  test "due soon event notifies student about upcoming deadline" do
-    @assignment.update!(due_date: 3.days.from_now)
+  # Test :feedback_received event
+  test "feedback received event notifies student" do
+    feedback = feedbacks(:advisor_feedback)
 
     assert_difference -> { Notification.count }, 1 do
-      SurveyNotificationJob.perform_now(event: :due_soon, survey_assignment_id: @assignment.id)
+      SurveyNotificationJob.perform_now(
+        event: :feedback_received,
+        feedback_id: feedback.id,
+        metadata: { kind: "submitted" }
+      )
     end
 
     notification = Notification.last
     assert_equal @assignment.student.user, notification.user
-    assert_equal "Survey Due Soon", notification.title
+    assert_equal "Advisor Feedback Submitted", notification.title
     assert_match @assignment.survey.title, notification.message
-    assert_match /due in/, notification.message
+    assert_match "Review it in your survey record", notification.message
+    assert_equal "feedback.submitted", notification.event_key
+    assert_equal "submitted", notification.metadata["kind"]
+  end
+
+  test "feedback received event can notify student of revised feedback" do
+    feedback = feedbacks(:advisor_feedback)
+
+    assert_difference -> { Notification.count }, 1 do
+      SurveyNotificationJob.perform_now(
+        event: :feedback_received,
+        feedback_id: feedback.id,
+        metadata: { kind: "revised" }
+      )
+    end
+
+    notification = Notification.last
+    assert_equal @assignment.student.user, notification.user
+    assert_equal "Advisor Feedback Revised", notification.title
+    assert_match @assignment.survey.title, notification.message
+    assert_match "updated feedback", notification.message
+    assert_equal "feedback.revised", notification.event_key
+    assert_equal "revised", notification.metadata["kind"]
+  end
+
+  test "feedback received event skips when assignment missing" do
+    feedback = feedbacks(:advisor_feedback)
+    SurveyAssignment.where(student_id: feedback.student_id, survey_id: feedback.survey_id).delete_all
+
+    assert_no_difference -> { Notification.count } do
+      SurveyNotificationJob.perform_now(event: :feedback_received, feedback_id: feedback.id)
+    end
+  end
+
+  test "feedback received event skips when feedback is draft" do
+    feedback = feedbacks(:advisor_feedback)
+    AdvisorFeedbackSubmission.where(
+      student_id: feedback.student_id,
+      survey_id: feedback.survey_id,
+      advisor_id: feedback.advisor_id
+    ).delete_all
+
+    assert_no_difference -> { Notification.count } do
+      SurveyNotificationJob.perform_now(event: :feedback_received, feedback_id: feedback.id)
+    end
+  end
+
+  # Test :student_revised_after_feedback event
+  test "student revised after feedback notifies advisor and admins" do
+    assert User.admins.exists?
+
+    expected_recipients = 1 + User.admins.count
+
+    assert_difference -> { Notification.count }, expected_recipients do
+      SurveyNotificationJob.perform_now(event: :student_revised_after_feedback, survey_assignment_id: @assignment.id)
+    end
+
+    notifications = Notification.last(expected_recipients)
+    recipients = notifications.map(&:user)
+
+    assert_includes recipients, @assignment.advisor.user
+    User.admins.find_each { |admin_user| assert_includes recipients, admin_user }
+
+    notifications.each do |notification|
+      assert_equal "Competency Survey Updated After Feedback", notification.title
+      assert_match @assignment.student.full_name, notification.message
+      assert_match @assignment.survey.title, notification.message
+    end
+  end
+
+  test "student revised after feedback skips when no feedback exists" do
+    Feedback.where(student_id: @assignment.student_id, survey_id: @assignment.survey_id).delete_all
+
+    assert_no_difference -> { Notification.count } do
+      SurveyNotificationJob.perform_now(event: :student_revised_after_feedback, survey_assignment_id: @assignment.id)
+    end
+  end
+
+  # Test :due_soon event
+  test "due soon event notifies student about upcoming deadline" do
+    @assignment.update!(available_until: 3.days.from_now)
+
+    assert_difference -> { Notification.count }, 1 do
+      assert_enqueued_jobs 1, only: NotificationEmailDeliveryJob do
+        SurveyNotificationJob.perform_now(event: :due_soon, survey_assignment_id: @assignment.id)
+      end
+    end
+
+    notification = Notification.last
+    assert_equal @assignment.student.user, notification.user
+    assert_equal "Competency Survey Closing Soon", notification.title
+    assert_match @assignment.survey.title, notification.message
+    assert_match /closes in/, notification.message
   end
 
   test "due soon event skips completed assignments" do
-    @assignment.update!(due_date: 3.days.from_now, completed_at: Time.current)
+    @assignment.update!(available_until: 3.days.from_now, completed_at: Time.current)
 
     assert_no_difference -> { Notification.count } do
       SurveyNotificationJob.perform_now(event: :due_soon, survey_assignment_id: @assignment.id)
     end
   end
 
-  test "due soon event skips assignments without due date" do
-    @assignment.update!(due_date: nil)
+  test "due soon event skips assignments without a closing time" do
+    @assignment.update!(available_until: nil)
 
     assert_no_difference -> { Notification.count } do
       SurveyNotificationJob.perform_now(event: :due_soon, survey_assignment_id: @assignment.id)
@@ -141,8 +234,8 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
   end
 
   # Test :past_due event
-  test "past due event notifies student about overdue survey" do
-    @assignment.update!(due_date: 2.days.ago)
+  test "past due event notifies student when survey closes" do
+    @assignment.update!(available_until: 2.days.ago)
 
     assert_difference -> { Notification.count }, 1 do
       SurveyNotificationJob.perform_now(event: :past_due, survey_assignment_id: @assignment.id)
@@ -150,21 +243,21 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
 
     notification = Notification.last
     assert_equal @assignment.student.user, notification.user
-    assert_equal "Survey Past Due", notification.title
+    assert_equal "Competency Survey Closed", notification.title
     assert_match @assignment.survey.title, notification.message
-    assert_match /past due/i, notification.message
+    assert_match /now closed/i, notification.message
   end
 
   test "past due event skips completed assignments" do
-    @assignment.update!(due_date: 2.days.ago, completed_at: Time.current)
+    @assignment.update!(available_until: 2.days.ago, completed_at: Time.current)
 
     assert_no_difference -> { Notification.count } do
       SurveyNotificationJob.perform_now(event: :past_due, survey_assignment_id: @assignment.id)
     end
   end
 
-  test "past due event skips assignments without due date" do
-    @assignment.update!(due_date: nil)
+  test "past due event skips assignments without a closing time" do
+    @assignment.update!(available_until: nil)
 
     assert_no_difference -> { Notification.count } do
       SurveyNotificationJob.perform_now(event: :past_due, survey_assignment_id: @assignment.id)
@@ -189,7 +282,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     recipients = notifications.map(&:user)
     assert_includes recipients, @advisor.user
     assert_includes recipients, other_advisor.user
-    assert_equal "Survey Updated", notifications.first.title
+    assert_equal "Competency Survey Updated", notifications.first.title
     assert_match "Questions updated.", notifications.first.message
   end
 
@@ -218,13 +311,12 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     end
 
     Notification.last(expected_notifications).each do |notification|
-      assert_equal "Survey Updated", notification.title
+      assert_equal "Competency Survey Updated", notification.title
     end
   end
 
   # Test :survey_archived event
   test "survey archived event notifies all students with assignments" do
-    other_student = students(:other_student)
     expected_notifications = distinct_student_ids_for(@survey.id).size
     assert expected_notifications >= 2
 
@@ -234,9 +326,14 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
 
     notifications = Notification.last(expected_notifications)
     recipients = notifications.map(&:user)
-    assert_includes recipients, @student.user
-    assert_includes recipients, other_student.user
-    assert_equal "Survey Archived", notifications.first.title
+
+    expected_student_ids = distinct_student_ids_for(@survey.id)
+    expected_student_users = Student.includes(:user).where(student_id: expected_student_ids).map(&:user)
+    expected_student_users.each do |expected_user|
+      assert_includes recipients, expected_user
+    end
+
+    assert_equal "Competency Survey Archived", notifications.first.title
     assert_match @survey.title, notifications.first.message
   end
 
@@ -265,7 +362,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     expected_recipients.each do |user|
       assert_includes recipients, user
     end
-    assert_equal "Question Updated", Notification.last.title
+    assert_equal "Competency Question Updated", Notification.last.title
   end
 
   test "question updated event includes editor name in message" do
@@ -463,7 +560,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
       student: nil,
       advisor: nil,
       assigned_at: 1.week.ago,
-      due_date: 1.week.from_now
+      available_until: 1.week.from_now
     )
 
     assert_nothing_raised do
@@ -475,9 +572,26 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     end
   end
 
+  test "dispatcher skips notification delivery when recipient user is missing" do
+    dispatcher = Notifications::SurveyEventDispatcher.new
+
+    assert_no_difference -> { Notification.count } do
+      assert_nil dispatcher.send(
+        :deliver_event!,
+        user: nil,
+        event_key: "orphan.event",
+        dedupe_key: "orphan.event:test",
+        title: "Orphan event",
+        message: "This event has no recipient."
+      )
+    end
+
+    assert_nothing_raised { dispatcher.send(:enqueue_notification_email, nil) }
+  end
+
   private
 
-  def create_assignment_for(student: nil, survey: @survey, advisor: advisors(:advisor), assigned_at: 1.day.ago, due_date: 1.week.from_now)
+  def create_assignment_for(student: nil, survey: @survey, advisor: advisors(:advisor), assigned_at: 1.day.ago, available_until: 1.week.from_now)
     student ||= build_temp_student(advisor: advisor)
 
     SurveyAssignment.create!(
@@ -485,7 +599,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
       student: student,
       advisor: advisor,
       assigned_at: assigned_at,
-      due_date: due_date
+      available_until: available_until
     )
   end
 

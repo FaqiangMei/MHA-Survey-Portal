@@ -62,18 +62,16 @@
       }
 
       .chart-legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
+        display: block;
         margin-bottom: 12px;
         font-size: 12px;
         color: #475569;
       }
 
       .chart-legend__item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        display: inline-block;
+        margin-right: 14px;
+        margin-bottom: 6px;
       }
 
       .chart-legend__swatch {
@@ -120,37 +118,45 @@
       }
 
       .chart-horizontal {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
+        display: block;
       }
 
       .chart-horizontal__row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        display: table;
+        width: 100%;
+        table-layout: fixed;
+        margin-bottom: 12px;
         font-size: 12px;
         color: #334155;
       }
 
       .chart-horizontal__label {
-        width: 160px;
+        display: table-cell;
+        width: 180px;
         font-weight: 600;
         word-break: break-word;
+        padding-right: 12px;
+        vertical-align: middle;
+        color: #0f172a;
       }
 
       .chart-horizontal__bar {
-        flex: 1;
-        height: 20px;
-        display: flex;
+        display: table-cell;
+        height: 18px;
         border-radius: 6px;
         overflow: hidden;
         background-color: #e2e8f0;
+        vertical-align: middle;
       }
 
       .chart-horizontal__value {
-        width: 64px;
+        display: table-cell;
+        width: 70px;
         text-align: right;
+        padding-left: 12px;
+        vertical-align: middle;
+        font-size: 12px;
+        color: #0f172a;
       }
 
       .chart-comparison {
@@ -221,6 +227,58 @@
       .chart-segment {
         display: block;
         width: 100%;
+      }
+
+      /*
+        wkhtmltopdf renders with a very old WebKit that doesn't support the
+        CSS flexbox `gap` property -- flex rows using `gap` for spacing
+        collapse their spacing entirely, causing labels/bars/values to
+        overlap. Use table/table-cell display instead (like
+        .chart-horizontal above), which renders reliably.
+      */
+      .chart-metric-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .chart-metric-card__title {
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+        color: #0f172a;
+      }
+
+      .chart-metric-row {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
+        margin-bottom: 0.35rem;
+      }
+
+      .chart-metric-row__label {
+        display: table-cell;
+        width: 110px;
+        font-size: 0.85rem;
+        color: #475569;
+        vertical-align: middle;
+        padding-right: 0.5rem;
+      }
+
+      .chart-metric-row__track {
+        display: table-cell;
+        background-color: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+        vertical-align: middle;
+      }
+
+      .chart-metric-row__fill {
+        display: block;
+        color: #fff;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
       }
     </style>
   </head>

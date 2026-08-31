@@ -1,0 +1,42 @@
+<nav class="c-card c-card--tight" aria-label="Survey editor tabs">
+  <div role="tablist" aria-label="Survey editor" class="u-grid u-grid--dense" style="--u-grid-min: 12rem">
+    <button type="button"
+            role="tab"
+            id="tab-settings"
+            class="<%= button_classes(:primary, extra_classes: 'btn-sm u-w-full u-justify-center') %>"
+            data-survey-tabs-target="tab"
+            data-tab-id="settings"
+            data-action="survey-tabs#switchTab keydown->survey-tabs#handleKeydown"
+            aria-selected="true"
+            aria-controls="panel-settings"
+            tabindex="0">
+      General settings
+    </button>
+
+    <button type="button"
+            role="tab"
+            id="tab-builder"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm u-w-full u-justify-center') %>"
+            data-survey-tabs-target="tab"
+            data-tab-id="builder"
+            data-action="survey-tabs#switchTab keydown->survey-tabs#handleKeydown"
+            aria-selected="false"
+            aria-controls="panel-builder"
+            tabindex="-1">
+      Question builder
+    </button>
+
+    <button type="button"
+            role="tab"
+            id="tab-legend"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm u-w-full u-justify-center') %>"
+            data-survey-tabs-target="tab"
+            data-tab-id="legend"
+            data-action="survey-tabs#switchTab keydown->survey-tabs#handleKeydown"
+            aria-selected="false"
+            aria-controls="panel-legend"
+            tabindex="-1">
+      Legend
+    </button>
+  </div>
+</nav>

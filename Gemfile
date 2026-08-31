@@ -4,7 +4,7 @@ ruby "3.4.6"
 source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem "rails", "~> 8.0.3"
+gem "rails", "~> 8.1.0"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 gem "propshaft"
 gem "tailwindcss-rails"
@@ -20,6 +20,11 @@ gem "turbo-rails"
 gem "stimulus-rails"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
+gem "csv"
+gem "commonmarker"
+
+# View components (extract reusable UI into Ruby components)
+gem "view_component"
 
 group :development do
   # Provide wkhtmltopdf binary for local PDF generation
@@ -31,6 +36,17 @@ gem "wicked_pdf"
 
 # Excel export support
 gem "caxlsx"
+gem "roo"
+
+# Streaming xlsx reader -- unlike Roo, doesn't load the whole workbook into
+# memory at once. Used for the largest grade-import files (see
+# GradeImports::BatchProcessor).
+gem "creek"
+
+# Bundles multiple generated PDFs into one download (see
+# ReportsController#export_by_cohort). Already present transitively via
+# caxlsx/active_storage; pinned here since we call it directly.
+gem "rubyzip", require: "zip"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
@@ -83,6 +99,11 @@ group :development do
 end
 
 group :test do
+  # Pin below Minitest 6, which split minitest/mock into a separate gem and
+  # breaks test_helper.rb's require. Revisit when the app is ready to adopt
+  # Minitest 6 deliberately.
+  gem "minitest", "~> 5.25"
+
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
   gem "selenium-webdriver"

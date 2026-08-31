@@ -1,0 +1,41 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">People admin</p>
+          <h1 class="c-page-title c-page-title--brand">People Management</h1>
+          <p class="c-page-subtitle">Manage member access and student assignments from one workspace.</p>
+        </div>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+      </header>
+    </section>
+
+    <section class="c-card u-stack u-stack--xl">
+      <% tabs = [
+        ["Members", "members", "Roles, permissions, and account cleanup"],
+        ["Students", "students", "Advisors, tracks, and assignment groups"]
+      ] %>
+
+      <nav class="c-tab-list" aria-label="People management sections">
+        <% tabs.each do |label, value, description| %>
+          <% active = (@people_tab == value) %>
+          <%= link_to label,
+                people_management_path(tab: value),
+                class: "c-tab-link #{active ? 'is-active' : ''}",
+                title: description,
+                aria: (active ? { current: "page" } : {}),
+                data: { turbo: false } %>
+        <% end %>
+      </nav>
+
+      <div>
+        <% if @people_tab == "students" %>
+          <%= render "dashboards/people_students_tab" %>
+        <% else %>
+          <%= render "dashboards/people_members_tab" %>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</main>

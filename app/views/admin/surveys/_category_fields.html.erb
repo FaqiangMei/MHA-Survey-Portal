@@ -1,56 +1,120 @@
 <% category = category_fields.object %>
 <% section_options = local_assigns[:section_options] || [["No section", ""]] %>
+<% position_supported = Category.column_names.include?("position") %>
 <% selected_section_key = category.section_form_uid.presence %>
 <% if selected_section_key.blank? && category.respond_to?(:survey_section_id) && category.survey_section_id.present? %>
   <% selected_section_key = "section-#{category.survey_section_id}" %>
   <% category.section_form_uid = selected_section_key if category.respond_to?(:section_form_uid=) %>
 <% end %>
-<article class="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+<% category_uid = category.persisted? ? "category-#{category.id}" : "category-temp-#{category.object_id}" %>
+<article id="<%= category_uid %>"
+         class="c-card c-builder-node c-builder-collapsible u-stack u-stack--lg"
+         data-builder-kind="category"
+         data-builder-label="<%= category.name.to_s.strip.presence || 'Untitled category' %>"
          data-category-fields-target="item">
-  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-    <div class="flex-1 space-y-2">
+  <div class="u-responsive-split u-items-start">
+    <div class="u-flex-1 u-stack u-stack--sm">
       <%= category_fields.hidden_field :id %>
-      <%= category_fields.label :name, "Category name", class: "block text-sm font-medium text-slate-700" %>
+      <%= category_fields.hidden_field :_destroy, value: 0 %>
+      <% if position_supported %>
+        <%= category_fields.hidden_field :position %>
+      <% end %>
+
+      <div class="u-actions u-actions--split">
+        <span class="js-drag-handle c-builder-sort-handle" aria-label="Drag to reorder">
+          ⋮⋮
+        </span>
+        <div class="c-builder-node__meta">
+          <span class="c-builder-node__kind c-builder-node__kind--category">Category</span>
+          <button type="button"
+                  class="c-builder-toggle"
+                  data-action="survey-builder#toggleCategory"
+                  data-category-id="<%= category_uid %>">
+            Toggle
+          </button>
+        </div>
+      </div>
+      <%= category_fields.label :name, "Category name", class: "c-label" %>
       <%= category_fields.text_field :name,
                                      required: true,
                                      class: input_classes,
                                      placeholder: "Leadership" %>
 
-      <div class="space-y-2">
-        <%= category_fields.label :section_form_uid, "Section assignment", class: "block text-sm font-medium text-slate-700" %>
+      <div class="c-field">
+        <%= category_fields.label :section_form_uid, "Section assignment", class: "c-label" %>
         <%= category_fields.select :section_form_uid,
                                    options_for_select(section_options, selected_section_key),
                                    { include_blank: false },
                                    class: input_classes,
                                    data: { category_fields_target: "sectionSelect" } %>
-        <p class="text-xs text-slate-500">Choose the section this category belongs to or select "No section".</p>
+        <p class="c-help">Choose the section this category belongs to or select "No section".</p>
       </div>
+
+      <%# Display order is controlled via drag-and-drop. %>
     </div>
 
-    <% if category.persisted? %>
-      <label class="flex items-center gap-2 text-sm font-medium text-rose-600">
-        <%= category_fields.check_box :_destroy, class: checkbox_classes %>
-        <span>Remove category</span>
-      </label>
-    <% else %>
-      <button type="button"
-              class="text-sm font-medium text-rose-600"
-              data-action="category-fields#remove">
-        Remove category
-      </button>
-    <% end %>
+    <button type="button"
+            class="<%= button_classes(:danger, extra_classes: 'btn-sm') %>"
+            data-action="category-fields#remove">
+      <span>Remove</span>
+    </button>
   </div>
 
-  <div class="space-y-5">
-    <div class="space-y-2">
-      <%= category_fields.label :description, "Description", class: "block text-sm font-medium text-slate-700" %>
+  <div class="c-builder-collapsible__body u-stack u-stack--md" data-builder-category-body>
+    <div class="c-field">
+      <%= category_fields.label :description, "Description", class: "c-label" %>
       <%= category_fields.text_area :description, class: textarea_classes, placeholder: "Optional context shown to advisors and students." %>
     </div>
 
-    <div class="space-y-4" data-controller="question-fields">
-      <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-600">Questions</h3>
-      <div class="space-y-4" data-question-fields-target="container">
-        <%= category_fields.fields_for :questions do |question_fields| %>
+    <div class="u-stack u-stack--md" data-controller="question-fields">
+      <h3 class="c-builder-panel__title">
+        <span>Questions</span>
+      </h3>
+
+      <%# Ensure parent questions and sub-questions render in a stable order.
+          Parents: question_order asc.
+          Sub-questions: immediately after their parent, by sub_question_order asc.
+      %>
+      <% questions_for_render = category.questions.to_a %>
+      <% parent_order_by_id = questions_for_render.each_with_object({}) do |q, memo|
+           memo[q.id] = q.question_order.to_i if q.id.present? && (!q.respond_to?(:parent_question_id) || q.parent_question_id.blank?)
+         end %>
+      <% reflection_base_order = {} %>
+      <% questions_for_render.each do |q| %>
+        <% next if q.respond_to?(:parent_question_id) && q.parent_question_id.present? %>
+        <% text = q.question_text.to_s.strip %>
+        <% next if text.blank? %>
+        <% is_reflection = text.match?(/\s+Reflection\z/i) %>
+        <% next if is_reflection %>
+        <% base_key = text.downcase %>
+        <% order = q.question_order.to_i %>
+        <% order = 9_999 if order == 0 %>
+        <% reflection_base_order[base_key] = order %>
+      <% end %>
+      <% ordered_questions_for_render = questions_for_render.sort_by do |q|
+           is_sub = q.respond_to?(:parent_question_id) && q.parent_question_id.present?
+           if is_sub
+             parent_order = parent_order_by_id[q.parent_question_id] || 9_999
+             sub_order = q.respond_to?(:sub_question_order) ? q.sub_question_order.to_i : 9_999
+             [parent_order, 1, sub_order, q.id.to_i.nonzero? || 9_999_999, q.object_id]
+           else
+             text = q.question_text.to_s.strip
+             order = q.question_order.to_i
+             order = 9_999 if order == 0
+
+             reflection_match = text.match(/\A(.+?)\s+Reflection\z/i)
+             if reflection_match
+               base_key = reflection_match[1].to_s.strip.downcase
+               paired_order = reflection_base_order[base_key] || order
+               [paired_order, 0, 1, order, q.id.to_i.nonzero? || 9_999_999, q.object_id]
+             else
+               [order, 0, 0, order, q.id.to_i.nonzero? || 9_999_999, q.object_id]
+             end
+           end
+         end %>
+
+      <div class="u-stack u-stack--md" data-question-fields-target="container">
+        <%= category_fields.fields_for :questions, ordered_questions_for_render do |question_fields| %>
           <%= render "admin/surveys/question_fields",
                      question_fields: question_fields,
                      input_classes: input_classes,
@@ -59,7 +123,13 @@
         <% end %>
       </div>
 
-      <% new_question = category.questions.build(question_text: "", question_order: (category.questions.maximum(:question_order) || 0) + 1) %>
+      <% new_question = category.questions.build(
+           question_text: "New question",
+           question_type: (@question_types.first || Question.question_types.keys.first),
+           question_order: (category.questions.maximum(:question_order) || 0) + 1,
+           is_required: false,
+           has_evidence_field: false
+         ) %>
       <% template = capture do %>
         <%= category_fields.fields_for(:questions, new_question, child_index: "NEW_QUESTION") do |question_fields| %>
           <%= render "admin/surveys/question_fields",
@@ -74,7 +144,7 @@
       <template data-question-fields-target="template"><%= template %></template>
 
       <button type="button"
-              class="rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400"
+              class="c-builder-add-button"
               data-action="question-fields#add">
         + Add another question
       </button>

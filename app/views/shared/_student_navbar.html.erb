@@ -1,56 +1,91 @@
 <!-- Student Navigation Header -->
-<header class="app-header" role="banner">
-  <div class="header-content">
-    <div class="header-left">
-      <div class="logo" aria-label="Texas A&amp;M University">
-        <div class="logo-icon" aria-hidden="true"></div>
-        <div class="logo-text">
-          TEXAS A&M<br>
-          UNIVERSITY
+<header class="c-app-header" role="banner">
+  <% if impersonating? %>
+    <div class="flash flash__warning impersonation-banner" role="status">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          Viewing as <strong><%= current_user&.display_name %></strong> (read-only)
+          <% if impersonator_user.present? %>
+            <span class="opacity-80">— signed in as <%= impersonator_user.display_name %></span>
+          <% end %>
         </div>
+        <%= link_to "Exit view",
+                    impersonation_path,
+                    method: :delete,
+                    class: "underline whitespace-nowrap" %>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="c-app-header__content">
+    <div class="c-app-header__left c-app-header__left--brand-only">
+      <%= link_to student_dashboard_path, class: "c-brand-link", aria: { label: "Texas A&M University home" } do %>
+        <div class="c-brand-logo" aria-hidden="true"></div>
+        <span class="sr-only">Texas A&amp;M University</span>
+      <% end %>
+
+      <button type="button"
+              class="c-mobile-menu-button"
+              data-mobile-nav-toggle
+              aria-label="Open navigation menu"
+              aria-controls="student-mobile-nav"
+              aria-expanded="false">
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <div id="student-mobile-nav" class="c-nav-drawer" data-mobile-nav-drawer aria-label="Student navigation">
+      <div class="c-nav-drawer__header">
+        <span class="c-nav-drawer__title">Student Menu</span>
+        <button type="button" class="c-nav-drawer__close" data-mobile-nav-close aria-label="Close navigation menu">&times;</button>
       </div>
 
-      <nav class="nav-links" aria-label="Primary">
+      <nav class="c-nav-links" aria-label="Primary">
         <%= link_to "Home",
                     student_dashboard_path,
-                    class: "nav-link #{'active' if current_page?(student_dashboard_path)}" %>
+                    class: "c-nav-link #{'active' if current_page?(student_dashboard_path)}" %>
 
         <%= link_to "Survey",
                     surveys_path,
-                    class: "nav-link #{'active' if controller_name == 'surveys'}" %>
+                    class: "c-nav-link #{'active' if controller_name == 'surveys'}" %>
+
+        <%= link_to "Competencies",
+                    student_competencies_path,
+                    class: "c-nav-link #{'active' if controller_name == 'student_competencies'}" %>
+
+        <%= link_to "FAQ",
+              faq_path,
+              class: "c-nav-link #{'active' if current_page?(faq_path)}" %>
       </nav>
-    </div>
 
-    <div class="user-section">
-      <!-- High contrast toggle -->
-      <button
-        type="button"
-        class="btn btn-secondary"
-        data-high-contrast-toggle="true"
-        aria-pressed="false"
-        aria-label="Toggle high contrast mode">
-        High Contrast: Off
-      </button>
+      <div class="c-user-section">
+      <%= render ToggleSwitchComponent.new(
+        id: "high-contrast-toggle",
+        checked: false,
+        label: "High Contrast",
+        data: { high_contrast_toggle: true }
+      ) %>
 
-      <!-- Text-to-speech toggle -->
-      <button
-        type="button"
-        class="btn btn-secondary"
-        data-tts-toggle="true"
-        aria-pressed="false"
-        aria-label="Read this page aloud">
-        Read Page Aloud
-      </button>
+      <%= render ToggleSwitchComponent.new(
+        id: "tts-toggle",
+        checked: false,
+        label: "Read Aloud",
+        data: { tts_toggle: true }
+      ) %>
 
-      <span class="role-badge student">STUDENT</span>
+      <%= render "shared/translate_toggle" %>
 
-      <div class="notification-area">
+      <span class="c-role-badge c-role-badge--student">STUDENT</span>
+
+      <div>
         <%= render "shared/notification_menu" %>
       </div>
 
-      <div class="user-profile">
+      <div class="c-user-profile">
         <% avatar_url = current_user&.avatar_url.presence %>
-        <div class="user-avatar" title="<%= current_user&.full_name %>">
+        <div class="c-user-avatar" title="<%= current_user&.full_name %>">
           <% if avatar_url %>
             <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(current_user) %>" loading="lazy">
           <% else %>
@@ -60,9 +95,9 @@
         </div>
 
         <!-- Profile Dropdown -->
-        <div class="profile-dropdown">
-          <div class="profile-header">
-            <div class="user-avatar">
+        <div class="c-profile-popover">
+          <div class="c-profile-summary">
+            <div class="c-user-avatar">
               <% if avatar_url %>
                 <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(current_user) %>" loading="lazy">
               <% else %>
@@ -70,30 +105,33 @@
                 <span class="sr-only"><%= avatar_aria_label(current_user) %></span>
               <% end %>
             </div>
-            <div class="profile-info">
-              <h3><%= current_user&.full_name || "Student User" %></h3>
+            <div class="c-profile-info">
+              <h3 class="c-h3"><%= current_user&.full_name || "Student User" %></h3>
               <p><%= current_user&.email %></p>
             </div>
           </div>
 
-          <div class="profile-menu">
-            <%= link_to student_profile_path, class: "profile-menu-item" do %>
-              <div class="profile-menu-icon" aria-hidden="true">👤</div>
+          <div class="c-profile-actions">
+            <%= link_to account_path, class: "c-profile-action" do %>
+              <div class="c-profile-action__icon" aria-hidden="true">👤</div>
               <span>Account Information</span>
             <% end %>
-              <%= link_to settings_path, class: "profile-menu-item" do %>
-                <div class="profile-menu-icon" aria-hidden="true">⚙️</div>
+              <%= link_to settings_path, class: "c-profile-action" do %>
+                <div class="c-profile-action__icon" aria-hidden="true">⚙️</div>
                 <span>Settings</span>
               <% end %>
             <%= link_to destroy_user_session_path,
                         method: :delete,
-                        class: "profile-menu-item danger" do %>
-              <div class="profile-menu-icon" aria-hidden="true">🚪</div>
+                        class: "c-profile-action danger" do %>
+              <div class="c-profile-action__icon" aria-hidden="true">🚪</div>
               <span>Sign Out</span>
             <% end %>
           </div>
         </div>
       </div>
     </div>
+    </div>
+
+    <div class="c-nav-drawer-backdrop" data-mobile-nav-backdrop hidden></div>
   </div>
 </header>

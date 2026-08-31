@@ -12,8 +12,14 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Authentication Tests
-  test "edit requires authentication" do
+  test "show requires authentication" do
     get settings_path
+
+    assert_redirected_to new_user_session_path
+  end
+
+  test "edit requires authentication" do
+    get edit_settings_path
 
     assert_redirected_to new_user_session_path
   end
@@ -24,37 +30,121 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_user_session_path
   end
 
-  # Edit Action Tests
-  test "edit displays settings form for admin" do
-    sign_in @admin
-
-    get settings_path
-
-    assert_response :success
-  end
-
-  test "edit displays settings form for advisor" do
-    sign_in @advisor
-
-    get settings_path
-
-    assert_response :success
-  end
-
-  test "edit displays settings form for student" do
+  # Show Action Tests
+  test "show displays read only settings summary" do
     sign_in @student
 
     get settings_path
 
     assert_response :success
+    assert_includes response.body, "Workspace preferences"
+    assert_includes response.body, "Saved Settings"
+    assert_select "a[href=?]", edit_settings_path, text: "Edit"
+    assert_select "nav[aria-label='Account and settings navigation']"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?]", account_path, text: "Account"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].is-active", settings_path, text: "Settings"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].c-tab--danger", destroy_user_session_path, text: "Sign out"
+    assert_select "form[action=?] input#settings_in_app_notifications_enabled[type='checkbox']", settings_path
+    assert_select "input#settings_in_app_notifications_enabled[disabled]", count: 0
+    assert_select "form#settings-form", count: 0
+  end
+
+  test "show displays current preference values" do
+    sign_in @student
+    @student.update!(language: "es", text_scale_percent: 125)
+
+    get settings_path
+
+    assert_response :success
+    assert_includes response.body, "Spanish"
+    assert_includes response.body, "125%"
+  end
+
+  # Edit Action Tests
+  test "edit displays settings form for admin" do
+    sign_in @admin
+
+    get edit_settings_path
+
+    assert_response :success
+    assert_select "form#settings-form"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?]", account_path, text: "Account"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].is-active", settings_path, text: "Settings"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].c-tab--danger", destroy_user_session_path, text: "Sign out"
+  end
+
+  test "edit displays settings form for advisor" do
+    sign_in @advisor
+
+    get edit_settings_path
+
+    assert_response :success
+    assert_select "form#settings-form"
+  end
+
+  test "edit displays settings form for student" do
+    sign_in @student
+
+    get edit_settings_path
+
+    assert_response :success
+    assert_select "form#settings-form"
+  end
+
+  test "edit displays notification settings without email control when system email is disabled" do
+    sign_in @student
+    ENV.delete("EMAIL_NOTIFICATIONS_ENABLED")
+
+    get edit_settings_path
+
+    assert_response :success
+    assert_includes response.body, "Delivery Settings"
+    assert_includes response.body, "System email delivery"
+    assert_includes response.body, "EMAIL_NOTIFICATIONS_ENABLED"
+    assert_includes response.body, "In-app notifications"
+    assert_select "select[name='user[notifications_enabled]']", count: 0
+    assert_select "input#user_notifications_enabled", count: 0
+    assert_select "input#system_email_delivery_toggle[disabled]"
+    assert_select "input#user_in_app_notifications_enabled[type='checkbox']"
+    assert_select "input#user_in_app_notifications_enabled[disabled]", count: 0
+    assert_select "a[href=?]", notifications_path, text: "Open notifications", count: 0
+  end
+
+  test "edit displays email notification control when system email is enabled" do
+    sign_in @student
+    previous = ENV["EMAIL_NOTIFICATIONS_ENABLED"]
+    ENV["EMAIL_NOTIFICATIONS_ENABLED"] = "true"
+
+    get edit_settings_path
+
+    assert_response :success
+    assert_includes response.body, "Email notifications"
+    assert_select "select[name='user[notifications_enabled]']", count: 0
+    assert_select "input#user_notifications_enabled[type='checkbox']"
+  ensure
+    previous.nil? ? ENV.delete("EMAIL_NOTIFICATIONS_ENABLED") : ENV["EMAIL_NOTIFICATIONS_ENABLED"] = previous
   end
 
   test "edit assigns current user" do
     sign_in @admin
 
-    get settings_path
+    get edit_settings_path
 
     assert_response :success
+  end
+
+  test "edit includes scaled typography tokens when user sets text size" do
+    sign_in @admin
+    original_scale = @admin.text_scale_percent
+    @admin.update!(text_scale_percent: 200)
+
+    get edit_settings_path
+
+    assert_response :success
+    assert_includes @response.body, "--app-font-scale: 2.00"
+    assert_includes @response.body, "--font-size-base: calc(17px * var(--app-font-scale))"
+  ensure
+    @admin.update!(text_scale_percent: original_scale)
   end
 
   # Update Action Tests - Language
@@ -64,7 +154,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { language: "es" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_equal "es", @admin.language
   ensure
@@ -77,7 +167,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { language: "fr" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @advisor.reload
     assert_equal "fr", @advisor.language
   ensure
@@ -90,7 +180,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { language: "en" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @student.reload
     assert_equal "en", @student.language
   ensure
@@ -102,9 +192,9 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     sign_in @admin
     @admin.update!(notifications_enabled: false)
 
-    patch settings_path, params: { user: { notifications_enabled: "1" } }
+    patch settings_path, params: { user: { notifications_enabled: "true" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert @admin.notifications_enabled
   end
@@ -113,11 +203,31 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     sign_in @admin
     @admin.update!(notifications_enabled: true)
 
-    patch settings_path, params: { user: { notifications_enabled: "0" } }
+    patch settings_path, params: { user: { notifications_enabled: "false" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_not @admin.notifications_enabled
+  end
+
+  test "update allows disabling in app notifications" do
+    sign_in @admin
+    @admin.update!(in_app_notifications_enabled: true)
+
+    patch settings_path, params: { user: { in_app_notifications_enabled: "0" } }
+
+    assert_redirected_to settings_path
+    assert_not @admin.reload.in_app_notifications_enabled
+  end
+
+  test "update allows enabling in app notifications" do
+    sign_in @admin
+    @admin.update!(in_app_notifications_enabled: false)
+
+    patch settings_path, params: { user: { in_app_notifications_enabled: "1" } }
+
+    assert_redirected_to settings_path
+    assert @admin.reload.in_app_notifications_enabled
   end
 
   # Update Action Tests - Text Scale
@@ -126,7 +236,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { text_scale_percent: 120 } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_equal 120, @admin.text_scale_percent
   end
@@ -136,7 +246,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { text_scale_percent: 100 } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_equal 100, @admin.text_scale_percent
   end
@@ -146,7 +256,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { text_scale_percent: 200 } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_equal 200, @admin.text_scale_percent
   end
@@ -159,15 +269,17 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     patch settings_path, params: {
       user: {
         language: "es",
-        notifications_enabled: "1",
+        notifications_enabled: "true",
+        in_app_notifications_enabled: "false",
         text_scale_percent: 110
       }
     }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_equal "es", @admin.language
     assert @admin.notifications_enabled
+    assert_not @admin.in_app_notifications_enabled
     assert_equal 110, @admin.text_scale_percent
   ensure
     @admin.update!(language: original_language)
@@ -183,22 +295,22 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Redirect Behavior
-  test "update redirects to root path by default" do
+  test "update redirects to settings page by default" do
     sign_in @admin
 
     patch settings_path, params: { user: { language: "en" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
-  test "update redirects to referer when present" do
+  test "update redirects to settings page when referer is present" do
     sign_in @admin
 
     patch settings_path,
           params: { user: { language: "en" } },
           headers: { "HTTP_REFERER" => "/dashboard" }
 
-    assert_redirected_to "/dashboard"
+    assert_redirected_to settings_path
   end
 
   # Validation Errors
@@ -234,19 +346,20 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal original_email, @admin.email
   end
 
-  test "update only permits language notifications_enabled and text_scale_percent" do
+  test "update only permits language notification settings and text_scale_percent" do
     sign_in @admin
 
     patch settings_path, params: {
       user: {
         language: "en",
         notifications_enabled: "1",
+        in_app_notifications_enabled: "0",
         text_scale_percent: 100,
         role: "admin"
       }
     }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   # Edge Cases - removed empty params test as controller requires user param
@@ -266,7 +379,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { notifications_enabled: "1" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   test "advisor can update their settings" do
@@ -274,7 +387,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { notifications_enabled: "1" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   test "student can update their settings" do
@@ -282,7 +395,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { notifications_enabled: "1" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   # Updated At Timestamp
@@ -325,7 +438,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { notifications_enabled: true } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   test "update handles boolean false for notifications" do
@@ -333,7 +446,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { notifications_enabled: false } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   # Persistence Tests
@@ -362,6 +475,18 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     @admin.update!(notifications_enabled: original_notifications)
   end
 
+  test "update persists in app notifications changes" do
+    sign_in @admin
+    original_notifications = @admin.in_app_notifications_enabled
+
+    patch settings_path, params: { user: { in_app_notifications_enabled: !original_notifications } }
+
+    user_from_db = User.find(@admin.id)
+    assert_equal !original_notifications, user_from_db.in_app_notifications_enabled
+  ensure
+    @admin.update!(in_app_notifications_enabled: original_notifications)
+  end
+
   test "update persists text scale changes" do
     sign_in @admin
     original_scale = @admin.text_scale_percent
@@ -380,7 +505,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { text_scale_percent: "150" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
     @admin.reload
     assert_equal 150, @admin.text_scale_percent
   end
@@ -391,7 +516,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch settings_path, params: { user: { language: "en" } }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
   # Error Recovery Tests
@@ -428,10 +553,18 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Response Format Tests
-  test "edit returns HTML response" do
+  test "show returns HTML response" do
     sign_in @admin
 
     get settings_path
+
+    assert_equal "text/html; charset=utf-8", @response.content_type
+  end
+
+  test "edit returns HTML response" do
+    sign_in @admin
+
+    get edit_settings_path
 
     assert_equal "text/html; charset=utf-8", @response.content_type
   end
@@ -445,23 +578,23 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Referer Edge Cases
-  test "update handles invalid referer gracefully" do
+  test "update ignores invalid referer gracefully" do
     sign_in @admin
 
     patch settings_path,
           params: { user: { language: "en" } },
           headers: { "HTTP_REFERER" => "" }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 
-  test "update redirects to root when referer is blank" do
+  test "update redirects to settings when referer is blank" do
     sign_in @admin
 
     patch settings_path,
           params: { user: { language: "en" } },
           headers: { "HTTP_REFERER" => "   " }
 
-    assert_redirected_to root_path
+    assert_redirected_to settings_path
   end
 end

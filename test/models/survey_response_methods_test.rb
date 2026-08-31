@@ -62,6 +62,55 @@ class SurveyResponseMethodsTest < ActiveSupport::TestCase
     assert summary[:total_optional] >= 1
   end
 
+  test "required count updates when branch parent answer is yes" do
+    skip "Sub-questions not supported" unless Question.sub_question_columns_supported?
+
+    student = students(:student)
+    survey = surveys(:fall_2025)
+    StudentQuestion.where(student_id: student.student_id, question_id: survey.questions.select(:id)).delete_all
+
+    category = survey.categories.first || survey.categories.create!(name: "Test Category", description: "")
+
+    parent_question = category.questions.create!(
+      question_text: "Parent question",
+      question_order: 100,
+      question_type: "multiple_choice",
+      answer_options: %w[Yes No].to_json,
+      is_required: true
+    )
+    sub_question = category.questions.create!(
+      question_text: "Sub question",
+      question_order: parent_question.question_order,
+      question_type: "short_answer",
+      is_required: true,
+      parent_question: parent_question,
+      sub_question_order: 0
+    )
+
+    # Parent answered No => child branch question is not required.
+    StudentQuestion.create!(student_id: student.student_id, question: parent_question, response_value: "No")
+    sr = SurveyResponse.new(student: student, survey: survey)
+    summary = sr.progress_summary
+    required_when_no = summary[:total_required]
+    answered_when_no = summary[:answered_required]
+
+    # Parent answered Yes => child becomes required, raising required count.
+    parent_record = StudentQuestion.find_by!(student_id: student.student_id, question_id: parent_question.id)
+    parent_record.update!(response_value: "Yes")
+
+    sr2 = SurveyResponse.new(student: student, survey: survey)
+    summary2 = sr2.progress_summary
+    assert_equal required_when_no + 1, summary2[:total_required]
+    assert_equal answered_when_no, summary2[:answered_required]
+
+    # Once child is answered, required answered count catches up.
+    StudentQuestion.create!(student_id: student.student_id, question: sub_question, response_value: "Sub answer")
+    sr3 = SurveyResponse.new(student: student, survey: survey)
+    summary3 = sr3.progress_summary
+    assert_equal required_when_no + 1, summary3[:total_required]
+    assert_equal answered_when_no + 1, summary3[:answered_required]
+  end
+
   test "evidence_history_by_category groups evidence responses" do
     student = students(:student)
     survey = surveys(:fall_2025)
@@ -72,7 +121,7 @@ class SurveyResponseMethodsTest < ActiveSupport::TestCase
       ev_q = Question.create!(category: cat, question_text: "Evidence question", question_order: 999, question_type: "evidence", is_required: false)
     end
 
-    sq = StudentQuestion.create!(student_id: student.student_id, question: ev_q, response_value: "https://drive.google.com/file/d/1")
+    sq = StudentQuestion.create!(student_id: student.student_id, question: ev_q, response_value: "https://sites.google.com/tamu.edu/demo/home")
     sr = SurveyResponse.new(student: student, survey: survey)
     grouped = sr.evidence_history_by_category
     assert_kind_of Hash, grouped

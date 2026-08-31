@@ -1,140 +1,47 @@
-<% survey_title = @survey.title.presence || "Survey ##{@survey.id}" %>
+<main class="c-main c-main--dashboard" data-survey-scroll-scope>
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Survey preview</p>
+          <h1 class="c-page-title c-page-title--brand"><%= @survey.title %></h1>
+          <p class="c-page-subtitle">Read-only preview of the survey layout.</p>
+        </div>
 
-<div class="survey-container mx-auto max-w-4xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
-  <header class="survey-header space-y-1 text-center">
-    <h1 class="text-2xl font-semibold text-slate-900"><%= survey_title %></h1>
-    <p class="text-sm text-slate-600">
-      Semester: <%= @survey.semester.presence || "TBD" %> · Tracks: <%= @track_list.presence&.join(", ") || "Unassigned" %>
-    </p>
-    <% if @survey.description.present? %>
-      <p class="text-sm text-slate-600"><%= @survey.description %></p>
-    <% end %>
-    <p class="text-xs text-slate-500"><span class="text-red-600" aria-hidden="true">*</span> required to answer</p>
-  </header>
+        <div class="u-actions">
+          <%= link_to "Back", admin_surveys_path, class: button_classes(:secondary) %>
+          <%= link_to "Edit Survey", edit_admin_survey_path(@survey), class: button_classes(:primary) %>
+        </div>
+      </header>
+    </section>
 
-  <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
-    Read-only preview of the student experience. Inputs are disabled so you can review safely.
-  </div>
+    <div class="c-two-column-layout">
+      <div class="u-stack u-stack--xl u-min-w-0">
+        <div class="c-callout c-callout--info">
+          Interactive preview. You can click through fields and submit the preview. No responses are saved.
+        </div>
 
-  <% if @category_groups.blank? || @category_groups.all? { |category| category.questions.empty? } %>
-    <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">
-      No questions are currently assigned to this survey.
-    </div>
-  <% else %>
-    <div class="space-y-6">
-      <% rendered_section_ids = [] %>
-      <% @category_groups.each do |category| %>
-        <% section = category.section %>
-        <% if section.present? && !rendered_section_ids.include?(section.id) %>
-          <div class="space-y-1 rounded-2xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
-            <p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Section</p>
-            <h2 class="text-xl font-bold text-[#500000]"><%= section.title %></h2>
-            <% if section.description.present? %>
-              <p class="text-sm text-slate-700"><%= section.description %></p>
-            <% end %>
+        <%= form_with url: "#", method: :post, local: true, data: { preview_survey_form: true, survey_shared_submit: true }, class: "survey-form u-stack u-stack--xl" do %>
+          <%= render partial: "survey_responses/survey_response",
+                     locals: {
+                       survey_response: @preview_survey_response,
+                       editable: true,
+                       existing_answers: {},
+                       other_answers: {},
+                       viewer_is_student_owner: true
+                     } %>
+
+          <div class="c-form-actions-bar">
+            <div class="u-actions u-actions--end u-w-full">
+              <%= submit_tag "Submit Preview", class: button_classes(:primary) %>
+            </div>
           </div>
-          <% rendered_section_ids << section.id %>
         <% end %>
-        <section class="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <header>
-            <h2 class="text-xl font-semibold text-slate-900"><%= category.name %></h2>
-            <% if category.description.present? %>
-              <p class="text-sm text-slate-600"><%= category.description %></p>
-            <% end %>
-          </header>
-
-          <% category.questions.ordered.each_with_index do |question, index| %>
-
-            <% q_text = question.question_text.to_s.strip %>
-            <% desc_text = question.description.to_s.strip.presence %>
-            <% tooltip_text = question.tooltip_text.to_s.strip.presence %>
-            <% show_mha_tooltip = question.question_type == "multiple_choice" && section&.mha_competency? %>
-            <% show_custom_tooltip = tooltip_text.present? && !show_mha_tooltip %>
-            <% formatted_desc = desc_text.present? ? desc_text.gsub(/\r?\n/, '<br>').html_safe : nil %>
-            <% required = @computed_required[question.id] %>
-
-            <article class="space-y-2 question-block" data-question-id="<%= question.id %>">
-              <label class="block text-sm font-medium text-slate-900">
-                <span class="font-semibold">Q<%= index + 1 %></span>
-                <span class="ml-2 inline-flex flex-col gap-1">
-                  <span class="flex flex-wrap items-center gap-2">
-                    <span><%= q_text %></span>
-                    <% if show_mha_tooltip %>
-                      <% if tooltip_text.present? %>
-                        <span class="inline-flex"><%= render 'shared/question_tooltip', text: tooltip_text, label: "Show proficiency guidance" %></span>
-                      <% else %>
-                        <span class="inline-flex"><%= render 'shared/proficiency_tooltip' %></span>
-                      <% end %>
-                    <% elsif show_custom_tooltip %>
-                      <span class="inline-flex"><%= render 'shared/question_tooltip', text: tooltip_text %></span>
-                    <% end %>
-                    <% if required %>
-                      <span class="text-red-600" aria-hidden="true">*</span>
-                      <span class="sr-only">Required question</span>
-                    <% end %>
-                  </span>
-                  <% if formatted_desc.present? %>
-                    <span class="text-xs text-slate-600"><%= formatted_desc %></span>
-                  <% end %>
-                </span>
-              </label>
-
-              <% case question.question_type %>
-              <% when "short_answer" %>
-                <textarea rows="3" disabled class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">Student response will appear here</textarea>
-              <% when "multiple_choice" %>
-                <% options = question.answer_options_list.presence || [] %>
-                <div class="flex flex-col gap-2" role="radiogroup">
-                  <% options.each do |option| %>
-                    <label class="flex items-center gap-2 text-sm text-slate-800 opacity-75">
-                      <input type="radio" disabled class="h-4 w-4 text-blue-600" />
-                      <span><%= option %></span>
-                    </label>
-                  <% end %>
-                  <% if options.empty? %>
-                    <p class="text-xs text-slate-500">(No options configured)</p>
-                  <% end %>
-                </div>
-              <% when "scale" %>
-                <% scale_labels = scale_labels_for(question) %>
-                <% scale_steps = [scale_labels.size, 1].max %>
-                <div class="space-y-1">
-                  <div class="flex items-center gap-3">
-                    <span class="text-xs text-slate-500"><%= scale_labels.first || "Low" %></span>
-                    <input type="range" min="1" max="<%= scale_steps %>" value="<%= ((scale_steps + 1) / 2.0).ceil %>" disabled class="w-full" />
-                    <span class="text-xs text-slate-500"><%= scale_labels.last || "High" %></span>
-                  </div>
-                  <div class="flex justify-between text-[0.7rem] text-slate-500">
-                    <% scale_labels.each do |label| %>
-                      <span><%= label %></span>
-                    <% end %>
-                  </div>
-                </div>
-              <% when "evidence" %>
-                <div class="space-y-1">
-                  <input type="text" disabled value="https://sites.google.com/view/sample" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm" />
-                  <p class="text-xs text-slate-500">Students paste a publicly shareable Google link (Drive, Docs, Sites, etc.).</p>
-                </div>
-              <% else %>
-                <input type="text" disabled class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm" />
-              <% end %>
-            </article>
-          <% end %>
-        </section>
-      <% end %>
-    </div>
-
-    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-4 shadow-sm">
-      <div class="text-sm text-slate-600">Students use these buttons. They are disabled here for safety.</div>
-      <div class="flex gap-3">
-        <button type="button" disabled class="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-500 opacity-70">Save Progress</button>
-        <button type="button" disabled class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white opacity-70">Submit Survey</button>
       </div>
-    </div>
-  <% end %>
 
-  <div class="flex flex-wrap gap-3">
-    <%= link_to "Back to Surveys", admin_surveys_path, class: tailwind_button_classes(:secondary) %>
-    <%= link_to "Edit Survey", edit_admin_survey_path(@survey), class: tailwind_button_classes(:primary) %>
+      <%= render ::SurveyLegendComponent.new(legend: @survey.legend) %>
+    </div>
   </div>
-</div>
+</main>
+
+<%= render "shared/survey_behavior_bootstrap" %>

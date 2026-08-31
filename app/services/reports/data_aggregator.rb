@@ -6,36 +6,54 @@ module Reports
   # and any active filters passed from the client.
   class DataAggregator
     NUMERIC_PATTERN = /\A-?\d+(?:\.\d+)?\z/.freeze
-  SCALE_MAX = 5.0
-  TARGET_SCORE = 4.0
-  PROGRAM_GOAL_PERCENT = 80.0
-  GOAL_THRESHOLD = 0.85
-  TIMELINE_MONTHS = 3
-  COMPETENCY_TITLES = [
-    "Public and Population Health Assessment",
-    "Delivery, Organization, and Financing of Health Services and Health Systems",
-    "Policy Analysis",
-    "Legal & Ethical Bases for Health Services and Health Systems",
-    "Ethics, Accountability, and Self-Assessment",
-    "Organizational Dynamics",
-    "Problem Solving, Decision Making, and Critical Thinking",
-    "Team Building and Collaboration",
-    "Strategic Planning",
-    "Business Planning",
-    "Communication",
-    "Financial Management",
-    "Performance Improvement",
-    "Project Management",
-    "Systems Thinking",
-    "Data Analysis and Information Management",
-    "Quantitative Methods for Health Services Delivery"
-  ].freeze
-  REPORT_DOMAINS = [
-    "Health Care Environment and Community",
-    "Leadership Skills",
-    "Management Skills",
-    "Analytic and Technical Skills"
-  ].freeze
+
+    SCALE_MIN = 1.0
+    SCALE_MAX = 5.0
+    TIMELINE_MONTHS = 3
+
+    COMPETENCY_TITLES = [
+      "Public and Population Health Assessment",
+      "Delivery, Organization, and Financing of Health Services and Health Systems",
+      "Policy Analysis",
+      "Legal & Ethical Bases for Health Services and Health Systems",
+      "Ethics, Accountability, and Self-Assessment",
+      "Organizational Dynamics",
+      "Problem Solving, Decision Making, and Critical Thinking",
+      "Team Building and Collaboration",
+      "Strategic Planning",
+      "Business Planning",
+      "Communication",
+      "Financial Management",
+      "Performance Improvement",
+      "Project Management",
+      "Systems Thinking",
+      "Data Analysis and Information Management",
+      "Quantitative Methods for Health Services Delivery"
+    ].freeze
+
+    REPORT_DOMAINS = [
+      "Health Care Environment and Community",
+      "Leadership Skills",
+      "Management Skills",
+      "Analytic and Technical Skills"
+    ].freeze
+
+    # The self-assessment rating scale students choose from (see
+    # composite_reports_helper.rb's DEFAULT_PROFICIENCY_OPTION_PAIRS).
+    RATING_LEVEL_LABELS = {
+      0 => "Not able to assess",
+      1 => "Beginner",
+      2 => "Emerging",
+      3 => "Capable",
+      4 => "Experienced",
+      5 => "Mastery"
+    }.freeze
+
+    # Program-level target used by accreditation exhibits (e.g. CAHME
+    # Exhibit 2.2.1): the share of students expected to meet or exceed each
+    # competency's own configured target level.
+    RATING_LEVEL_TARGET_MET_PERCENT = 75.0
+
     RECENT_WINDOW = 90.days
     DATASET_SELECT = [
       "student_questions.id",
@@ -46,10 +64,14 @@ module Reports
       "categories.id AS category_id",
       "categories.name AS category_name",
       "questions.question_text AS question_text",
+      "questions.program_target_level AS program_target_level",
       "surveys.id AS survey_id",
       "surveys.title AS survey_title",
-      "surveys.semester AS survey_semester",
+      "program_semesters.id AS program_semester_id",
+      "program_semesters.name AS survey_semester",
       "students.track AS student_track",
+      "students.program_year AS student_class_of",
+      "students.program_year AS student_program_year",
       "students.student_id AS student_primary_id",
       "students.advisor_id AS owning_advisor_id"
     ].freeze
@@ -63,10 +85,14 @@ module Reports
       "categories.id AS category_id",
       "categories.name AS category_name",
       "questions.question_text AS question_text",
+      "questions.program_target_level AS program_target_level",
       "surveys.id AS survey_id",
       "surveys.title AS survey_title",
-      "surveys.semester AS survey_semester",
+      "program_semesters.id AS program_semester_id",
+      "program_semesters.name AS survey_semester",
       "students.track AS student_track",
+      "students.program_year AS student_class_of",
+      "students.program_year AS student_program_year",
       "students.student_id AS student_primary_id",
       "students.advisor_id AS owning_advisor_id"
     ].freeze
@@ -80,6 +106,7 @@ module Reports
     def filter_options
       {
         tracks: available_tracks,
+        program_years: available_program_years,
         semesters: available_semesters,
         advisors: available_advisors,
         categories: available_categories,
@@ -104,14 +131,41 @@ module Reports
       @competency_detail ||= build_competency_detail
     end
 
-    # Survey-level achievement details for the course performance section.
-    def course_summary
-      @course_summary ||= build_course_summary
-    end
-
     # Track-level aggregate details used by exports.
     def track_summary
       @track_summary ||= build_track_summary
+    end
+
+    # Program-level competency attainment by rating level (Beginner..Mastery),
+    # for accreditation exhibits (e.g. CAHME Exhibit 2.2.1).
+    def rating_level_distribution
+      @rating_level_distribution ||= build_rating_level_distribution
+    end
+
+    # Every (track, program year) cohort combination this user can see at
+    # least one student in, ignoring the track/program_year filters on this
+    # particular instance. Used to enumerate which per-cohort reports to
+    # generate (see ReportsController#export_by_cohort).
+    #
+    # @return [Array<Hash>] each entry: { track_key:, track_name:, program_year: }
+    def available_track_year_combinations
+      accessible_student_relation
+        .where.not(track: [ nil, "" ])
+        .where.not(program_year: nil)
+        .distinct
+        .pluck(:track, :program_year)
+        .filter_map do |raw_track, program_year|
+          track_key = ProgramTrack.canonical_key(raw_track) || raw_track.to_s.strip.downcase.presence
+          next unless track_key
+
+          {
+            track_key: track_key,
+            track_name: ProgramTrack.name_for_key(track_key) || raw_track.to_s.titleize,
+            program_year: program_year
+          }
+        end
+        .uniq { |entry| [ entry[:track_key], entry[:program_year] ] }
+        .sort_by { |entry| [ entry[:track_name], entry[:program_year] ] }
     end
 
     # Cards for quick overview tiles (alias for convenience).
@@ -127,12 +181,303 @@ module Reports
         benchmark: benchmark,
         competency_summary: competency_summary,
         competency_detail: competency_detail,
-        course_summary: course_summary,
-        track_summary: track_summary
+        track_summary: track_summary,
+        rating_level_distribution: rating_level_distribution,
+        employment_summary: employment_summary,
+        raw_data: raw_data
+      }
+    end
+
+    # Employment section: aggregate employment status, hours, and flexibility
+    # across all respondents within the active filter scope.
+    def employment_summary
+      @employment_summary ||= build_employment_summary
+    end
+
+    # Raw row-level data used by Excel exports. These rows intentionally follow
+    # the same access scope and filters as the dashboard summaries.
+    def raw_data
+      @raw_data ||= {
+        survey_responses: raw_rating_rows(advisor_entry: false),
+        advisor_ratings: raw_rating_rows(advisor_entry: true),
+        course_evidence: raw_course_evidence_rows,
+        employment_responses: raw_employment_response_rows
       }
     end
 
     private
+
+    # ---------------------------------------------------------------------------
+    # Raw export helpers
+    # ---------------------------------------------------------------------------
+
+    def raw_rating_rows(advisor_entry:)
+      dataset_rows
+        .select { |row| row[:advisor_entry] == advisor_entry }
+        .sort_by { |row| [ row[:student_id].to_i, row[:survey_semester].to_s, row[:category_name].to_s, row[:question_text].to_s ] }
+        .map do |row|
+          student = student_export_lookup[row[:student_id]]
+          advisor_id = advisor_entry ? row[:rating_advisor_id] : row[:advisor_id]
+          advisor = advisor_export_lookup[advisor_id]
+
+          student_export_fields(student).merge(
+            advisor_id: advisor_id,
+            advisor: advisor&.display_name,
+            survey_id: row[:survey_id],
+            survey: row[:survey_title],
+            semester: row[:survey_semester],
+            domain: row[:category_name],
+            competency: normalized_competency_title(row[:question_text]),
+            score: row[:score],
+            program_target_level: row[:program_target_level],
+            updated_at: row[:updated_at]
+          )
+        end
+    end
+
+    def raw_course_evidence_rows
+      reportable_course_evidence_scope
+        .includes(:grade_import_file, grade_import_batch: :program_semester, student: [ :user, { advisor: :user } ])
+        .order(:student_id, :course_code, :competency_title, :assignment_name)
+        .map do |evidence|
+          student_export_fields(evidence.student).merge(
+            semester: evidence.grade_import_batch&.program_semester&.name,
+            course: evidence.course_code,
+            competency: evidence.competency_title,
+            assignment: evidence.assignment_name,
+            raw_grade: evidence.raw_grade,
+            assessed_level: evidence.mapped_level,
+            course_target_level: evidence.course_target_level,
+            target_status: GradeImports::TargetAttainmentReport.ui_label(evidence.mapped_level, evidence.course_target_level),
+            source_file: evidence.grade_import_file&.file_name,
+            imported_at: evidence.created_at,
+            updated_at: evidence.updated_at
+          )
+        end
+    end
+
+    def raw_employment_response_rows
+      employment_response_scope
+        .includes(student: [ :user, { advisor: :user } ], question: { category: { survey: :program_semester } })
+        .order(:student_id, :question_id)
+        .map do |record|
+          survey = record.question&.category&.survey
+
+          student_export_fields(record.student).merge(
+            survey_id: survey&.id,
+            survey: survey&.title,
+            semester: survey&.program_semester&.name,
+            question: record.question&.question_text,
+            parsed_answer: parse_employment_value(record),
+            raw_response: record.response_value,
+            updated_at: record.updated_at
+          )
+        end
+    end
+
+    def reportable_course_evidence_scope
+      @reportable_course_evidence_scope ||= begin
+        scope = GradeCompetencyEvidence
+          .joins(:grade_import_batch, :student)
+          .merge(GradeImportBatch.reportable)
+          .where(student_id: accessible_student_relation.select(:student_id))
+
+        scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+        scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
+        scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
+        scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
+
+        if filters[:semester]
+          semester = ProgramSemester.find_by_name_case_insensitive(filters[:semester])
+          scope = semester ? scope.where(grade_import_batches: { program_semester_id: semester.id }) : scope.none
+        end
+
+        if filters[:competency]
+          competency_name = competency_lookup[filters[:competency]]&.dig(:name)
+          scope = scope.where(competency_title: competency_name) if competency_name.present?
+        elsif filters[:category_id]
+          scope = scope.where(competency_title: competency_titles_for_domain_filter)
+        end
+
+        scope
+      end
+    end
+
+    def student_export_lookup
+      @student_export_lookup ||= accessible_student_relation
+        .includes(:user, advisor: :user)
+        .index_by(&:student_id)
+    end
+
+    def advisor_export_lookup
+      @advisor_export_lookup ||= begin
+        advisor_ids = (accessible_advisor_ids + dataset_rows.filter_map { |row| row[:rating_advisor_id] }).compact.uniq
+        Advisor.where(advisor_id: advisor_ids).includes(:user).index_by(&:advisor_id)
+      end
+    end
+
+    def student_export_fields(student)
+      {
+        student_id: student&.student_id,
+        student_name: student&.user&.display_name || student&.full_name,
+        email: student&.email,
+        uin: student&.uin,
+        track: student&.track,
+        year: student&.program_year,
+        assigned_advisor: student&.advisor&.display_name
+      }
+    end
+
+    # ---------------------------------------------------------------------------
+    # Employment summary helpers
+    # ---------------------------------------------------------------------------
+
+    EMPLOYMENT_FIELD_MAP = {
+      "currently employed"           => :currently_employed,
+      "where are you employed"       => :employer,
+      "what is your title"           => :job_title,
+      "hours per week"               => :hours_per_week,
+      "flexible are your work hours" => :flexibility
+    }.freeze
+
+    def employment_field_key(question_text)
+      normalized = question_text.to_s.downcase
+      EMPLOYMENT_FIELD_MAP.each { |pattern, key| return key if normalized.include?(pattern) }
+      nil
+    end
+
+    def build_employment_summary
+      # Pull all employment-related responses respecting the standard filter scope.
+      # Note: custom select must include student_questions.question_id so ActiveRecord
+      # doesn't raise MissingAttributeError when materialising StudentQuestion records.
+      rows = employment_response_scope
+        .select(
+          "student_questions.student_id",
+          "student_questions.question_id",
+          "student_questions.response_value",
+          "questions.question_text",
+          "questions.question_type"
+        )
+
+      # Group responses by student so each student contributes once per field.
+      by_student = Hash.new { |h, k| h[k] = {} }
+      rows.each do |record|
+        field = employment_field_key(record.question_text)
+        next unless field
+
+        by_student[record.student_id][field] ||= parse_employment_value(record)
+      end
+
+      # Aggregate buckets
+      status_counts   = Hash.new(0)   # "Yes" / "No" / "No response"
+      hours_dist      = Hash.new(0)   # bucket label => count
+      flex_dist       = Hash.new(0)   # "1".."5" => count
+      total_employed  = 0
+      total_responded = by_student.size
+
+      by_student.each_value do |fields|
+        employed = fields[:currently_employed]
+        if employed.blank?
+          status_counts["No response"] += 1
+          next
+        end
+
+        if employed.casecmp?("Yes")
+          status_counts["Employed"] += 1
+          total_employed += 1
+
+          hours_value = parse_employment_integer(fields[:hours_per_week])
+          if hours_value
+            bucket = hours_bucket(hours_value)
+            hours_dist[bucket] += 1
+          end
+
+          flex_raw = fields[:flexibility].to_s.strip
+          flex_digit = flex_raw[/\A(\d+)/, 1]
+          flex_dist[flex_digit] += 1 if flex_digit && ("1".."5").include?(flex_digit)
+        elsif employed.casecmp?("No")
+          status_counts["Not employed"] += 1
+        else
+          status_counts["No response"] += 1
+        end
+      end
+
+      employment_rate = total_responded > 0 ? (total_employed.to_f / total_responded * 100).round(1) : nil
+
+      # Build sorted distributions for the charting layer
+      hours_labels  = %w[<10 10–19 20–29 30–39 40–49 50+]
+      hours_data    = hours_labels.map { |label| hours_dist[label] }
+
+      flex_labels = [ "1 — No flexibility", "2 — Limited", "3 — Some", "4 — Flexible", "5 — Very flexible" ]
+      flex_data   = (1..5).map { |n| flex_dist[n.to_s] }
+
+      {
+        total_respondents:  total_responded,
+        employment_rate:    employment_rate,
+        status_counts:      status_counts.map { |label, count| { label: label, count: count } },
+        hours_distribution: { labels: hours_labels, data: hours_data },
+        flexibility_distribution: { labels: flex_labels, data: flex_data }
+      }
+    end
+
+    def employment_response_scope
+      scope = StudentQuestion
+        .joins(:student)
+        .merge(accessible_student_relation)
+        .joins(question: { category: { survey: :program_semester } })
+        .where("LOWER(categories.name) LIKE ?", "%employment%")
+
+      scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
+      if filters[:semester]
+        scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
+      end
+      scope = scope.where(surveys: { id: filters[:survey_id] }) if filters[:survey_id]
+      scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
+      scope = scope.where(student_questions: { student_id: filters[:student_id] }) if filters[:student_id]
+
+      scope
+    end
+
+    def parse_employment_value(record)
+      raw = record.response_value
+      return raw if raw.is_a?(String) && !raw.start_with?("{", "[")
+
+      begin
+        parsed = JSON.parse(raw.to_s)
+        case parsed
+        when Hash
+          parsed["answer"] || parsed["value"] || parsed["rating"] || raw
+        when Array
+          parsed.first.to_s
+        else
+          raw
+        end
+      rescue JSON::ParserError
+        raw
+      end
+    end
+
+    def parse_employment_integer(value)
+      candidate = value.to_s.strip
+      return nil if candidate.blank?
+      return nil unless candidate.match?(/\A\d+\z/)
+
+      Integer(candidate, 10)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def hours_bucket(n)
+      case n
+      when 0..9   then "<10"
+      when 10..19 then "10–19"
+      when 20..29 then "20–29"
+      when 30..39 then "30–39"
+      when 40..49 then "40–49"
+      else             "50+"
+      end
+    end
 
     attr_reader :user
 
@@ -141,6 +486,12 @@ module Reports
 
       sanitized = {}
       assign_filter(sanitized, :track) { |val| val unless val.casecmp?("all") }
+      assign_filter(sanitized, :program_year) do |val|
+        next if val.casecmp?("all")
+
+        year = val.to_i
+        year if year.positive?
+      end
       assign_filter(sanitized, :semester) { |val| val unless val.casecmp?("all") }
       assign_filter(sanitized, :survey_id) do |val|
         id = val.to_i
@@ -173,7 +524,7 @@ module Reports
 
     def accessible_student_relation
       return Student.none unless user
-      return Student.all if user.role_admin? || user.role_advisor?
+      return Student.all if user.role_admin?
 
       advisor = user.advisor_profile
       advisor ? Student.where(advisor_id: advisor.advisor_id) : Student.none
@@ -188,6 +539,7 @@ module Reports
 
       relation = accessible_student_relation
       relation = relation.where(track: filters[:track]) if filters[:track]
+      relation = relation.where(program_year: filters[:program_year]) if filters[:program_year]
       relation = relation.where(advisor_id: filters[:advisor_id]) if filters[:advisor_id]
       relation = relation.where(student_id: filters[:student_id]) if filters[:student_id]
 
@@ -212,11 +564,30 @@ module Reports
       end
     end
 
+    # Sections whose questions aren't 1-5 competency scores, so their answers
+    # must never flow into score averaging (see base_scope).
+    NON_COMPETENCY_SECTION_TITLES = [ "Professional Snapshot", "Portfolio Review", "Evidence" ].freeze
+
     def base_scope
+      # Excludes non-competency sections. Without this, answers sharing the
+      # same StudentQuestion table (e.g. "Professional Snapshot" section
+      # questions like "how many hours per week do you work", answered as a
+      # plain integer) get parsed as a 1-5 competency score by
+      # build_dataset_row and inflate averages well past the real 1-5 scale,
+      # particularly in the Monthly Trend chart which averages dataset_rows
+      # without any further category filtering. Categories with no section
+      # at all (nil) are left alone rather than excluded, since that's not
+      # a signal that a category is non-competency -- just that it predates
+      # (or, in tests, never bothered to set) the survey_sections feature.
       StudentQuestion
         .joins(:student)
         .merge(accessible_student_relation)
-        .joins(question: { category: :survey })
+        .joins(question: { category: { survey: :program_semester } })
+        .joins("LEFT OUTER JOIN survey_sections ON survey_sections.id = categories.survey_section_id")
+        .where(
+          "survey_sections.title IS NULL OR LOWER(survey_sections.title) NOT IN (?)",
+          NON_COMPETENCY_SECTION_TITLES.map(&:downcase)
+        )
         .where.not(response_value: [ nil, "" ])
     end
 
@@ -225,8 +596,11 @@ module Reports
       if filters[:track]
         scope = scope.where(students: { track: filters[:track] })
       end
+      if filters[:program_year]
+        scope = scope.where(students: { program_year: filters[:program_year] })
+      end
       if filters[:semester]
-        scope = scope.where("LOWER(surveys.semester) = ?", filters[:semester].downcase)
+        scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
       end
       if filters[:survey_id]
         scope = scope.where(surveys: { id: filters[:survey_id] })
@@ -253,7 +627,7 @@ module Reports
         .joins(:student)
         .merge(accessible_student_relation)
         .joins(:question)
-        .joins(question: { category: :survey })
+        .joins(question: { category: { survey: :program_semester } })
         .where.not(average_score: nil)
     end
 
@@ -262,8 +636,11 @@ module Reports
       if filters[:track]
         scope = scope.where(students: { track: filters[:track] })
       end
+      if filters[:program_year]
+        scope = scope.where(students: { program_year: filters[:program_year] })
+      end
       if filters[:semester]
-        scope = scope.where("LOWER(surveys.semester) = ?", filters[:semester].downcase)
+        scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
       end
       if filters[:survey_id]
         scope = scope.where(surveys: { id: filters[:survey_id] })
@@ -353,8 +730,11 @@ module Reports
       return nil if student_avg.nil? || advisor_avg.nil?
 
       gap = (student_avg - advisor_avg).abs
-      normalized = [ SCALE_MAX - [ gap, SCALE_MAX ].min, 0 ].max
-      (normalized / SCALE_MAX) * 100.0
+      max_gap = (SCALE_MAX - SCALE_MIN)
+      return nil if max_gap <= 0
+
+      clamped_gap = [ gap, max_gap ].min
+      ((max_gap - clamped_gap) / max_gap) * 100.0
     end
 
     def build_benchmark_payload
@@ -362,35 +742,86 @@ module Reports
       Rails.logger.debug "Filters applied: #{@raw_params.inspect}"
       Rails.logger.debug "Dataset rows count: #{dataset_rows.size}"
 
-      student_scores = dataset_rows.reject { |row| row[:advisor_entry] }.map { |row| row[:score] }
-      advisor_scores = dataset_rows.select { |row| row[:advisor_entry] }.map { |row| row[:score] }
+      benchmark_thresholds = {
+        students_goal_percent: 80.0,
+        competencies_goal_percent: 75.0
+      }
 
-      student_avg = average(student_scores)
-      advisor_avg = average(advisor_scores)
-      alignment_pct = alignment_percent(student_avg, advisor_avg)
+      benchmark_attainment = benchmark_attainment_stats(
+        dataset_rows,
+        competencies_goal_percent: benchmark_thresholds[:competencies_goal_percent]
+      )
 
       cards = []
+
+      overall_source_label = rating_source_label(benchmark_attainment.dig(:source_breakdown, :overall))
+      overall_meta = {
+        goal_percent: benchmark_thresholds[:students_goal_percent],
+        students_met_goal: benchmark_attainment[:overall][:students_meeting_count],
+        competencies_goal_percent: benchmark_thresholds[:competencies_goal_percent]
+      }
+      overall_meta[:name] = overall_source_label if overall_source_label.present?
+
       cards << build_card(
-        key: "overall_average",
-        title: "Overall Student Average",
-        value: student_avg,
-        unit: "score",
-        precision: 1,
-        change: percent_change_for(:student),
-        description: "Mean student competency score on a five-point scale.",
-        sample_size: student_scores.size
+        key: "benchmark_attainment_overall",
+        title: "Benchmark Attainment",
+        value: benchmark_attainment[:overall][:students_meeting_percent],
+        unit: "percent",
+        precision: 0,
+        change: nil,
+        description: "At least #{benchmark_thresholds[:competencies_goal_percent].to_i}% of the MHA track cohort will achieve the MHA competency at the program target level by the end of their degree program.",
+        sample_size: benchmark_attainment[:overall][:total_students],
+        meta: overall_meta
       )
 
       cards << build_card(
-        key: "advisor_alignment",
-        title: "Student & Advisor Alignment",
-        value: alignment_pct,
+        key: "benchmark_not_meeting_overall",
+        title: "Below Benchmark",
+        value: benchmark_attainment[:overall][:students_not_meeting_percent],
         unit: "percent",
         precision: 0,
-        change: alignment_trend_change,
-        description: "Closeness of student and advisor averages (100% = perfect alignment).",
-        sample_size: [ student_scores.size, advisor_scores.size ].min
+        change: nil,
+        description: "Less than #{benchmark_thresholds[:competencies_goal_percent].to_i}% of the MHA track cohort achieved the MHA competency at the program target level by the end of their degree program.",
+        sample_size: benchmark_attainment[:overall][:total_students]
       )
+
+      track_summaries = []
+      benchmark_attainment[:by_track].each do |track_key, stats|
+        track_label = track_key.to_s.strip
+        next if track_label.blank?
+
+        track_source_label = rating_source_label(benchmark_attainment.dig(:source_breakdown, :by_track, track_key))
+
+        track_summaries << {
+          label: track_label,
+          percent: stats[:students_meeting_percent],
+          students_met_goal: stats[:students_meeting_count],
+          sample_size: stats[:total_students],
+          source_label: track_source_label
+        }
+      end
+
+      if track_summaries.any?
+        total_track_students = track_summaries.sum { |entry| entry[:sample_size].to_i }
+        cards << build_card(
+          key: "benchmark_attainment_by_track",
+          title: "Benchmark by Track",
+          value: nil,
+          unit: "percent",
+          precision: 0,
+          change: nil,
+          description: "Percent of students meeting the benchmark broken down by track.",
+          sample_size: total_track_students,
+          meta: {
+            goal_percent: benchmark_thresholds[:students_goal_percent],
+            competencies_goal_percent: benchmark_thresholds[:competencies_goal_percent],
+            tracks: track_summaries
+          }
+        )
+      end
+
+      alignment_card = build_alignment_card
+      cards << alignment_card if alignment_card
 
       completion_stats = completion_stats()
       cards << build_card(
@@ -404,46 +835,164 @@ module Reports
         sample_size: completion_stats[:total_assignments]
       )
 
-      goal_metric = competency_goal_metric
-      Rails.logger.debug "Competency Goal Metric: #{goal_metric.inspect}"
-
-      if (goal_metric = competency_goal_metric)
-        cards << build_card(
-          key: "competency_goal_attainment",
-          title: "Students Meeting Competency Goal",
-          value: goal_metric[:percent],
-          unit: "percent",
-          precision: 0,
-          change: goal_metric[:percent] && goal_metric[:goal_percent] ? (goal_metric[:percent] - goal_metric[:goal_percent]) : nil,
-          description: "Percent of students achieving ≥85% of competencies. Program goal: #{goal_metric[:goal_percent]}%.",
-          sample_size: goal_metric[:total_students],
-          meta: {
-            goal_percent: goal_metric[:goal_percent],
-            goal_threshold: goal_metric[:goal_threshold],
-            students_met_goal: goal_metric[:students_meeting_goal]
-          }
-        )
-      end
-
       competency_summary_data = competency_summary
       Rails.logger.debug "Competency Summary (for Leading Competency card): #{competency_summary_data.first.inspect}"
 
       Rails.logger.debug "--- Finished build_benchmark_payload ---"
 
       {
-        student_average: student_avg,
-        advisor_average: advisor_avg,
-        alignment_percent: alignment_pct,
         completion_rate: completion_stats[:completion_rate],
         cards: cards.compact,
         timeline: build_timeline,
-        sample_size_student: student_scores.size,
-        sample_size_advisor: advisor_scores.size
+        benchmark_attainment: benchmark_attainment
       }
     end
 
+    def build_alignment_card
+      summary = alignment_summary
+      return nil unless summary
+
+      build_card(
+        key: "student_advisor_alignment",
+        title: "Student & Advisor Alignment",
+        value: summary[:percent],
+        unit: "percent",
+        precision: 0,
+        change: summary[:change],
+        description: "Percent alignment between student self-assessments and advisor ratings.",
+        sample_size: summary[:sample_size],
+        meta: summary[:meta]
+      )
+    end
+
+    def benchmark_attainment_stats(rows, competencies_goal_percent:)
+      goal = competencies_goal_percent.to_f
+
+      grouped = Hash.new { |hash, key| hash[key] = {} }
+
+      rows.each do |row|
+        student_id = row[:student_id]
+        next if student_id.blank?
+
+        competency_title = normalized_competency_title(row[:question_text])
+        next if competency_title.blank?
+
+        existing = grouped[student_id][competency_title]
+        if existing.nil?
+          grouped[student_id][competency_title] = row
+          next
+        end
+
+        existing_time = existing[:updated_at]
+        incoming_time = row[:updated_at]
+
+        preferred = if existing[:advisor_entry] && !row[:advisor_entry]
+          false
+        elsif !existing[:advisor_entry] && row[:advisor_entry]
+          true
+        elsif existing_time.present? && incoming_time.present?
+          incoming_time > existing_time
+        else
+          false
+        end
+
+        grouped[student_id][competency_title] = row if preferred
+      end
+
+      per_student = {}
+      per_track = Hash.new { |hash, key| hash[key] = { students: 0, meeting: 0 } }
+      per_track_source_counts = Hash.new { |hash, key| hash[key] = { advisor: 0, student: 0 } }
+      overall_source_counts = { advisor: 0, student: 0 }
+
+      grouped.each do |student_id, competency_map|
+        competency_rows = competency_map.values
+        next if competency_rows.blank?
+
+        achieved = 0
+        advisor_entries = 0
+        student_entries = 0
+
+        competency_rows.each do |row|
+          target = row[:program_target_level].presence || 4.0
+          achieved += 1 if row[:score].to_f >= target.to_f
+          if row[:advisor_entry]
+            advisor_entries += 1
+          else
+            student_entries += 1
+          end
+        end
+
+        total = competency_rows.size
+        percent_met = safe_percent(achieved, total) || 0.0
+        meets_goal = percent_met >= goal
+
+        track = competency_rows.first[:track]
+        track_key = track.to_s
+
+        overall_source_counts[:advisor] += advisor_entries
+        overall_source_counts[:student] += student_entries
+        per_track_source_counts[track_key][:advisor] += advisor_entries
+        per_track_source_counts[track_key][:student] += student_entries
+        per_student[student_id] = {
+          track: track,
+          competencies_total: total,
+          competencies_met: achieved,
+          competencies_met_percent: percent_met,
+          meets_benchmark: meets_goal
+        }
+
+        per_track[track_key][:students] += 1
+        per_track[track_key][:meeting] += 1 if meets_goal
+      end
+
+      total_students = per_student.size
+      meeting_students = per_student.values.count { |s| s[:meets_benchmark] }
+      meeting_percent = safe_percent(meeting_students, total_students)
+      not_meeting_percent = meeting_percent.nil? ? nil : (100.0 - meeting_percent)
+
+      {
+        overall: {
+          total_students: total_students,
+          students_meeting_count: meeting_students,
+          students_meeting_percent: meeting_percent,
+          students_not_meeting_percent: not_meeting_percent,
+          competencies_goal_percent: goal
+        },
+        by_track: per_track.transform_values do |stats|
+          meeting_pct = safe_percent(stats[:meeting], stats[:students])
+          {
+            total_students: stats[:students],
+            students_meeting_count: stats[:meeting],
+            students_meeting_percent: meeting_pct
+          }
+        end,
+        per_student: per_student,
+        source_breakdown: {
+          overall: overall_source_counts,
+          by_track: per_track_source_counts.transform_values { |counts| counts.dup }
+        }
+      }
+    end
+
+    def rating_source_label(source_counts)
+      counts = source_counts || {}
+      advisor = counts[:advisor].to_i
+      student = counts[:student].to_i
+
+      return nil if advisor.zero? && student.zero?
+
+      if advisor.positive? && student.positive?
+        "Advisor & student ratings"
+      elsif advisor.positive?
+        "Advisor ratings"
+      else
+        "Student self-ratings"
+      end
+    end
+
     def build_card(key:, title:, value:, unit:, precision:, description:, change:, sample_size:, meta: nil)
-      return nil if value.nil?
+      tracks = meta.is_a?(Hash) ? Array(meta[:tracks]) : []
+      return nil if value.nil? && tracks.blank?
 
       {
         key: key,
@@ -491,30 +1040,69 @@ module Reports
     end
 
     def build_timeline
-      return [] if dataset_rows.empty?
+      return [] if dataset_rows.empty? && course_rating_rows.empty?
 
-      buckets = Hash.new { |hash, key| hash[key] = { student: [], advisor: [] } }
+      buckets = Hash.new { |hash, key| hash[key] = { student_rows: [], advisor_rows: [], course_rows: [] } }
 
       dataset_rows.each do |row|
         month = row[:updated_at].in_time_zone.beginning_of_month
         bucket = buckets[month]
         if row[:advisor_entry]
-          bucket[:advisor] << row[:score]
+          bucket[:advisor_rows] << row
         else
-          bucket[:student] << row[:score]
+          bucket[:student_rows] << row
         end
       end
 
+      course_rating_rows.each do |row|
+        month = row[:updated_at].in_time_zone.beginning_of_month
+        buckets[month][:course_rows] << row
+      end
+
       buckets.keys.sort.last(TIMELINE_MONTHS).map do |month|
-        student_avg = average(buckets[month][:student])
-        advisor_avg = average(buckets[month][:advisor])
+        student_rows = buckets[month][:student_rows]
+        advisor_rows = buckets[month][:advisor_rows]
+        course_rows = buckets[month][:course_rows]
+        student_avg = average(student_rows.map { |row| row[:score] })
+        advisor_avg = average(advisor_rows.map { |row| row[:score] })
+        course_avg = average(course_rows.map { |row| row[:score] })
+
+        student_target_percent = target_percent_for_rows(student_rows)
+        advisor_target_percent = target_percent_for_rows(advisor_rows)
+        course_target_percent = target_percent_for_rows(course_rows)
         {
           label: month.strftime("%b %Y"),
           student: student_avg,
           advisor: advisor_avg,
+          course: course_avg,
+          student_target_percent: student_target_percent,
+          advisor_target_percent: advisor_target_percent,
+          course_target_percent: course_target_percent,
           alignment: alignment_percent(student_avg, advisor_avg)
         }
       end
+    end
+
+    def target_percent_for_rows(rows)
+      total_students = scoped_student_ids.size
+      return nil if total_students.zero?
+
+      by_student = group_student_rows(rows)
+      met = 0
+
+      scoped_student_ids.each do |student_id|
+        entries = by_student[student_id] || []
+        next if entries.blank?
+
+        score_avg = average(entries.map { |row| row[:score] })
+        target_levels = entries.map { |row| row[:program_target_level] }.compact.map(&:to_f)
+        target_avg = average(target_levels)
+        next if score_avg.nil? || target_avg.nil?
+
+        met += 1 if score_avg >= target_avg
+      end
+
+      safe_percent(met, total_students)
     end
 
     def alignment_trend_change
@@ -528,8 +1116,39 @@ module Reports
       latest - previous
     end
 
+    def alignment_summary
+      student_rows = dataset_rows.reject { |row| row[:advisor_entry] }
+      advisor_rows = dataset_rows.select { |row| row[:advisor_entry] }
+
+      student_avg = average(student_rows.map { |row| row[:score] })
+      advisor_avg = average(advisor_rows.map { |row| row[:score] })
+      alignment = alignment_percent(student_avg, advisor_avg)
+      return nil if alignment.nil?
+
+      paired_students = group_student_rows(dataset_rows).count do |_student_id, rows|
+        next false if rows.blank?
+
+        has_student = rows.any? { |row| !row[:advisor_entry] }
+        has_advisor = rows.any? { |row| row[:advisor_entry] }
+        has_student && has_advisor
+      end
+      return nil if paired_students.zero?
+
+      {
+        percent: alignment,
+        change: alignment_trend_change,
+        sample_size: paired_students,
+        meta: {
+          name: "Advisor & student ratings",
+          advisor_average: advisor_avg,
+          student_average: student_avg
+        }
+      }
+    end
+
     def build_competency_summary
       Rails.logger.debug "--- Building Competency Summary ---"
+      assigned_total_students = assigned_student_ids_in_scope.size
       grouped = Hash.new { |hash, key| hash[key] = { rows: [], category_ids: [] } }
 
       dataset_rows.each do |row|
@@ -550,9 +1169,19 @@ module Reports
         advisor_avg = average(advisor_rows.map { |row| row[:score] })
 
         student_group = group_student_rows(student_rows)
-        attainment_counts = attainment_counts_for_group(student_group)
+        attainment_counts = attainment_counts_for_group(student_group, total_students: assigned_total_students)
         attainment_percentages = attainment_percentages(attainment_counts)
+
+        advisor_group = group_student_rows(advisor_rows)
+        advisor_attainment_counts = attainment_counts_for_group(advisor_group, total_students: assigned_total_students)
+        advisor_attainment_percentages = attainment_percentages(advisor_attainment_counts)
         course_breakdown = build_competency_course_breakdown(rows)
+        course_average = course_domain_average_lookup[slug]
+        course_target_percent = course_domain_target_percent_lookup[slug]
+
+        student_target_percent = target_percent_for_rows(student_rows)
+        advisor_target_percent = target_percent_for_rows(advisor_rows)
+        target_level = average(rows.map { |row| row[:program_target_level] }.compact.map(&:to_f))
 
         {
           id: slug,
@@ -560,9 +1189,10 @@ module Reports
           category_ids: data[:category_ids].uniq,
           student_average: student_avg,
           advisor_average: advisor_avg,
+          course_average: course_average,
           gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil,
           change: percent_change_for_category(rows),
-          status: student_avg && student_avg >= TARGET_SCORE ? "on_track" : "watch",
+          status: student_avg && target_level && student_avg >= target_level ? "on_track" : "watch",
           student_sample: student_rows.size,
           advisor_sample: advisor_rows.size,
           achieved_count: attainment_counts[:achieved_count],
@@ -571,10 +1201,18 @@ module Reports
           achieved_percent: attainment_percentages[:achieved_percent],
           not_met_percent: attainment_percentages[:not_met_percent],
           not_assessed_percent: attainment_percentages[:not_assessed_percent],
+          student_target_percent: student_target_percent,
+          advisor_target_percent: advisor_target_percent,
+          course_target_percent: course_target_percent,
+          program_target_level: target_level,
           total_students: attainment_counts[:total_students],
           courses: course_breakdown
         }
-      end.compact.select { |entry| REPORT_DOMAINS.include?(entry[:name]) }.sort_by { |entry| -(entry[:student_average] || 0.0) }
+      end.compact
+
+      summary = summary.select { |entry| REPORT_DOMAINS.include?(entry[:name]) }
+      order_lookup = domain_order_names.each_with_index.to_h
+      summary = summary.sort_by { |entry| order_lookup.fetch(entry[:name], Float::INFINITY) }
 
       Rails.logger.debug "Generated competency summary: #{summary.inspect}"
       summary
@@ -598,6 +1236,7 @@ module Reports
 
     def build_competency_detail
       Rails.logger.debug "--- Building Competency Detail ---"
+      assigned_total_students = assigned_student_ids_in_scope.size
       buckets = Hash.new do |hash, key|
         hash[key] = {
           student_rows: [],
@@ -631,8 +1270,18 @@ module Reports
         advisor_avg = average(advisor_rows.map { |row| row[:score] })
 
         student_group = group_student_rows(student_rows)
-        attainment_counts = attainment_counts_for_group(student_group)
+        attainment_counts = attainment_counts_for_group(student_group, total_students: assigned_total_students)
         attainment_percentages = attainment_percentages(attainment_counts)
+
+        advisor_group = group_student_rows(advisor_rows)
+        advisor_attainment_counts = attainment_counts_for_group(advisor_group, total_students: assigned_total_students)
+        advisor_attainment_percentages = attainment_percentages(advisor_attainment_counts)
+        course_average = course_competency_average_lookup[title]
+        course_target_percent = course_competency_target_percent_lookup[title]
+
+        student_target_percent = target_percent_for_rows(student_rows)
+        advisor_target_percent = target_percent_for_rows(advisor_rows)
+        target_level = average((student_rows + advisor_rows).map { |row| row[:program_target_level] }.compact.map(&:to_f))
 
         {
           id: slug,
@@ -641,6 +1290,7 @@ module Reports
           domain_name: bucket&.dig(:domain_name),
           student_average: student_avg,
           advisor_average: advisor_avg,
+          course_average: course_average,
           gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil,
           achieved_count: attainment_counts[:achieved_count],
           not_met_count: attainment_counts[:not_met_count],
@@ -648,6 +1298,10 @@ module Reports
           achieved_percent: attainment_percentages[:achieved_percent],
           not_met_percent: attainment_percentages[:not_met_percent],
           not_assessed_percent: attainment_percentages[:not_assessed_percent],
+          student_target_percent: student_target_percent,
+          advisor_target_percent: advisor_target_percent,
+          course_target_percent: course_target_percent,
+          program_target_level: target_level,
           total_students: attainment_counts[:total_students]
         }
       end
@@ -660,49 +1314,80 @@ module Reports
       detail
     end
 
-    def build_course_summary
-      surveys = dataset_rows.group_by { |row| row[:survey_id] }
+    # Per-competency counts of students at each self-assessment rating level
+    # (Beginner..Mastery), plus the share meeting or exceeding that
+    # competency's own target level. Built for accreditation exhibits that
+    # want a level-by-level breakdown rather than a binary achieved/not-met
+    # count (e.g. CAHME Exhibit 2.2.1).
+    def build_rating_level_distribution
+      buckets = Hash.new { |hash, key| hash[key] = [] }
 
-      surveys.map do |_survey_id, rows|
-        survey_meta = rows.first
-        student_rows = rows.reject { |row| row[:advisor_entry] }
-        advisor_rows = rows.select { |row| row[:advisor_entry] }
+      dataset_rows.each do |row|
+        next if row[:advisor_entry]
 
-        student_avg = average(student_rows.map { |row| row[:score] })
-        advisor_avg = average(advisor_rows.map { |row| row[:score] })
+        slug = competency_slug(row[:question_text])
+        next unless slug && competency_lookup.key?(slug)
 
-        student_by_person = group_student_rows(student_rows)
-        attainment_counts = attainment_counts_for_group(student_by_person)
-        attainment_percentages = attainment_percentages(attainment_counts)
-        competency_breakdown = build_course_competency_breakdown(rows)
+        buckets[slug] << row
+      end
+
+      items = COMPETENCY_TITLES.map do |title|
+        slug = competency_slug(title)
+        rows = buckets[slug] || []
+        student_group = group_student_rows(rows)
+
+        level_counts = RATING_LEVEL_LABELS.keys.index_with { 0 }
+        target_met_count = 0
+        assessed_count = 0
+
+        student_group.each_value do |entries|
+          score_avg = average(entries.map { |row| row[:score] })
+          next if score_avg.nil?
+
+          level = score_avg.round.clamp(RATING_LEVEL_LABELS.keys.min, RATING_LEVEL_LABELS.keys.max)
+          level_counts[level] += 1
+          assessed_count += 1
+
+          target_avg = average(entries.map { |row| row[:program_target_level] }.compact.map(&:to_f))
+          target_met_count += 1 if target_avg && score_avg >= target_avg
+        end
+
+        not_met_count = assessed_count - target_met_count
+        target_met_percent = assessed_count.positive? ? safe_percent(target_met_count, assessed_count) : nil
+        not_met_percent = assessed_count.positive? ? safe_percent(not_met_count, assessed_count) : nil
 
         {
-          id: survey_meta[:survey_id],
-          title: survey_meta[:survey_title],
-          semester: survey_meta[:survey_semester],
-          track: survey_meta[:track],
-          student_average: student_avg,
-          advisor_average: advisor_avg,
-          submissions: student_by_person.size,
-          on_track_percent: attainment_percentages[:achieved_percent],
-          achieved_count: attainment_counts[:achieved_count],
-          not_met_count: attainment_counts[:not_met_count],
-          not_assessed_count: attainment_counts[:not_assessed_count],
-          achieved_percent: attainment_percentages[:achieved_percent],
-          not_met_percent: attainment_percentages[:not_met_percent],
-          not_assessed_percent: attainment_percentages[:not_assessed_percent],
-          total_students: attainment_counts[:total_students],
-          gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil,
-          competencies: competency_breakdown
+          id: slug,
+          name: title,
+          level_counts: level_counts,
+          total_students: assessed_count,
+          target_met_count: target_met_count,
+          target_met_percent: target_met_percent,
+          not_met_count: not_met_count,
+          not_met_percent: not_met_percent,
+          target_met: target_met_percent.present? && target_met_percent >= RATING_LEVEL_TARGET_MET_PERCENT
         }
-      end.compact.sort_by { |entry| -(entry[:student_average] || 0.0) }
+      end
+
+      {
+        levels: RATING_LEVEL_LABELS,
+        program_target_met_percent: RATING_LEVEL_TARGET_MET_PERCENT,
+        items: items
+      }
     end
 
     def build_track_summary
-      tracks = dataset_rows.group_by { |row| row[:track] }
+      # dataset_rows[:track] and the students.track column both store the
+      # canonical key (e.g. "residential"), while program_track_names returns
+      # display labels (e.g. "Residential") -- group/query by key, not by the
+      # display label, or every track bucket comes back empty.
+      rows_by_track = dataset_rows
+                       .group_by { |row| ProgramTrack.canonical_key(row[:track]) }
 
-      tracks.map do |track_name, rows|
-        next if rows.blank?
+      program_track_names.map do |track_name|
+        track_key = ProgramTrack.canonical_key(track_name)
+        rows = rows_by_track[track_key] || []
+        track_total_students = assigned_student_count_for_track(track_key)
 
         student_rows = rows.reject { |row| row[:advisor_entry] }
         advisor_rows = rows.select { |row| row[:advisor_entry] }
@@ -711,12 +1396,11 @@ module Reports
         advisor_avg = average(advisor_rows.map { |row| row[:score] })
 
         student_by_person = group_student_rows(student_rows)
-        attainment_counts = attainment_counts_for_group(student_by_person)
+        attainment_counts = attainment_counts_for_group(student_by_person, total_students: track_total_students)
         attainment_percentages = attainment_percentages(attainment_counts)
 
         {
-          id: track_name.parameterize(separator: "_")
-            .presence || "track_#{track_name.object_id}",
+          id: track_key.presence || track_name.parameterize(separator: "_").presence || "track_#{track_name.object_id}",
           track: track_name,
           student_average: student_avg,
           advisor_average: advisor_avg,
@@ -730,7 +1414,7 @@ module Reports
           not_assessed_percent: attainment_percentages[:not_assessed_percent],
           total_students: attainment_counts[:total_students]
         }
-      end.compact.sort_by { |entry| entry[:track].to_s }
+      end
     end
 
     def completion_stats
@@ -762,8 +1446,23 @@ module Reports
     end
 
     def available_tracks
-      raw_tracks = accessible_student_relation.where.not(track: [ nil, "" ]).pluck(:track)
-      sanitize_tracks(raw_tracks)
+      program_track_names
+    end
+
+    def available_program_years
+      accessible_student_relation.where.not(program_year: nil).distinct.order(:program_year).pluck(:program_year)
+    end
+
+    def program_track_names
+      return @program_track_names if defined?(@program_track_names)
+
+      names = if ProgramTrack.data_source_ready?
+        ProgramTrack.active.ordered.pluck(:name)
+      else
+        ProgramTrack.names
+      end
+
+      @program_track_names = Array(names).map { |name| name.to_s.strip }.reject(&:blank?).uniq
     end
 
     def normalized_track_name(value)
@@ -772,21 +1471,43 @@ module Reports
     end
 
     def available_semesters
-      base_scope.distinct.pluck("surveys.semester").compact.sort
+      ProgramSemester.ordered.pluck(:name).compact.uniq
     end
 
     def available_categories
-      category_group_lookup
+      entries = category_group_lookup
         .values
         .select { |entry| REPORT_DOMAINS.include?(entry[:name]) }
         .map { |entry| { id: entry[:id], name: entry[:name], category_ids: entry[:ids] } }
-        .sort_by { |entry| entry[:name].to_s.downcase }
+
+      order_lookup = domain_order_names.each_with_index.to_h
+      entries.sort_by do |entry|
+        [ order_lookup.fetch(entry[:name], Float::INFINITY), entry[:name].to_s.downcase ]
+      end
+    end
+
+    def domain_order_names
+      return @domain_order_names if defined?(@domain_order_names)
+
+      @domain_order_names = if filters[:survey_id]
+        categories = Category.where(survey_id: filters[:survey_id]).select(:id, :name)
+        categories = if Category.column_names.include?("position")
+          categories.order(:position, :id)
+        else
+          categories.order(:id)
+        end
+
+        ordered_names = categories.map { |category| category.name.to_s.strip }.reject(&:blank?)
+        ordered_names & REPORT_DOMAINS
+      else
+        REPORT_DOMAINS
+      end
     end
 
     def available_surveys
       base_scope
         .distinct
-        .pluck("surveys.id", "surveys.title", "surveys.semester")
+        .pluck("surveys.id", "surveys.title", "program_semesters.name")
         .map { |id, title, semester| { id: id, title: title, semester: semester } }
         .sort_by { |entry| entry[:title].to_s.downcase }
     end
@@ -824,6 +1545,116 @@ module Reports
 
     def competency_lookup
       @competency_lookup ||= available_competencies.index_by { |entry| entry[:id] }
+    end
+
+    def course_competency_average_lookup
+      @course_competency_average_lookup ||= begin
+        grouped = reportable_course_rating_scope.group_by(&:competency_title)
+        grouped.transform_values do |ratings|
+          levels = ratings.filter_map { |rating| rating.aggregated_level&.to_f }
+          CourseCompetencyRule.aggregate(levels, rule_key: active_course_competency_rule)
+        end
+      end
+    end
+
+    def course_competency_target_percent_lookup
+      @course_competency_target_percent_lookup ||= begin
+        grouped = course_rating_rows.group_by { |row| normalized_competency_title(row[:question_text]) }
+        grouped.transform_values { |rows| target_percent_for_rows(rows) }
+      end
+    end
+
+    def course_domain_average_lookup
+      @course_domain_average_lookup ||= begin
+        grouped = Hash.new { |hash, key| hash[key] = [] }
+
+        course_competency_average_lookup.each do |title, avg|
+          next if avg.nil?
+
+          slug = domain_slug_for_competency(title)
+          next if slug.blank?
+
+          grouped[slug] << avg
+        end
+
+        grouped.transform_values { |values| average(values) }
+      end
+    end
+
+    def course_domain_target_percent_lookup
+      @course_domain_target_percent_lookup ||= begin
+        grouped = Hash.new { |hash, key| hash[key] = [] }
+
+        course_rating_rows.each do |row|
+          slug = domain_slug_for_competency(row[:question_text])
+          next if slug.blank?
+
+          grouped[slug] << row
+        end
+
+        grouped.transform_values { |rows| target_percent_for_rows(rows) }
+      end
+    end
+
+    def reportable_course_rating_scope
+      @reportable_course_rating_scope ||= begin
+      scope = GradeCompetencyRating
+        .joins(:grade_import_batch, student: :user)
+        .merge(GradeImportBatch.reportable)
+        .where(student_id: accessible_student_relation.select(:student_id))
+
+      scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
+      scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
+        scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
+        if filters[:semester]
+          semester = ProgramSemester.find_by_name_case_insensitive(filters[:semester])
+          scope = semester ? scope.where(grade_import_batches: { program_semester_id: semester.id }) : scope.none
+        end
+
+        if filters[:competency]
+          competency_name = competency_lookup[filters[:competency]]&.dig(:name)
+          scope = scope.where(competency_title: competency_name) if competency_name.present?
+        elsif filters[:category_id]
+          scope = scope.where(competency_title: competency_titles_for_domain_filter)
+        end
+
+        scope.to_a
+      end
+    end
+
+    def competency_titles_for_domain_filter
+      slug = filters[:category_id]
+      return COMPETENCY_TITLES if slug.blank?
+
+      COMPETENCY_TITLES.select { |title| domain_slug_for_competency(title) == slug }
+    end
+
+    def domain_slug_for_competency(title)
+      slug = competency_slug(title)
+      return nil if slug.blank?
+
+      return @domain_slug_for_competency[slug] if defined?(@domain_slug_for_competency) && @domain_slug_for_competency.key?(slug)
+
+      @domain_slug_for_competency ||= {}
+
+      domain_name = competency_detail_domain_lookup[slug]
+      @domain_slug_for_competency[slug] = normalize_domain_slug(domain_name)
+    end
+
+    def competency_detail_domain_lookup
+      @competency_detail_domain_lookup ||= begin
+        lookup = {}
+
+        dataset_rows.each do |row|
+          slug = competency_slug(row[:question_text])
+          next if slug.blank? || row[:category_name].blank?
+
+          lookup[slug] ||= row[:category_name]
+        end
+
+        lookup
+      end
     end
 
     def domain_slug(value)
@@ -916,13 +1747,23 @@ module Reports
 
       {
         track: filters[:track] || "All tracks",
+        year: filters[:program_year] || "All years",
         semester: filters[:semester] || "All semesters",
         advisor: filters[:advisor_id] ? advisor_map[filters[:advisor_id]]&.dig(:name) : "All advisors",
         domain: filters[:category_id] ? category_map[filters[:category_id]]&.dig(:name) : "All domains",
         competency: filters[:competency] ? competency_map[filters[:competency]]&.dig(:name) : "All competencies",
+        course_competency_rule: active_course_competency_rule_label,
         survey: filters[:survey_id] ? format_survey_label(survey_map[filters[:survey_id]]) : "All surveys",
         student: filters[:student_id] ? student_map[filters[:student_id]]&.dig(:name) : "All students"
       }
+    end
+
+    def active_course_competency_rule
+      @active_course_competency_rule ||= SiteSetting.course_competency_rule
+    end
+
+    def active_course_competency_rule_label
+      CourseCompetencyRule.label_for(active_course_competency_rule)
     end
 
     def format_survey_label(entry)
@@ -982,6 +1823,8 @@ module Reports
       value = parse_numeric(record.response_value)
       return nil unless value
 
+      effective_target_level = competency_target_level_for_record(record)
+
       {
         id: record.student_question_id,
         score: value,
@@ -990,13 +1833,197 @@ module Reports
         category_id: record.category_id,
         category_name: record.category_name,
         question_text: record.question_text,
+        program_target_level: effective_target_level,
         survey_id: record.survey_id,
         survey_title: record.survey_title,
+        program_semester_id: record.program_semester_id,
         survey_semester: record.survey_semester,
         track: record.student_track,
         student_id: record.student_primary_id,
-        advisor_id: record.owning_advisor_id || record.advisor_id
+        advisor_id: record.owning_advisor_id || record.advisor_id,
+        rating_advisor_id: is_advisor_entry ? record.advisor_id : nil
       }
+    end
+
+    def course_rating_rows
+      @course_rating_rows ||= reportable_course_rating_scope.filter_map do |rating|
+        target_level = course_target_level_for_rating(rating)
+        next if target_level.nil?
+
+        {
+          student_id: rating.student_id,
+          score: rating.aggregated_level.to_f,
+          advisor_entry: false,
+          updated_at: rating.updated_at,
+          category_id: nil,
+          category_name: competency_detail_domain_lookup[competency_slug(rating.competency_title)],
+          question_text: rating.competency_title,
+          program_target_level: target_level,
+          survey_id: nil,
+          survey_title: nil,
+          survey_semester: nil,
+          track: rating.student&.track,
+          advisor_id: rating.student&.advisor_id
+        }
+      end
+    end
+
+    def course_target_level_for_rating(rating)
+      student = rating.student
+      return nil unless student
+
+      title = normalized_competency_title(rating.competency_title)
+      program_semester_id = target_program_semester_id_for_rating(rating)
+      target_from_dataset = course_target_level_from_dataset(
+        student_id: student.student_id,
+        competency_title: title,
+        program_semester_id: program_semester_id
+      )
+      return target_from_dataset if target_from_dataset.present?
+
+      fallback_course_target_level(student: student, competency_title: title, program_semester_id: program_semester_id)
+    end
+
+    def target_program_semester_id_for_rating(rating)
+      rating.grade_import_batch&.program_semester_id || selected_report_program_semester&.id || ProgramSemester.current&.id
+    end
+
+    def selected_report_program_semester
+      return nil if filters[:semester].blank?
+
+      @selected_report_program_semester ||= ProgramSemester.find_by_name_case_insensitive(filters[:semester])
+    end
+
+    def course_target_level_from_dataset(student_id:, competency_title:, program_semester_id:)
+      return nil if program_semester_id.blank?
+
+      matching_rows = dataset_rows.select do |row|
+        row[:student_id] == student_id &&
+          row[:program_semester_id] == program_semester_id &&
+          normalized_competency_title(row[:question_text]) == competency_title
+      end
+
+      average(matching_rows.map { |row| row[:program_target_level] }.compact.map(&:to_f))
+    end
+
+    def fallback_course_target_level(student:, competency_title:, program_semester_id:)
+      track = target_track_key(student[:track])
+      return nil if track.blank? || competency_title.blank? || program_semester_id.blank?
+
+      records = competency_target_records_by_semester_track_and_title[[ program_semester_id, track, competency_title ]] || []
+      return nil if records.blank?
+
+      class_of = student.class_of
+      program_year = student.program_year
+
+      if class_of.present?
+        exact_class = records.find { |record| record.class_of.present? && record.class_of.to_i == class_of.to_i }
+        return exact_class.target_level if exact_class
+      end
+
+      class_fallback = records.find { |record| record.class_of.nil? }
+      return class_fallback.target_level if class_fallback
+
+      if program_year.present?
+        exact_year = records.find { |record| record.program_year.present? && record.program_year.to_i == program_year.to_i }
+        return exact_year.target_level if exact_year
+      end
+
+      year_fallback = records.find { |record| record.program_year.nil? }
+      return year_fallback.target_level if year_fallback
+
+      records.first&.target_level
+    end
+
+    def competency_target_records_by_semester_track_and_title
+      @competency_target_records_by_semester_track_and_title ||= begin
+        records = CompetencyTargetLevel
+          .select(:program_semester_id, :track, :program_year, :class_of, :competency_title, :target_level)
+          .to_a
+
+        records.group_by do |record|
+          [ record.program_semester_id, target_track_key(record.track), normalized_competency_title(record.competency_title) ]
+        end
+               .transform_values do |rows|
+          rows.sort_by do |row|
+            [
+              row.class_of.present? ? 0 : 1,
+              row.program_year.present? ? 0 : 1,
+              row.program_semester_id || Float::INFINITY
+            ]
+          end
+        end
+      end
+    end
+
+    def competency_target_level_for_record(record)
+      fallback = record.respond_to?(:program_target_level) ? record.program_target_level : nil
+      return fallback unless record.respond_to?(:program_semester_id) && record.respond_to?(:student_track)
+
+      semester_id = record.program_semester_id
+      track = target_track_key(record.student_track)
+      title = normalized_competency_title(record.question_text)
+      class_of = record.respond_to?(:student_class_of) ? record.student_class_of : nil
+      program_year = record.respond_to?(:student_program_year) ? record.student_program_year : nil
+
+      lookup_bundle = competency_target_level_lookup_bundle
+
+      lookup_bundle[:class_of_exact][[ semester_id, track, class_of, title ]] ||
+        lookup_bundle[:class_of_exact][[ semester_id, track, nil, title ]] ||
+        (class_of.nil? ? lookup_bundle[:class_of_any][[ semester_id, track, title ]] : nil) ||
+        lookup_bundle[:program_year_exact][[ semester_id, track, program_year, title ]] ||
+        lookup_bundle[:program_year_exact][[ semester_id, track, nil, title ]] ||
+        (program_year.nil? ? lookup_bundle[:program_year_any_year][[ semester_id, track, title ]] : nil) ||
+        fallback
+    end
+
+    def competency_target_level_lookup_bundle
+      @competency_target_level_lookup_bundle ||= begin
+        class_of_exact = {}
+        class_of_any = {}
+        program_year_exact = {}
+        program_year_any_year = {}
+
+        CompetencyTargetLevel
+          .select(:id, :program_semester_id, :track, :program_year, :class_of, :competency_title, :target_level)
+          .find_each do |row|
+            semester_id = row.program_semester_id
+            track = target_track_key(row.track)
+            title = normalized_competency_title(row.competency_title)
+            program_year = row.program_year
+            class_of = row.class_of
+
+            class_of_exact[[ semester_id, track, class_of, title ]] = row.target_level
+            program_year_exact[[ semester_id, track, program_year, title ]] = row.target_level
+
+            if class_of.present?
+              any_class_key = [ semester_id, track, title ]
+              existing = class_of_any[any_class_key]
+              if existing.nil? || class_of.to_i < existing[:class_of]
+                class_of_any[any_class_key] = { class_of: class_of.to_i, level: row.target_level }
+              end
+            end
+
+            next if program_year.blank?
+
+            any_year_key = [ semester_id, track, title ]
+            existing = program_year_any_year[any_year_key]
+            if existing.nil? || program_year.to_i < existing[:year]
+              program_year_any_year[any_year_key] = { year: program_year.to_i, level: row.target_level }
+            end
+          end
+
+        {
+          class_of_exact: class_of_exact,
+          class_of_any: class_of_any.transform_values { |entry| entry[:level] },
+          program_year_exact: program_year_exact,
+          program_year_any_year: program_year_any_year.transform_values { |entry| entry[:level] }
+        }
+      end
+    end
+
+    def competency_target_level_any_year_lookup
+      competency_target_level_lookup_bundle[:program_year_any_year]
     end
 
     def sanitize_tracks(values)
@@ -1011,20 +2038,28 @@ module Reports
       trimmed.presence
     end
 
+    def target_track_key(value)
+      ProgramTrack.canonical_key(value) || value.to_s.strip.downcase.presence
+    end
+
     def group_student_rows(rows)
       rows.reject { |row| row[:student_id].blank? }
           .group_by { |row| row[:student_id] }
     end
 
-    def attainment_counts_for_group(student_rows_group)
+    def attainment_counts_for_group(student_rows_group, total_students: nil)
       achieved = 0
       not_met = 0
 
       student_rows_group.each_value do |entries|
-        avg = average(entries.map { |row| row[:score] })
-        next if avg.nil?
+        score_avg = average(entries.map { |row| row[:score] })
+        next if score_avg.nil?
 
-        if avg >= TARGET_SCORE
+        target_levels = entries.map { |row| row[:program_target_level] }.compact.map(&:to_f)
+        target_avg = average(target_levels)
+        next if target_avg.nil?
+
+        if score_avg >= target_avg
           achieved += 1
         else
           not_met += 1
@@ -1032,7 +2067,7 @@ module Reports
       end
 
       assessed = achieved + not_met
-      total_students = scoped_student_ids.size
+      total_students ||= scoped_student_ids.size
       not_assessed = [ total_students - assessed, 0 ].max
 
       {
@@ -1054,43 +2089,6 @@ module Reports
       }
     end
 
-    def competency_goal_metric
-      Rails.logger.debug "--- Calculating competency_goal_metric ---"
-      student_ids = scoped_student_ids
-      Rails.logger.debug "Scoped student IDs for goal metric: #{student_ids.inspect}"
-      return nil if student_ids.blank?
-
-      averages = student_competency_averages
-      Rails.logger.debug "Student competency averages for goal: #{averages.inspect}"
-      competency_slugs = competency_ids_for_goal(averages)
-      Rails.logger.debug "Competency slugs for goal: #{competency_slugs.inspect}"
-      total_competencies = competency_slugs.size
-      return nil if total_competencies.zero?
-
-      students_meeting_goal = student_ids.count do |student_id|
-        competency_avgs = averages[student_id] || {}
-        achieved = competency_slugs.count do |slug|
-          avg = competency_avgs[slug]
-          avg && avg >= TARGET_SCORE
-        end
-        ratio = achieved.to_f / total_competencies
-        Rails.logger.debug "Student #{student_id} achieved ratio: #{ratio}"
-        ratio >= GOAL_THRESHOLD
-      end
-
-      percent = safe_percent(students_meeting_goal, student_ids.size)
-
-      result = {
-        percent: percent,
-        goal_percent: PROGRAM_GOAL_PERCENT,
-        goal_threshold: GOAL_THRESHOLD,
-        total_students: student_ids.size,
-        students_meeting_goal: students_meeting_goal
-      }
-      Rails.logger.debug "Final competency_goal_metric result: #{result.inspect}"
-      result
-    end
-
     def student_competency_averages
       @student_competency_averages ||= begin
         per_student = Hash.new { |hash, key| hash[key] = Hash.new { |inner, slug| inner[slug] = [] } }
@@ -1109,25 +2107,19 @@ module Reports
       end
     end
 
-    def competency_ids_for_goal(averages = nil)
-      return [ filters[:competency] ] if filters[:competency]
-
-      averages ||= student_competency_averages
-      present_slugs = averages.values.flat_map(&:keys).uniq.compact
-      present_slugs.presence || competency_lookup.keys
-    end
-
     def scoped_assignment_scope
       scope = SurveyAssignment
               .joins(:survey, :student)
               .where(student_id: accessible_student_relation.select(:student_id))
 
       scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
       scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
       scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
       scope = scope.where(surveys: { id: filters[:survey_id] }) if filters[:survey_id]
       if filters[:semester]
-        scope = scope.where("LOWER(surveys.semester) = ?", filters[:semester].downcase)
+        scope = scope.joins(survey: :program_semester)
+        scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
       end
 
       scope
@@ -1149,6 +2141,30 @@ module Reports
       return false if student_id.blank? || survey_id.blank?
 
       completed_assignment_pairs[assignment_pair_key(student_id, survey_id)] || false
+    end
+
+    def assigned_student_ids_in_scope
+      @assigned_student_ids_in_scope ||= scoped_assignment_scope
+                                         .distinct
+                                         .pluck(:student_id)
+                                         .compact
+                                         .uniq
+    end
+
+    def assigned_student_count_for_survey(survey_id)
+      return 0 if survey_id.blank?
+
+      scoped_assignment_scope
+        .where(survey_id: survey_id)
+        .distinct
+        .count(:student_id)
+    end
+
+    def assigned_student_count_for_track(track_key)
+      scoped_assignment_scope
+        .where(students: { track: track_key })
+        .distinct
+        .count(:student_id)
     end
   end
 end

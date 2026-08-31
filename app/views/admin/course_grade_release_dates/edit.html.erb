@@ -1,0 +1,74 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="u-stack u-stack--lg">
+      <header class="c-card c-card--brand c-page-header">
+        <div>
+          <p class="c-eyebrow">Admin controls</p>
+          <h1 class="c-page-title c-page-title--brand">Set Release Date</h1>
+          <p class="c-page-subtitle">
+            Configure when <strong><%= @semester.name %></strong> course competency results become visible.
+          </p>
+        </div>
+        <%= link_to "Back to release dates", admin_course_grade_release_dates_path, class: button_classes(:secondary) %>
+      </header>
+
+      <div class="c-two-column-layout">
+        <section class="c-card">
+          <%= form_with model: @release_date, url: @release_date.persisted? ? admin_course_grade_release_date_path(@release_date) : admin_course_grade_release_dates_path, method: @release_date.persisted? ? :patch : :post, local: true, class: "u-stack u-stack--md" do |f| %>
+            <input type="hidden" name="course_grade_release_date[program_semester_id]" value="<%= @semester.id %>" />
+
+            <div class="c-field">
+              <%= f.label :release_date, "Release Date & Time", class: "c-label" %>
+              <%= f.datetime_local_field :release_date, 
+                    class: "c-input",
+                    placeholder: "Leave blank to make visible by default" %>
+              <small class="c-help">Leave blank to make results visible immediately (default behavior).</small>
+            </div>
+
+            <div class="u-border-top u-pt-lg">
+              <p class="c-help"><strong>Preview:</strong></p>
+              <% if @release_date.release_date.present? %>
+                <p class="c-lede">
+                  Results will be <strong>visible after <%= l(@release_date.release_date, format: :long) %></strong>
+                </p>
+              <% else %>
+                <p class="c-lede">
+                  Results will be <span class="u-success">visible immediately (no embargo)</span>
+                </p>
+              <% end %>
+            </div>
+
+            <div class="c-form-actions u-actions u-actions--start">
+              <%= f.submit @release_date.persisted? ? "Update" : "Create", class: button_classes(:primary) %>
+              <% if @release_date.persisted? %>
+                <%= link_to "Delete", admin_course_grade_release_date_path(@release_date), method: :delete, class: button_classes(:danger), data: { turbo_confirm: "Delete this course release date? Students may see affected course competency results immediately if no other release date applies." } %>
+              <% end %>
+            </div>
+          <% end %>
+        </section>
+
+        <aside class="u-stack u-stack--sm">
+          <div class="c-card c-card--muted u-stack u-stack--sm">
+            <p class="c-section-title">Semester Details</p>
+            <dl class="u-stack u-stack--sm c-help">
+              <div>
+                <dt><strong>Name</strong></dt>
+                <dd><%= @semester.name %></dd>
+              </div>
+              <div>
+                <dt><strong>Current semester</strong></dt>
+                <dd><%= @semester.is_current? ? "Yes" : "No" %></dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="c-callout c-callout--info">
+            <p>
+              <strong>Note:</strong> This release date applies to all surveys in this semester. Students will not see course-derived competency results until the date passes.
+            </p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </div>
+</main>

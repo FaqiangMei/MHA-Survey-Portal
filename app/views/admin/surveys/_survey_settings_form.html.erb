@@ -1,0 +1,144 @@
+<section class="c-card u-stack u-stack--lg">
+  <header class="c-panel-header c-panel-header--with-border">
+    <div class="u-responsive-split u-w-full">
+      <div class="u-stack u-stack--sm">
+        <h2 class="c-panel-title">Survey Metadata</h2>
+        <p class="c-panel-subtitle">Configure survey identity, availability, and track assignment.</p>
+      </div>
+
+      <div class="c-card c-card--tight c-card--muted u-shadow-none">
+        <label class="c-toggle u-cursor-pointer">
+          <%= form.check_box :is_active, class: "c-toggle__input" %>
+          <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+          <span class="u-stack u-stack--xs">
+            <span class="c-toggle__label">Survey is active</span>
+            <span class="c-help">Inactive surveys stay hidden from advisors.</span>
+          </span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <div class="u-grid u-grid--form">
+    <div class="c-field u-col-span-all">
+      <%= form.label :title, "Survey title", class: "c-label" %>
+      <%= form.text_field :title,
+                          required: true,
+                          class: "#{input_classes} c-input u-w-full",
+                          placeholder: "Capstone Competency Survey" %>
+    </div>
+
+    <div class="c-field">
+      <%= form.label :semester, "Semester", class: "c-label" %>
+      <% if @program_semester_options.present? %>
+        <div class="c-select-wrapper u-max-w-md">
+          <%= form.select :semester,
+                          options_for_select(@program_semester_options, survey.semester.presence || @program_semester_options.first),
+                          { include_blank: "Select semester" },
+                          class: "c-select u-w-full" %>
+        </div>
+      <% else %>
+        <%= form.text_field :semester,
+                            required: true,
+                            class: "#{input_classes} c-input u-max-w-md",
+                            placeholder: "Fall 2025" %>
+      <% end %>
+    </div>
+
+    <div class="c-field">
+      <label for="survey-track-list" class="c-label">Track assignment</label>
+      <%= hidden_field_tag "survey[track_list][]", "" %>
+      <% track_dropdown_options = [["Select a track", ""]] + track_options.map { |track| [track, track] } %>
+      <div class="c-select-wrapper u-max-w-md">
+        <%= select_tag "survey[track_list][]",
+                       options_for_select(track_dropdown_options, survey.track_list.first),
+                       id: "survey-track-list",
+                       class: "c-select u-w-full" %>
+      </div>
+    </div>
+
+    <div class="c-field">
+      <%= form.label :available_from, "Available from", class: "c-label" %>
+      <%= form.datetime_local_field :available_from, class: "#{input_classes} c-input u-max-w-md" %>
+    </div>
+
+    <div class="c-field">
+      <%= form.label :available_until, "Available until", class: "c-label" %>
+      <%= form.datetime_local_field :available_until, class: "#{input_classes} c-input u-max-w-md" %>
+    </div>
+
+    <div class="c-field u-col-span-all">
+      <%= form.label :description, "Summary", class: "c-label" %>
+      <%= form.text_area :description, class: textarea_classes, placeholder: "Explain where this survey fits in the advising process." %>
+    </div>
+
+    <div class="c-field u-col-span-all">
+      <div class="u-grid u-grid--2">
+        <div class="c-card c-card--tight c-card--muted u-shadow-none">
+          <label class="c-toggle u-cursor-pointer">
+            <%= form.check_box :show_course_competencies_with_survey, class: "c-toggle__input" %>
+            <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+            <span class="u-stack u-stack--xs">
+              <span class="c-toggle__label">Show course competencies in survey</span>
+              <span class="c-help">Displays released course-derived competency results and course targets beside matching competency survey questions.</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="c-card c-card--tight c-card--muted u-shadow-none">
+          <label class="c-toggle u-cursor-pointer">
+            <%= form.check_box :advisor_numeric_feedback_enabled, class: "c-toggle__input" %>
+            <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+            <span class="u-stack u-stack--xs">
+              <span class="c-toggle__label">Enable advisor numeric ratings</span>
+              <span class="c-help">Legacy option. When off, advisors can still save written feedback and notes without score dropdowns.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<% if SurveyOffering.data_source_ready? && survey.persisted? && survey.offerings.any? %>
+  <section class="c-card c-card--flush u-overflow-hidden">
+    <div class="c-panel-header c-panel-header--with-border">
+      <div class="u-stack u-stack--sm">
+        <h2 class="c-panel-title">Review Meeting Dates</h2>
+        <p class="c-panel-subtitle">Edit the review meeting window shown to students per offering.</p>
+      </div>
+    </div>
+
+    <div class="c-table-wrapper">
+      <table class="c-table c-table--sm c-table--divide">
+        <thead>
+          <tr>
+            <th>Track</th>
+            <th>Class of</th>
+            <th>Stage</th>
+            <th>Review start</th>
+            <th>Review end</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% sorted_offerings = survey.offerings.sort_by { |row| [row.track.to_s, row.class_of.to_i, row.stage.to_s] } %>
+          <%= form.fields_for :offerings, sorted_offerings do |offering_fields| %>
+            <% offering = offering_fields.object %>
+            <tr>
+              <td><%= offering.track %></td>
+              <td><%= offering.class_of.presence || "All" %></td>
+              <td><%= offering.stage.to_s.titleize %></td>
+              <td>
+                <%= offering_fields.hidden_field :id %>
+                <%= offering_fields.date_field :review_meetings_start, class: "#{input_classes} c-input c-input--compact" %>
+              </td>
+              <td>
+                <%= offering_fields.date_field :review_meetings_end, class: "#{input_classes} c-input c-input--compact" %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% end %>

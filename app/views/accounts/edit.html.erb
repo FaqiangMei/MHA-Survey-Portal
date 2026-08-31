@@ -1,157 +1,196 @@
-<% content_for :title, "Account Settings" %>
+<% content_for :title, "Edit Account Information" %>
 
-<% role_label = if @user.respond_to?(:role_admin?) && @user.role_admin?
-                  "Administrator"
-                elsif @user.respond_to?(:role_advisor?) && @user.role_advisor?
-                  "Advisor"
-                elsif @user.respond_to?(:role_student?) && @user.role_student?
-                  "Student"
-                else
-                  "User"
-                end %>
+<% full_name = @student.full_name.presence || @student.user&.name || @user.name || "Student" %>
+<% email = @user.email.presence || "Not provided" %>
+<% uin = @student.uin.presence || "Not provided" %>
+<% track = @student.track.present? ? @student.track.to_s.titleize : "Not assigned" %>
+<% program_year = @student.program_year.presence || "Not set" %>
+<% major = @student.major.presence || "Program TBD" %>
+<% advisor_name = @student.advisor&.display_name || @student.advisor&.name || "Advisor pending" %>
+<% updated_text = @student.updated_at ? "#{time_ago_in_words(@student.updated_at)} ago" : "Just now" %>
+<% initials = full_name.to_s.split.first(2).map { |part| part.first&.upcase }.join.presence || "ST" %>
+<% avatar_url = @user.respond_to?(:avatar_url) ? @user.avatar_url.presence : nil %>
+<% profile_complete = @student.profile_complete? %>
+<% major_names = (@majors.to_a.map(&:name) + [@student.major]).compact.map(&:to_s).map(&:strip).reject(&:blank?).uniq.sort %>
+<% role_label = "Student" %>
 
-<% initials = @user.name.to_s.split.first(2).map { |p| p.first&.upcase }.join.presence || @user.email.first.upcase %>
-<% joined_on = @user.created_at ? @user.created_at.strftime("%b %-d, %Y") : "Recent" %>
-<% last_accessed = if @user.respond_to?(:current_sign_in_at) && @user.current_sign_in_at.present?
-                     time_ago_in_words(@user.current_sign_in_at)
-                   else
-                     "Recently"
-                   end %>
-<% support_email = "health-admin@tamu.edu" %>
-
-<main class="account-settings-page bg-slate-50 px-4 py-12">
-  <div class="account-settings-container mx-auto max-w-6xl space-y-10">
-    <section class="account-settings-hero relative overflow-hidden rounded-[32px] border border-white/20 bg-gradient-to-r from-[#5e0d13] via-[#750f23] to-[#b32c37] px-8 py-10 text-white shadow-2xl">
-      <div class="absolute inset-y-0 right-0 hidden w-1/2 rotate-6 rounded-[48px] bg-white/10 blur-3xl lg:block" aria-hidden="true"></div>
-      <div class="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+<main class="c-main c-page">
+  <section class="c-card c-card--brand c-card--spacious u-stack u-stack--lg">
+    <header class="c-page-header">
+      <div class="u-stack u-stack--md">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Account overview</p>
-          <h1 class="mt-3 text-3xl font-semibold tracking-tight"><%= @user.name %></h1>
-          <div class="mt-5 flex flex-wrap gap-3 text-sm text-white/90">
-            <span class="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 font-medium">
-              <span class="h-2.5 w-2.5 rounded-full bg-emerald-300"></span>
-              <%= role_label %>
-            </span>
-            <span class="inline-flex items-center rounded-full bg-white/10 px-3 py-1">Member since <%= joined_on %></span>
-            <span class="inline-flex items-center rounded-full bg-white/10 px-3 py-1">Last active <%= last_accessed %> ago</span>
-          </div>
+          <p class="c-eyebrow">Edit account information</p>
+          <h1 class="c-page-title c-page-title--brand"><%= full_name %></h1>
+          <p class="c-page-subtitle">Update the student program details used for assignments, advising, and reporting.</p>
         </div>
 
-        <div class="flex items-center gap-5 text-sm text-white/80">
-          <div class="text-right">
-            <p class="text-xs uppercase tracking-wide text-white/60">Primary email</p>
-            <p class="text-base font-medium"><%= @user.email %></p>
-          </div>
-          <div class="flex h-24 w-24 items-center justify-center rounded-full bg-white/15 text-3xl font-semibold text-white ring-4 ring-white/20">
-            <%= initials %>
-          </div>
+        <div class="u-actions u-actions--start u-gap-xs">
+          <span class="c-status-pill <%= profile_complete ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
+            <%= profile_complete ? "Profile complete" : "Profile needs updates" %>
+          </span>
+          <span class="c-pill c-pill--muted"><%= track %></span>
+          <span class="c-pill c-pill--muted"><%= program_year %></span>
+          <span class="c-pill c-pill--muted">Updated <%= updated_text %></span>
         </div>
       </div>
 
-      <div class="mt-8 grid gap-4 text-sm text-white/80 md:grid-cols-3">
-        <div class="rounded-2xl bg-white/10 px-4 py-3">
-          <p class="text-xs uppercase tracking-wide text-white/60">Notifications</p>
-          <p class="mt-1 text-base font-semibold text-white"><%= @user.notifications_enabled? ? "Enabled" : "Muted" %></p>
-        </div>
-        <div class="rounded-2xl bg-white/10 px-4 py-3">
-          <p class="text-xs uppercase tracking-wide text-white/60">Track</p>
-          <p class="mt-1 text-base font-semibold text-white"><%= @user.student_profile&.track.presence || "Not specified" %></p>
-        </div>
-        <div class="rounded-2xl bg-white/10 px-4 py-3">
-          <p class="text-xs uppercase tracking-wide text-white/60">Advisor</p>
-          <% advisor = @user.student_profile&.advisor || @user.advisor_profile %>
-          <p class="mt-1 text-base font-semibold text-white"><%= advisor&.user&.display_name || "Awaiting assignment" %></p>
+      <div class="u-responsive-row u-items-center">
+        <div class="c-avatar-tile u-size-2xl text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@user)}\"" unless avatar_url %>>
+          <% if avatar_url %>
+            <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@user) %>" loading="lazy">
+          <% else %>
+            <span aria-hidden="true"><%= initials %></span>
+            <span class="sr-only"><%= avatar_aria_label(@user) %></span>
+          <% end %>
         </div>
       </div>
-    </section>
+    </header>
 
-    <div class="account-settings-grid grid gap-6 lg:grid-cols-[1.8fr,1fr]">
-      <section class="account-details-card rounded-[30px] bg-white px-8 py-8 shadow-sm ring-1 ring-slate-200">
-        <div class="flex flex-col gap-3 border-b border-slate-100 pb-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.3em] text-[#500000]">Profile details</p>
-            <h2 class="mt-2 text-2xl font-semibold text-slate-900">Make quick updates</h2>
-            <p class="mt-1 text-sm text-slate-600">Your name appears on dashboards, exports, and automated communications.</p>
-          </div>
-          <div class="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-            Changes save securely
-          </div>
-        </div>
+    <div class="u-grid u-grid--stats">
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Major / Program</p>
+        <p class="c-value c-value--lg"><%= major %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Program year</p>
+        <p class="c-value c-value--lg"><%= program_year %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Advisor</p>
+        <p class="c-value c-value--lg"><%= advisor_name %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">UIN</p>
+        <p class="c-value c-value--lg"><%= uin %></p>
+      </article>
+    </div>
+  </section>
 
-        <%= form_with model: @user, url: account_path, method: :patch, local: true, class: "mt-8 space-y-7" do |f| %>
-          <% if @user.errors.any? %>
-            <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
-              <p class="font-semibold">Please fix the following:</p>
-              <ul class="mt-1 list-disc pl-5">
-                <% @user.errors.full_messages.each do |msg| %>
-                  <li><%= msg %></li>
+  <%= form_with model: @student, url: account_path, method: :patch, local: true do |form| %>
+    <section class="c-student-overview-layout">
+      <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
+        <%= render "shared/account_settings_tabs", active: :account %>
+      </aside>
+
+      <div class="c-student-overview-main u-stack u-stack--lg">
+        <section class="c-card c-card--tight u-stack u-stack--lg">
+          <header class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Account</p>
+            <h2 class="c-section-title">Identity</h2>
+            <p class="c-help">These details are read-only and come from your authenticated sign-in account.</p>
+          </header>
+
+          <dl class="c-key-value-list">
+            <div>
+              <dt>Full name</dt>
+              <dd><%= full_name %></dd>
+            </div>
+            <div>
+              <dt>Email</dt>
+              <dd><%= email %></dd>
+            </div>
+            <div>
+              <dt>Role</dt>
+              <dd><%= role_label %></dd>
+            </div>
+            <div>
+              <dt>UIN</dt>
+              <dd><%= uin %></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="c-card c-card--tight u-stack u-stack--lg">
+          <header class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Student profile</p>
+            <h2 class="c-section-title">Program Details</h2>
+            <p class="c-help">Change these fields when your program, advisor, or cohort information needs correction.</p>
+          </header>
+
+          <% if @student.errors.any? %>
+            <div class="c-card c-card--tight c-card--danger u-shadow-none">
+              <h3 class="c-h3">
+                <%= pluralize(@student.errors.count, "error") %> need your attention before saving
+              </h3>
+              <ul class="c-rich-text">
+                <% @student.errors.full_messages.each do |message| %>
+                  <li><%= message %></li>
                 <% end %>
               </ul>
             </div>
           <% end %>
 
-          <div class="grid gap-6 md:grid-cols-2">
-            <div class="md:col-span-2">
-              <%= f.label :name, "Display name", class: "block text-sm font-semibold text-slate-700" %>
-              <%= f.text_field :name,
-                    placeholder: "e.g., Tee Li",
-                    class: "mt-2 block w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900 shadow-sm transition focus:border-[#500000] focus:outline-none focus:ring-2 focus:ring-[#500000]" %>
+          <div class="u-grid u-grid--form">
+            <div class="c-kv c-kv--compact">
+              <div class="c-field">
+                <%= form.label :uin, "UIN", class: "c-label" %>
+                <%= form.text_field :uin,
+                                    placeholder: "Enter your 9-digit UIN",
+                                    required: true,
+                                    inputmode: "numeric",
+                                    autocomplete: "off",
+                                    maxlength: 9,
+                                    pattern: "\\d{9}",
+                                    class: "c-input" %>
+                <small class="c-help">Your 9-digit University ID.</small>
+              </div>
             </div>
 
-            <div>
-              <label class="block text-sm font-semibold text-slate-700">Email</label>
-              <p class="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner">
-                <%= @user.email %>
-              </p>
+            <div class="c-kv c-kv--compact">
+              <div class="c-field">
+                <%= form.label :program_year, "Program year", class: "c-label" %>
+                <% program_year_options = ProgramYear.values.map { |year| [ year.to_s, year ] } %>
+                <%= form.select :program_year,
+                                options_for_select(program_year_options, @student.program_year.to_i.presence),
+                                { prompt: "Select your graduation year" },
+                                { required: true, class: "c-select u-w-full" } %>
+                <small class="c-help">Used for cohort assignment and reporting.</small>
+              </div>
             </div>
 
-            <div>
-              <label class="block text-sm font-semibold text-slate-700">Role</label>
-              <p class="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner">
-                <%= role_label %>
-              </p>
+            <div class="c-kv c-kv--compact">
+              <div class="c-field">
+                <%= form.label :major, "Major / Program", class: "c-label" %>
+                <%= form.select :major,
+                                options_for_select(major_names, @student.major.to_s),
+                                { prompt: "Select your major" },
+                                { required: true, class: "c-select u-w-full" } %>
+              </div>
+            </div>
+
+            <div class="c-kv c-kv--compact">
+              <div class="c-field">
+                <%= form.label :track, "Program track", class: "c-label" %>
+                <% track_options = Student.tracks.map { |key, label| [ label, key ] } %>
+                <%= form.select :track,
+                                options_for_select(track_options, @student.track_key.to_s),
+                                { prompt: "Select your track" },
+                                { required: true, class: "c-select u-w-full" } %>
+              </div>
+            </div>
+
+            <div class="c-kv c-kv--compact u-col-span-all">
+              <div class="c-field">
+                <%= form.label :advisor_id, "Advisor", class: "c-label" %>
+                <%= form.select :advisor_id,
+                                options_from_collection_for_select(@advisors, :advisor_id, :display_name, @student.advisor_id),
+                                { prompt: "Select your advisor (optional)" },
+                                { class: "c-select u-w-full" } %>
+              </div>
             </div>
           </div>
-
-          <div class="rounded-2xl bg-slate-50 px-5 py-4 text-sm text-slate-600">
-            <p class="font-semibold text-slate-800">Why only the name?</p>
-            <p class="mt-1">Sensitive authentication details continue to live in the secure sign-in experience, so you can edit your display information here without impacting MFA or SSO.</p>
-          </div>
-
-          <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-6">
-            <button type="button"
-                    onclick="window.history.back()"
-                    class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-              <span aria-hidden="true">←</span>
-              Back to previous page
-            </button>
-
-            <%= f.submit "Save changes",
-              class: "cta-button inline-flex items-center gap-2 rounded-2xl bg-[#500000] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3f0000] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#500000]" %>
-          </div>
-        <% end %>
-      </section>
-
-        <section class="account-checklist-card rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-lg">
-          <p class="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">Checklist</p>
-          <h3 class="mt-2 text-lg font-semibold">Keep your account ready</h3>
-          <ul class="mt-4 space-y-3 text-sm text-white/90">
-            <li class="flex items-start gap-2">
-              <span class="mt-1 h-2 w-2 rounded-full bg-emerald-300"></span>
-              Confirm your display name before exporting reports.
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="mt-1 h-2 w-2 rounded-full bg-amber-300"></span>
-              Review advisor assignments so updates reach the right inbox.
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="mt-1 h-2 w-2 rounded-full bg-sky-300"></span>
-              Keep notifications enabled to catch survey reminders instantly.
-            </li>
-          </ul>
         </section>
-      </aside>
-    </div>
-  </div>
+
+        <section class="c-card c-card--tight">
+          <div class="u-actions u-actions--split">
+            <%= link_to account_path, class: button_classes(:secondary) do %>
+              Cancel
+            <% end %>
+
+            <%= form.submit "Save program details", class: button_classes(:primary) %>
+          </div>
+        </section>
+      </div>
+    </section>
+  <% end %>
 </main>

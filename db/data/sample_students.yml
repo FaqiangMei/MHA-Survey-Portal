@@ -1,0 +1,147 @@
+# Demo/test student seed definitions.
+# Used by db/seeds.rb when SEED_DEMO_DATA is enabled (default: non-production).
+#
+# Fields are intentionally flexible so schema changes are easy to support.
+#
+# Required:
+# - email
+# - name
+# - track: "Residential" | "Executive"
+# - advisor_email: must match a seeded advisor account
+#
+# Optional:
+# - program_year: integer cohort year (e.g., 2026/2027)
+# - pending: boolean (default false)
+# - multi_semester: boolean (default false)
+
+# Two Year-2 students with multi-semester completions for testing confidential notes
+- email: avery.harrison25@tamu.edu
+  name: Avery Harrison
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2026
+  multi_semester: true
+
+- email: liam.daniels25@tamu.edu
+  name: Liam Daniels
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2026
+  multi_semester: true
+
+- email: zoe.elliott24@tamu.edu
+  name: Zoe Elliott
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2027
+
+- email: mila.perez25@tamu.edu
+  name: Mila Perez
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2026
+  multi_semester: true
+
+- email: carter.andrews25@tamu.edu
+  name: Carter Andrews
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2027
+
+- email: sloan.reese24@tamu.edu
+  name: Sloan Reese
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2027
+
+- email: nova.mitchell25@tamu.edu
+  name: Nova Mitchell
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2027
+
+- email: emery.walsh24@tamu.edu
+  name: Emery Walsh
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2027
+
+- email: kiara.hughes25@tamu.edu
+  name: Kiara Hughes
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2026
+  multi_semester: true
+
+- email: judah.nguyen24@tamu.edu
+  name: Judah Nguyen
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2027
+
+- email: logan.ramsey25@tamu.edu
+  name: Logan Ramsey
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2027
+  pending: true
+
+- email: isla.merritt25@tamu.edu
+  name: Isla Merritt
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2027
+  pending: true
+
+# Additional students — brings total to ~20, using cstebbins@tamu.edu as third advisor
+
+- email: marcus.chen25@tamu.edu
+  name: Marcus Chen
+  track: Residential
+  advisor_email: cstebbins@tamu.edu
+  program_year: 2027
+
+- email: priya.nair25@tamu.edu
+  name: Priya Nair
+  track: Residential
+  advisor_email: cstebbins@tamu.edu
+  program_year: 2027
+
+- email: faith.okonkwo25@tamu.edu
+  name: Faith Okonkwo
+  track: Residential
+  advisor_email: cstebbins@tamu.edu
+  program_year: 2026
+  multi_semester: true
+
+- email: derek.santos25@tamu.edu
+  name: Derek Santos
+  track: Executive
+  advisor_email: cstebbins@tamu.edu
+  program_year: 2027
+
+- email: grace.lawson25@tamu.edu
+  name: Grace Lawson
+  track: Executive
+  advisor_email: cstebbins@tamu.edu
+  program_year: 2027
+
+- email: theo.walker25@tamu.edu
+  name: Theo Walker
+  track: Executive
+  advisor_email: cstebbins@tamu.edu
+  program_year: 2026
+  multi_semester: true
+
+- email: simone.park25@tamu.edu
+  name: Simone Park
+  track: Residential
+  advisor_email: sarah115@tamu.edu
+  program_year: 2027
+
+- email: caleb.frost25@tamu.edu
+  name: Caleb Frost
+  track: Executive
+  advisor_email: probinson@tamu.edu
+  program_year: 2026
+  multi_semester: true

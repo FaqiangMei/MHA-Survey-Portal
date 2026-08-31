@@ -1,12 +1,33 @@
-<% content_for :title, "Editing survey response" %>
+<% content_for :title, "Edit survey responses" %>
 
-<h1>Editing survey response</h1>
+<div data-survey-scroll-scope class="c-document-shell">
+  <% return_to = @return_to.presence %>
 
-<%= render "form", survey_response: @survey_response %>
+  <%= form_with url: survey_response_path(@survey_response.id, return_to: return_to), method: :patch, local: true, data: { disable_submit_if_unchanged: true }, html: { class: "survey-form u-stack u-stack--xl" } do %>
+    <div class="u-actions u-actions--split">
+      <%= link_to "← Back", (return_to.presence || survey_records_path), class: button_classes(:secondary) %>
 
-<br>
+      <div class="u-actions">
+        <%= submit_tag "Save changes",
+                       class: button_classes(:primary),
+                       data: { save_button: true, turbo_confirm: "Save changes to this student's survey response?" },
+                       disabled: true %>
+        <%= link_to "Cancel", survey_response_path(@survey_response.id, return_to: return_to), class: button_classes(:secondary) %>
+      </div>
+    </div>
 
-<div>
-  <%= link_to "Show this survey response", @survey_response %> |
-  <%= link_to "Back to survey responses", survey_responses_path %>
+    <%= render "survey_responses/survey_response",
+               survey_response: @survey_response,
+               editable: true,
+               existing_answers: @existing_answers,
+               other_answers: @other_answers %>
+
+    <div class="u-actions">
+      <%= submit_tag "Save changes",
+                     class: button_classes(:primary),
+                     data: { save_button: true, turbo_confirm: "Save changes to this student's survey response?" },
+                     disabled: true %>
+      <%= link_to "Cancel", survey_response_path(@survey_response.id, return_to: return_to), class: button_classes(:secondary) %>
+    </div>
+  <% end %>
 </div>

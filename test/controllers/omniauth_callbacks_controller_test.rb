@@ -60,6 +60,21 @@ class OmniauthCallbacksControllerTest < ActionDispatch::IntegrationTest
     User.find_by(email: email)&.destroy
   end
 
+  test "TAMU email redirects to sign in when provisioning returns nil" do
+    email = "provisioning_failure@tamu.edu"
+    mock_oauth(email: email)
+
+    User.stub :from_google, nil do
+      get user_google_oauth2_omniauth_callback_path, params: { role: "student" }
+    end
+
+    assert_redirected_to new_user_session_path
+    follow_redirect!
+    assert_match(/not authorized/i, flash[:alert].to_s)
+  ensure
+    User.find_by(email: email)&.destroy
+  end
+
   private
 
   def mock_oauth(email:)
@@ -75,20 +90,21 @@ class OmniauthCallbacksControllerTest < ActionDispatch::IntegrationTest
   end
 end
 
-class OmniauthCallbacksControllerUnitTest < ActionController::TestCase
-  include Devise::Test::ControllerHelpers
-  tests OmniauthCallbacksController
-
+class OmniauthCallbacksControllerUnitTest < ActionDispatch::IntegrationTest
   setup do
-    @request.env["devise.mapping"] = Devise.mappings[:user]
-    @request.env["omniauth.params"] = { "role" => "student" }
-    @request.env["omniauth.auth"] = auth_hash(email: "student@tamu.edu")
+    OmniAuth.config.test_mode = true
+    mock_oauth(email: "student@tamu.edu")
+  end
+
+  teardown do
+    OmniAuth.config.mock_auth[:google_oauth2] = nil
+    OmniAuth.config.test_mode = false
   end
 
   test "non-TAMU emails are rejected before provisioning" do
-    @request.env["omniauth.auth"] = auth_hash(email: "user@example.com")
+    mock_oauth(email: "user@example.com")
 
-    get :google_oauth2
+    get user_google_oauth2_omniauth_callback_path, params: { role: "student" }
 
     assert_redirected_to new_user_session_path
     assert_match "Please sign in with your TAMU email", flash[:alert]
@@ -98,9 +114,10 @@ class OmniauthCallbacksControllerUnitTest < ActionController::TestCase
     user = users(:student)
     called = []
 
+    # Ensure Devise mapping is still available when the action hits sign_in.
     SurveyAssignments::AutoAssigner.stub :call, ->(**args) { called << args } do
       User.stub :from_google, user do
-        get :google_oauth2
+        get user_google_oauth2_omniauth_callback_path, params: { role: "student" }
       end
     end
 
@@ -110,30 +127,72 @@ class OmniauthCallbacksControllerUnitTest < ActionController::TestCase
     assert_equal user.student_profile, called.first[:student]
   end
 
-  test "provisioning failures redirect back with alert" do
-    User.stub :from_google, nil do
-      get :google_oauth2
+  test "admin role redirects to admin dashboard" do
+    user = users(:admin)
+
+    User.stub :from_google, user do
+      get user_google_oauth2_omniauth_callback_path, params: { role: "admin" }
     end
 
-    assert_redirected_to new_user_session_path
-    assert_match "not authorized", flash[:alert]
+    assert_redirected_to admin_dashboard_path
   end
 
-  test "after_omniauth_failure_path_for returns sign in path" do
-    assert_equal new_user_session_path, @controller.send(:after_omniauth_failure_path_for, :user)
+  test "advisor role redirects to advisor dashboard" do
+    user = users(:advisor)
+
+    User.stub :from_google, user do
+      get user_google_oauth2_omniauth_callback_path, params: { role: "advisor" }
+    end
+
+    assert_redirected_to advisor_dashboard_path
+  end
+
+  test "student auto assignment failures are rescued" do
+    user = users(:student)
+
+    SurveyAssignments::AutoAssigner.stub :call, ->(**_args) { raise "boom" } do
+      User.stub :from_google, user do
+        get user_google_oauth2_omniauth_callback_path, params: { role: "student" }
+      end
+    end
+
+    assert_redirected_to student_dashboard_path
+  end
+
+  test "unknown user role falls back to dashboard when callback role is unavailable" do
+    user = users(:student)
+
+    user.stub(:role, "mystery") do
+      user.stub(:role_student?, false) do
+        User.stub :from_google, user do
+          get user_google_oauth2_omniauth_callback_path,
+              params: { role: "advisor" },
+              env: { "omniauth.params" => { "role" => "advisor" } }
+        end
+      end
+    end
+
+    assert_redirected_to dashboard_path
+  end
+
+  test "tamu_email accepts email.tamu.edu and rejects blank" do
+    controller = OmniauthCallbacksController.new
+
+    assert_equal true, controller.send(:tamu_email?, "someone@email.tamu.edu")
+    assert_equal false, controller.send(:tamu_email?, "")
   end
 
   private
 
-  def auth_hash(email:)
-    OmniAuth::AuthHash.new(
+  def mock_oauth(email:)
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
       provider: "google_oauth2",
       uid: SecureRandom.uuid,
-      info: OmniAuth::AuthHash::InfoHash.new(
+      info: {
         email: email,
         name: "Unit Test",
         image: "https://example.org/avatar.png"
-      )
+      }
     )
   end
 end

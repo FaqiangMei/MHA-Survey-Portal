@@ -1,12 +1,47 @@
 # Helpers shared across views for formatting flash messages, buttons, and audit
 # metadata.
 module ApplicationHelper
-  DEFAULT_SCALE_LABELS = %w[1 2 3 4 5].freeze
+  include MarkdownHelper
+  include GuidanceTextHelper
+  include CompetencyTargetLevelsHelper
 
-  # Base Tailwind utility classes applied to flash messages.
-  FLASH_BASE_CLASSES = "mb-4 flex items-start gap-3 rounded-lg border-l-4 px-4 py-3 shadow-sm".freeze
+  APP_SHORT_NAME = "TAMU CAT".freeze
+  APP_FULL_NAME = "TAMU Competency Assessment Tracking".freeze
+  APP_LEGACY_NAME = "TAMU Competency Assessment Tool".freeze
+  APP_ICON_ASSET = "TAMU_CAT_icon.png".freeze
+  TAMU_ICON_ASSET = "tamu-logo.png".freeze
+
+  # Base CSS class applied to all flash notifications.
+  FLASH_BASE_CLASSES = "flash".freeze
   # Query string keys that should be preserved when building sortable headers.
   SURVEY_SORTABLE_KEYS = %w[q track semester].freeze
+
+  def app_short_name
+    APP_SHORT_NAME
+  end
+
+  def app_full_name
+    APP_FULL_NAME
+  end
+
+  def app_icon_asset
+    APP_ICON_ASSET
+  end
+
+  def tamu_icon_asset
+    TAMU_ICON_ASSET
+  end
+
+  def browser_title(page_title = nil)
+    title = page_title.to_s.strip
+    return app_short_name if title.blank?
+
+    compact_title = title
+      .gsub(APP_FULL_NAME, app_short_name)
+      .gsub(APP_LEGACY_NAME, app_short_name)
+
+    compact_title.include?(app_short_name) ? compact_title : "#{compact_title} | #{app_short_name}"
+  end
 
   # Computes alert styling classes based on the flash key.
   #
@@ -17,15 +52,15 @@ module ApplicationHelper
 
     case tone
     when :notice, :info
-      "#{FLASH_BASE_CLASSES} border-blue-500 bg-blue-50 text-blue-900"
+      "#{FLASH_BASE_CLASSES} flash__notice"
     when :success
-      "#{FLASH_BASE_CLASSES} border-emerald-500 bg-emerald-50 text-emerald-900"
+      "#{FLASH_BASE_CLASSES} flash__success"
     when :alert, :error
-      "#{FLASH_BASE_CLASSES} border-red-500 bg-red-50 text-red-900"
+      "#{FLASH_BASE_CLASSES} flash__alert"
     when :warning
-      "#{FLASH_BASE_CLASSES} border-amber-500 bg-amber-50 text-amber-900"
+      "#{FLASH_BASE_CLASSES} flash__warning"
     else
-      "#{FLASH_BASE_CLASSES} border-slate-400 bg-white text-slate-700"
+      FLASH_BASE_CLASSES
     end
   end
 
@@ -35,13 +70,33 @@ module ApplicationHelper
   # @return [String]
   def flash_title(key)
     {
-      notice: "Heads up",
-      info: "Heads up",
+      notice: "Heads Up",
+      info: "Heads Up",
       success: "Success",
-      alert: "Attention",
-      error: "Something went wrong",
-      warning: "Warning"
+      alert: "Needs Attention",
+      error: "Something Went Wrong",
+      warning: "Review Before Continuing"
     }.fetch(key.to_sym, key.to_s.titleize)
+  end
+
+  def ferpa_export_confirmation(record_description = "student-level education records")
+    "FERPA reminder: This download may include #{record_description}. Download only when you have a legitimate educational interest, and store or share the file securely. Continue?"
+  end
+
+  def ferpa_export_notice(record_description = "student-level education records")
+    "FERPA reminder: #{record_description} may include identifiable education records. Export only for legitimate educational or program review use, then store and share it securely."
+  end
+
+  # Renders question text in plain or rich format based on question config.
+  # Rich prompts are sanitized to a strict set of inline tags.
+  #
+  # @param question [Question]
+  # @return [ActiveSupport::SafeBuffer]
+  def render_question_prompt(question)
+    raw = question&.question_text.to_s
+    return h(raw) unless question.respond_to?(:rich_text_prompt?) && question.rich_text_prompt?
+
+    render_markdown_inline(raw)
   end
 
   # Emits a stylesheet tag for Tailwind, with a fallback if the asset pipeline
@@ -62,28 +117,73 @@ module ApplicationHelper
     nil
   end
 
-  # Builds Tailwind button classes for the provided variant.
+  # Emits links for the consolidated app stylesheets, with resilient fallback
+  # resolution for environments where logical asset lookup may intermittently fail.
+  #
+  # @return [String, nil]
+  def consolidated_stylesheet_tags
+    stylesheet_link_tag("application", "accessibility", "data-turbo-track": "reload")
+  rescue StandardError => e
+    names = %w[application.css accessibility.css]
+    tags = names.filter_map { |name| stylesheet_fallback_tag(name) }
+
+    Rails.logger.warn("consolidated stylesheets fallback used: #{e.class}: #{e.message}")
+
+    return safe_join(tags, "\n") if tags.any?
+
+    nil
+  end
+
+  private def stylesheet_fallback_tag(name)
+    prefix = Rails.application.config.assets.prefix.presence || "/assets"
+    candidates = [ name, "stylesheets/#{name}", "builds/#{name}" ]
+
+    asset = candidates.lazy.map { |path| Rails.application.assets&.load_path&.find(path) }.find(&:present?)
+
+    href = if asset&.respond_to?(:digested_path)
+      File.join(prefix, asset.digested_path)
+    else
+      File.join(prefix, name)
+    end
+
+    tag.link(rel: "stylesheet", href:, "data-turbo-track": "reload")
+  rescue StandardError
+    nil
+  end
+
+  # Builds application button classes for the provided variant.
   #
   # @param variant [Symbol]
   # @param extra_classes [String]
   # @return [String]
-  def tailwind_button_classes(variant = :primary, extra_classes: "")
-    base = "tailwind-btn inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+  def button_classes(variant = :primary, extra_classes: "")
+    base = "btn"
 
-    variant_classes = case variant.to_sym
+    variant_class = case variant.to_sym
     when :primary
-      "bg-[#500000] text-white hover:bg-[#330000] focus-visible:outline-[#500000]"
+      "btn-primary"
     when :secondary
-      "border border-[#500000] text-[#500000] hover:bg-[#f9f2f2] focus-visible:outline-[#500000]"
+      "btn-secondary"
+    when :ghost
+      "btn-ghost"
     when :subtle
-      "bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:outline-slate-400"
+      "btn-subtle"
     when :danger
-      "bg-rose-600 text-white hover:bg-rose-700 focus-visible:outline-rose-600"
+      "btn-danger"
+    when :success
+      "btn-success"
+    when :warning
+      "btn-warning"
     else
-      "bg-slate-700 text-white hover:bg-slate-800 focus-visible:outline-slate-700"
+      "btn-secondary"
     end
 
-    [ base, variant_classes, extra_classes.presence ].compact.join(" ")
+    [ base, variant_class, extra_classes.presence ].compact.join(" ")
+  end
+
+  # Backward-compatible alias for older views/helpers.
+  def tailwind_button_classes(...)
+    button_classes(...)
   end
 
   # Returns CSS classes for a survey status pill.
@@ -91,18 +191,108 @@ module ApplicationHelper
   # @param status [String, Symbol]
   # @return [String]
   def survey_status_badge_classes(status)
-    base = "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide"
+    status_badge_classes(status)
+  end
 
-    variant = case status.to_s.downcase
-    when "completed"
-      "border-emerald-200 bg-emerald-50 text-emerald-700"
-    when "pending"
-      "border-amber-200 bg-amber-50 text-amber-700"
-    else
-      "border-slate-200 bg-slate-100 text-slate-600"
+  # Returns CSS classes for feedback status badge.
+  #
+  # @param status [String, Symbol]
+  # @return [String]
+  def feedback_status_badge_classes(status)
+    status_badge_classes(status)
+  end
+
+  # Returns app-wide status badge classes.
+  #
+  # @param status [String, Symbol]
+  # @param extra_classes [String, nil]
+  # @return [String]
+  def status_badge_classes(status, extra_classes: nil)
+    classes = [ "c-status-badge", "c-status-badge--#{badge_tone(status)}" ]
+    classes << extra_classes if extra_classes.present?
+    classes.join(" ")
+  end
+
+  # Renders an app-wide status badge.
+  #
+  # @param label [String]
+  # @param value [String, Symbol, nil] optional tone source when the label differs from the status value
+  # @param html_options [Hash]
+  # @return [String]
+  def status_badge(label, value: nil, **html_options)
+    classes = status_badge_classes(value.presence || label, extra_classes: html_options.delete(:class))
+    content_tag(:span, label, html_options.merge(class: classes))
+  end
+
+  # Returns lifecycle label for a survey in student-record contexts.
+  #
+  # @param survey [Survey]
+  # @param rows [Array<Hash>] survey rows from StudentRecordsController
+  # @return [String]
+  def survey_lifecycle_label(survey, rows)
+    return "Archived" unless survey&.is_active?
+
+    row_list = Array(rows)
+    return "Active" if row_list.blank?
+
+    has_open_assignment = row_list.any? do |row|
+      deadline = row[:available_until]
+      deadline.blank? || deadline >= Time.current
     end
 
-    "#{base} #{variant}"
+    has_open_assignment ? "Active" : "Closed"
+  end
+
+  # Returns CSS classes for survey lifecycle badge.
+  #
+  # @param label [String]
+  # @return [String]
+  def survey_lifecycle_badge_classes(label)
+    status_badge_classes(label)
+  end
+
+  # Returns a human-friendly availability label for survey summaries.
+  #
+  # @param available_until [Time, Date, nil]
+  # @return [String]
+  def survey_availability_note(available_until)
+    return "No deadline" if available_until.blank?
+
+    date = available_until.to_date
+    "Closes #{date.strftime('%B')} #{date.day}, #{date.year}"
+  end
+
+  # Formats a date like "January 9, 2026" (no leading zero).
+  #
+  # @param value [Time, Date]
+  # @return [String]
+  def format_calendar_date(value)
+    date = value.to_date
+    "#{date.strftime('%B')} #{date.day}, #{date.year}"
+  end
+
+  # Returns a human-friendly review meeting date/range for a survey offering.
+  #
+  # @param offering [SurveyOffering, nil]
+  # @return [String, nil]
+  def review_meetings_note(offering)
+    return if offering.blank?
+
+    start_date = offering.review_meetings_start
+    end_date = offering.review_meetings_end
+    return if start_date.blank? && end_date.blank?
+
+    if start_date.present? && end_date.present?
+      start_label = format_calendar_date(start_date)
+      end_label = format_calendar_date(end_date)
+      return start_label if start_label == end_label
+
+      "#{start_label} – #{end_label}"
+    elsif start_date.present?
+      format_calendar_date(start_date)
+    else
+      format_calendar_date(end_date)
+    end
   end
 
   # Generates a concise summary string from survey audit metadata.
@@ -178,35 +368,30 @@ module ApplicationHelper
     name.present? ? "Profile picture for #{name}" : "User avatar"
   end
 
-  # Returns the configured labels for a scale question, falling back to a
-  # standard 1-5 list when no custom labels were provided.
-  #
-  # @param question [Question]
-  # @return [Array<String>]
-  def scale_labels_for(question)
-    Array(question&.answer_options_list).presence || DEFAULT_SCALE_LABELS
-  end
-
-  # Resolves the display label for a stored scale value. When the value is a
-  # numeric index, the matching configured label is returned; otherwise the raw
-  # value is shown.
-  #
-  # @param question [Question]
-  # @param raw_value [String, Integer]
-  # @return [String]
-  def scale_label_for_value(question, raw_value)
-    return "" if raw_value.blank?
-
-    labels = scale_labels_for(question)
-    index = Integer(raw_value) rescue nil
-    if index
-      labels.fetch(index - 1, raw_value.to_s.presence || "")
-    else
-      raw_value.to_s
-    end
-  end
-
   private
+
+  # Builds a unified badge class string.
+  # The badge text itself remains the caller-provided input.
+  #
+  # @param value [String, Symbol]
+  # @return [String]
+  def unified_badge_classes(value)
+    status_badge_classes(value)
+  end
+
+  # Resolves one of three badge tones from a free-form label.
+  #
+  # @param value [String, Symbol]
+  # @return [Symbol]
+  def badge_tone(value)
+    text = value.to_s.downcase.squish
+
+    return :success if text.in?([ "completed", "submitted", "active" ])
+    return :warning if text.in?([ "assigned", "draft", "closed", "late", "overdue", "in progress", "pending", "processing" ])
+    return :danger if text.in?([ "unassigned" ])
+
+    :neutral
+  end
 
   # Humanizes single audit attribute values for display.
   #

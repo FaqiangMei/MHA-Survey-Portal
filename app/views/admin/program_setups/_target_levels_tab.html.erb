@@ -1,0 +1,265 @@
+<section class="c-card c-card--spacious u-stack u-stack--md">
+  <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+    <div>
+      <h2 class="c-panel-title">Competency Targets</h2>
+      <p class="c-panel-subtitle">Set end-of-program target levels for a specific semester, track, and cohort.</p>
+    </div>
+  </header>
+
+  <% if @post_save_warning.present? %>
+    <div class="c-callout c-callout--warning" role="alert">
+      <p>
+        <span class="c-callout__title">Review before continuing:</span>
+        <%= @post_save_warning %>
+      </p>
+    </div>
+  <% end %>
+
+  <%= form_with url: admin_program_setup_path, method: :get, local: true, data: { turbo: false } do %>
+    <%= hidden_field_tag :tab, "targets" %>
+    <div class="c-card c-card--tight u-stack u-stack--md">
+      <div class="u-actions u-actions--split u-mt-sm">
+        <div>
+          <p class="c-eyebrow">1. Target context</p>
+          <h3 class="c-h3 c-heading-inline">Choose who these program targets apply to</h3>
+          <p class="c-panel-subtitle">Load a context first, then review coverage and edit the 17 competency targets below.</p>
+        </div>
+        <% if @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present? %>
+          <div class="u-actions u-actions--start u-gap-xs">
+            <span class="c-pill c-pill--muted">
+              <%= @semesters.find { |semester| semester.id == @selected_semester_id }&.name || "Selected semester" %>
+            </span>
+            <span class="c-pill c-pill--muted">
+              <%= @selected_track %>
+            </span>
+            <span class="c-pill c-pill--muted">Class of <%= @selected_class_of %></span>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="c-filter-grid">
+        <div class="c-field">
+          <label class="c-label">Semester</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :program_semester_id,
+              options_for_select([["Select a semester", ""]] + @semesters.map { |s| [s.name, s.id] }, @selected_semester_id),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-field">
+          <label class="c-label">Track</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :track,
+              options_for_select([["Select a track", ""]] + @tracks.map { |t| [t, t] }, @selected_track),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-field">
+          <label class="c-label">Cohort</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :class_of,
+              options_for_select(@class_of_options, @selected_class_of.to_s),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div>
+          <%= button_tag "Load Targets", type: "submit", name: nil, class: button_classes(:secondary) %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present? %>
+    <% selected_semester = @semesters.find { |semester| semester.id == @selected_semester_id } %>
+    <% current_semester = @current_program_semester %>
+    <% if @target_coverage_summary.present? %>
+      <% coverage = @target_coverage_summary %>
+      <section class="c-card c-card--tight u-stack u-stack--sm">
+        <div class="u-actions u-actions--split">
+          <div>
+            <p class="c-eyebrow">2. Program target coverage</p>
+            <h3 class="c-h3 c-heading-inline">
+              <%= coverage[:populated] %> of <%= coverage[:total] %> end-of-program targets set
+            </h3>
+            <p class="c-panel-subtitle">
+              These are program targets for this semester, track, and class context. Uploaded faculty CSV course targets are reviewed separately in grade import batches.
+            </p>
+          </div>
+          <span class="c-status-pill <%= coverage[:missing_count].zero? ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
+            <%= coverage[:missing_count].zero? ? "Complete" : "#{coverage[:missing_count]} missing" %>
+          </span>
+        </div>
+
+        <% if coverage[:missing_titles].present? %>
+          <details class="c-cell-details">
+            <summary class="c-cell-details__summary">Show missing program targets</summary>
+            <ul class="u-stack u-stack--xs u-mt-sm">
+              <% coverage[:missing_titles].each do |title| %>
+                <li><%= title %></li>
+              <% end %>
+            </ul>
+          </details>
+        <% end %>
+
+        <% if coverage[:legacy_program_year_count].to_i.positive? %>
+          <p class="c-help">
+            <%= pluralize(coverage[:legacy_program_year_count], "target") %> prefilled from existing cohort target records.
+            Saving will preserve the values for Class of <%= @selected_class_of %>.
+          </p>
+        <% end %>
+
+        <% if coverage[:missing_count].positive? || (current_semester.present? && current_semester.id != @selected_semester_id) %>
+          <div class="u-actions u-actions--start u-gap-xs">
+            <% if current_semester.present? && current_semester.id != @selected_semester_id %>
+              <%= button_to "Copy to Current Semester",
+                            admin_copy_target_levels_to_current_path,
+                            method: :post,
+                            params: {
+                              program_semester_id: @selected_semester_id,
+                              track: @selected_track,
+                              class_of: @selected_class_of
+                            },
+                            class: button_classes(:secondary),
+                            data: {
+                              turbo_confirm: "Copy configured target levels from #{selected_semester&.name || 'the selected semester'} to #{current_semester.name} for #{@selected_track}, Class of #{@selected_class_of}? Existing values for the current semester will be updated."
+                            } %>
+            <% end %>
+
+            <% if coverage[:missing_count].positive? %>
+            <%= button_to "Fill Missing From Defaults",
+                          admin_fill_default_target_levels_path,
+                          method: :post,
+                          params: {
+                            program_semester_id: @selected_semester_id,
+                            track: @selected_track,
+                            class_of: @selected_class_of
+                          },
+                          class: button_classes(:secondary),
+                          data: { turbo_confirm: "Fill only blank target levels for this selected context from the default target file?" } %>
+            <% end %>
+          </div>
+        <% end %>
+      </section>
+    <% end %>
+
+    <% confirm_message = if @submitted_students_count.to_i.positive?
+      "#{@submitted_students_count} student(s) have already submitted surveys for this cohort. Saving target levels may change how reports and exports are interpreted. Continue?"
+    else
+      "Save target levels?"
+    end %>
+
+    <%= form_with url: admin_target_levels_path,
+                  method: :patch,
+                  local: true,
+                  data: {
+                    turbo: false,
+                    controller: "confirm-submit",
+                    action: "submit->confirm-submit#confirm",
+                    "confirm-submit-message-value": confirm_message
+                  } do %>
+      <%= hidden_field_tag :program_semester_id, @selected_semester_id %>
+      <%= hidden_field_tag :track, @selected_track %>
+      <%= hidden_field_tag :class_of, @selected_class_of %>
+
+      <div class="u-actions u-actions--split">
+        <div>
+          <p class="c-eyebrow">3. Edit targets</p>
+          <h3 class="c-h3 c-heading-inline">Set end-of-program target levels</h3>
+          <p class="c-panel-subtitle">Blank values mean the target is not configured for this context.</p>
+        </div>
+      </div>
+
+      <div class="c-card c-card--flush c-table-wrapper">
+        <table class="c-table">
+          <thead>
+            <tr>
+              <th style="min-width: 28rem;">Competency</th>
+              <th style="min-width: 10rem;">End-of-program target</th>
+              <th style="min-width: 12rem;">Changes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @competencies.each_with_index do |title, idx| %>
+              <% original_value = @targets_by_title[title].to_s %>
+              <tr>
+                <td><div class="c-table__title"><%= title %></div></td>
+                <td>
+                  <%= hidden_field_tag "targets[#{idx}][competency_title]", title %>
+                  <div class="c-select-wrapper">
+                    <%= render "shared/proficiency_select",
+                               name: "targets[#{idx}][target_level]",
+                               selected: original_value,
+                               id: "target_level_#{idx}",
+                               class_name: "c-select u-w-full js-target-level-select",
+                               data: { row_id: idx, original_value: original_value } %>
+                  </div>
+                </td>
+                <td>
+                  <span class="c-change-indicator" data-row-id="<%= idx %>">No changes</span>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+
+      <script>
+        (function() {
+          function initTargetLevelChangeIndicators() {
+            const selects = document.querySelectorAll('.js-target-level-select');
+            if (!selects.length) return;
+
+            function labelFor(selectEl, value) {
+              const option = Array.from(selectEl.options).find(o => o.value === value);
+              return option ? option.text.trim() : (value || '');
+            }
+
+            selects.forEach(selectEl => {
+              const rowId = selectEl.dataset.rowId;
+              const originalValue = selectEl.dataset.originalValue || '';
+              const indicator = document.querySelector(`.c-change-indicator[data-row-id="${rowId}"]`);
+              if (!indicator) return;
+
+              function updateIndicator() {
+                const currentValue = selectEl.value || '';
+                if (currentValue === originalValue) {
+                  indicator.textContent = 'No changes';
+                  indicator.className = 'c-change-indicator';
+                  return;
+                }
+
+                const fromLabel = labelFor(selectEl, originalValue) || '—';
+                const toLabel = labelFor(selectEl, currentValue) || '—';
+                indicator.textContent = `${fromLabel} → ${toLabel}`;
+                indicator.className = 'c-change-indicator changed';
+              }
+
+              selectEl.addEventListener('change', updateIndicator);
+              updateIndicator();
+            });
+          }
+
+          document.addEventListener('turbo:load', initTargetLevelChangeIndicators);
+          document.addEventListener('DOMContentLoaded', initTargetLevelChangeIndicators);
+        })();
+      </script>
+
+      <div class="u-sticky-action-bar">
+        <div class="u-actions u-actions--split">
+          <p class="c-panel-subtitle">Changes are saved for the selected semester, track, and cohort context.</p>
+          <div class="u-actions">
+            <%= link_to "Change Context", admin_program_setup_path(tab: "targets"), class: button_classes(:ghost), data: { turbo: false } %>
+            <%= button_tag "Save Target Levels", type: "submit", name: nil, class: button_classes(:primary) %>
+          </div>
+        </div>
+      </div>
+    <% end %>
+  <% else %>
+    <div class="c-card c-card--tight c-card--muted">
+      <p class="c-panel-subtitle">Select a semester, track, and cohort above, then load targets to begin editing.</p>
+    </div>
+  <% end %>
+</section>

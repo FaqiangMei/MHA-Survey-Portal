@@ -5,6 +5,10 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     @adv_user = users(:advisor)
     @advisor = @adv_user.advisor_profile
 
+    @admin_user = users(:admin)
+    @other_adv_user = users(:other_advisor)
+    @other_advisor = @other_adv_user.advisor_profile
+
     @student_user = users(:student)
     @student = students(:student) || Student.first
 
@@ -27,6 +31,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     end
     @cat1, @cat2 = @survey.categories.order(:id).limit(2)
     @feedback = feedbacks(:advisor_feedback)
+    @survey.update!(advisor_numeric_feedback_enabled: true)
 
     sign_in @adv_user
   end
@@ -36,6 +41,16 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
   test "index displays all feedbacks" do
     get feedbacks_path
     assert_response :success
+  end
+
+  test "student cannot access feedback tools" do
+    sign_out @adv_user
+    sign_in @student_user
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+
+    assert_redirected_to dashboard_path
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   # === Show Action ===
@@ -50,17 +65,192 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
   test "new renders form with survey and student context" do
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
     assert_response :success
+    assert_select "form[data-feedback-editor='true'][data-feedback-autosave-enabled='true'][data-feedback-autosave-url=?]", feedbacks_path(survey_id: @survey.id, student_id: @student.student_id)
+    assert_select ".c-form-actions-bar"
+    assert_select "button[type='button'][data-feedback-save-button='true']", text: "Save"
+    assert_select "[data-feedback-autosave-status][data-autosave-state='ready']", text: /Autosave ready/
+    cancel_index = response.body.index('data-feedback-cancel="true"')
+    save_index = response.body.index('data-feedback-save-button="true"')
+    submit_index = response.body.index('data-feedback-submit-button="true"')
+    assert_operator cancel_index, :<, save_index
+    assert_operator save_index, :<, submit_index
+    assert_includes response.body, "Confidential advisor notes"
+    assert_select "textarea[name='confidential_advisor_note[body]']"
+    assert_not_includes response.body, "data-advisor-feedback-summary"
+    assert_not_includes response.body, "Summary Statistics"
+  end
+
+  test "advisor numeric ratings can be retired while written feedback remains" do
+    @survey.update!(advisor_numeric_feedback_enabled: false)
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Retired Numeric Competencies", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{question.id}][average_score]']", count: 0
+    assert_includes response.body, "numeric ratings are retired"
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: {
+        survey_id: @survey.id,
+        student_id: @student.student_id,
+        submission_intent: "submit",
+        ratings: {
+          question.id.to_s => { comments: "Written review only" }
+        }
+      }
+    end
+
+    assert_response :see_other
+    feedback = Feedback.order(:created_at).last
+    assert_nil feedback.average_score
+    assert_equal "Written review only", feedback.comments
   end
 
   test "new loads survey response context" do
-    # Create student question responses
-    q = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    category = @survey.categories.create!(name: "Readonly Student Response Context")
+    q = category.questions.create!(question_text: "Read-only response", question_order: 1, question_type: "short_answer")
     StudentQuestion.find_or_create_by!(student_id: @student.student_id, question_id: q.id) do |sq|
-      sq.response_text = "Test response"
+      sq.response_value = "Test response"
     end
 
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
     assert_response :success
+    assert_select ".c-question-card[data-feedback-readonly-response='true']"
+    assert_select "textarea[name='readonly_answers[#{q.id}]'][disabled]", text: /Test response/
+    assert_select "[name='answers[#{q.id}]']", count: 0
+  end
+
+  test "new with prefill keeps advisor scores blank even when student competency responses exist" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Prefill Competencies", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    StudentQuestion.find_or_create_by!(student_id: @student.student_id, question_id: question.id) do |response|
+      response.response_value = "3"
+    end
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{question.id}][average_score]'] option[selected='selected'][value='3']", count: 0
+  end
+
+  test "new with prefill loads real saved advisor score feedback values" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Existing Advisor Feedback Competencies", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.second,
+      question_order: 2,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id,
+      category_id: category.id,
+      question_id: question.id,
+      average_score: 4,
+      comments: "Real advisor score"
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{question.id}][average_score]'] option[selected='selected'][value='4']", text: /4/
+    assert_select "textarea[name='ratings[#{question.id}][comments]']", text: /Real advisor score/
+  end
+
+  test "new with prefill does not seed advisor scores from submitted version answers" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Versioned Prefill Competencies", section: section)
+    first_question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    second_question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.second,
+      question_order: 2,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    StudentQuestion.where(student_id: @student.student_id, question_id: [ first_question.id, second_question.id ]).delete_all
+    SurveyResponseVersion.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      event: "submitted",
+      answers: {
+        (first_question.id + 50).to_s => "4",
+        (second_question.id + 50).to_s => "2"
+      }
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{first_question.id}][average_score]'] option[selected='selected'][value='4']", count: 0
+    assert_select "select[name='ratings[#{second_question.id}][average_score]'] option[selected='selected'][value='2']", count: 0
+  end
+
+  test "new with submitted response shows self target summary" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Feedback Self Target Summary", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 10_010,
+      question_type: "dropdown",
+      answer_options: [
+        [ "Beginner (1)", "1" ],
+        [ "Emerging (2)", "2" ],
+        [ "Capable (3)", "3" ],
+        [ "Experienced (4)", "4" ],
+        [ "Mastery (5)", "5" ]
+      ].to_json,
+      has_feedback: true,
+      program_target_level: 4
+    )
+
+    SurveyResponseVersion.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      event: "submitted",
+      answers: { question.id.to_s => "5" }
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_includes response.body, "Self-assessment target summary"
+    assert_includes response.body, "1 of 1"
+    assert_includes response.body, "Met 1"
+  end
+
+  test "new redirects when survey is archived" do
+    @survey.update!(is_active: false)
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+
+    assert_redirected_to survey_records_path
+    assert_match "survey is archived", flash[:alert].to_s.downcase
   end
 
   # === Edit Action ===
@@ -90,9 +280,29 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     post feedbacks_path, params: params
 
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     after_count = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
     assert_equal before_count + 2, after_count
+  end
+
+  test "batch create is blocked when survey is archived" do
+    @survey.update!(is_active: false)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { average_score: "4", comments: "Good" }
+      }
+    }
+
+    assert_no_difference "Feedback.count" do
+      post feedbacks_path, params: params
+    end
+
+    assert_redirected_to survey_records_path
+    assert_match "survey is archived", flash[:alert].to_s.downcase
   end
 
   test "batch create with only score" do
@@ -110,7 +320,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     feedback = Feedback.order(:created_at).last
     assert_equal 5.0, feedback.average_score
     assert_nil feedback.comments
@@ -131,7 +341,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     feedback = Feedback.order(:created_at).last
     assert_nil feedback.average_score
     assert_equal "Great work!", feedback.comments
@@ -154,7 +364,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 
   test "batch create updates existing feedback" do
@@ -188,6 +398,135 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Updated", existing.comments
   end
 
+  test "batch create returns conflict when feedback was updated concurrently" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+
+    existing = Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      question_id: q1.id,
+      category_id: @cat1.id,
+      advisor_id: @advisor.advisor_id,
+      average_score: 3,
+      comments: "Initial"
+    )
+
+    stale_lock_version = existing.lock_version
+
+    # Simulate a concurrent save that happens after the form was rendered.
+    existing.update!(comments: "Concurrent update")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { id: existing.id, lock_version: stale_lock_version.to_s, average_score: "5", comments: "My update" }
+      }
+    }
+
+    post feedbacks_path, params: params
+    assert_response :unprocessable_entity
+
+    existing.reload
+    assert_equal "Concurrent update", existing.comments
+  end
+
+  test "batch create saves confidential advisor note when present" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { average_score: "4", comments: "Good" }
+      },
+      confidential_advisor_note: { body: "Confidential note from unified save" }
+    }
+
+    assert_difference "ConfidentialAdvisorNote.count", 1 do
+      post feedbacks_path, params: params
+    end
+
+    note = ConfidentialAdvisorNote.find_by(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id
+    )
+    assert note
+    assert_equal "Confidential note from unified save", note.body
+  end
+
+  test "batch create clears confidential advisor note when blank" do
+    ConfidentialAdvisorNote.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id,
+      body: "Existing confidential note"
+    )
+
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { average_score: "4", comments: "Good" }
+      },
+      confidential_advisor_note: { body: "   " }
+    }
+
+    assert_difference "ConfidentialAdvisorNote.count", -1 do
+      post feedbacks_path, params: params
+    end
+
+    refute ConfidentialAdvisorNote.find_by(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id
+    )
+  end
+
+  test "batch create allows note-only save and redirects" do
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {},
+      confidential_advisor_note: { body: "Note-only save" }
+    }
+
+    assert_difference "ConfidentialAdvisorNote.count", 1 do
+      post feedbacks_path, params: params
+    end
+
+    assert_response :redirect
+    assert_redirected_to survey_records_path
+
+    note = ConfidentialAdvisorNote.find_by(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id
+    )
+    assert note
+    assert_equal "Note-only save", note.body
+  end
+
+  test "batch create redirects to return_to when provided" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      return_to: "/survey_records",
+      ratings: {
+        q1.id.to_s => { average_score: "4", comments: "Good" }
+      }
+    }
+
+    post feedbacks_path, params: params
+    assert_response :redirect
+    assert_redirected_to survey_records_path
+  end
+
   test "batch create with validation errors rolls back transaction" do
     q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
 
@@ -204,6 +543,42 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_entity
+  end
+
+  test "batch create rejects scores outside 1-5" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { average_score: "6", comments: "Too high" }
+      }
+    }
+
+    assert_no_difference "Feedback.count" do
+      post feedbacks_path, params: params
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  test "batch create accepts 0 score" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { average_score: "0", comments: "Not assessable" }
+      }
+    }
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: params
+    end
+
+    assert_response :see_other
   end
 
   test "batch create with no valid ratings returns error" do
@@ -242,6 +617,267 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_kind_of Array, json
   end
 
+  test "autosave saves draft feedback json without submitting advisor feedback" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    AdvisorFeedbackSubmission.where(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id
+    ).delete_all
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path,
+           params: {
+             autosave: "1",
+             submission_intent: "save",
+             survey_id: @survey.id,
+             student_id: @student.student_id,
+             ratings: {
+               q1.id.to_s => { average_score: "4", comments: "Autosaved draft" }
+             }
+           },
+           as: :json
+    end
+
+    assert_response :ok
+    json = JSON.parse(response.body)
+    assert_equal true, json["saved"]
+    assert_equal 1, json["saved_count"]
+    assert_equal q1.id, json["feedbacks"].first["question_id"]
+    assert json["feedbacks"].first["id"].present?
+    assert json["feedbacks"].first.key?("lock_version")
+
+    feedback = Feedback.order(:created_at).last
+    assert_equal 4.0, feedback.average_score
+    assert_equal "Autosaved draft", feedback.comments
+
+    submission = AdvisorFeedbackSubmission.find_by!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id
+    )
+    assert submission.last_saved_at.present?
+    assert_nil submission.submitted_at
+  end
+
+  test "autosave updates matching question feedback instead of duplicating rows" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    existing = Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id,
+      category_id: q1.category_id,
+      question_id: q1.id,
+      average_score: 2,
+      comments: "Old draft"
+    )
+
+    assert_no_difference "Feedback.count" do
+      post feedbacks_path,
+           params: {
+             autosave: "1",
+             submission_intent: "save",
+             survey_id: @survey.id,
+             student_id: @student.student_id,
+             ratings: {
+               q1.id.to_s => { average_score: "5", comments: "Updated by autosave" }
+             }
+           },
+           as: :json
+    end
+
+    assert_response :ok
+    existing.reload
+    assert_equal 5.0, existing.average_score
+    assert_equal "Updated by autosave", existing.comments
+  end
+
+  test "autosave works when advisor numeric ratings are retired" do
+    @survey.update!(advisor_numeric_feedback_enabled: false)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path,
+           params: {
+             autosave: "1",
+             submission_intent: "save",
+             survey_id: @survey.id,
+             student_id: @student.student_id,
+             ratings: {
+               q1.id.to_s => { comments: "Written draft only" }
+             }
+           },
+           as: :json
+    end
+
+    assert_response :ok
+    feedback = Feedback.order(:created_at).last
+    assert_nil feedback.average_score
+    assert_equal "Written draft only", feedback.comments
+  end
+
+  test "autosave can save confidential advisor note without ratings" do
+    assert_difference "ConfidentialAdvisorNote.count", 1 do
+      post feedbacks_path,
+           params: {
+             autosave: "1",
+             submission_intent: "save",
+             survey_id: @survey.id,
+             student_id: @student.student_id,
+             confidential_advisor_note: { body: "Autosaved confidential note" }
+           },
+           as: :json
+    end
+
+    assert_response :ok
+    json = JSON.parse(response.body)
+    assert_equal true, json["saved"]
+    assert_equal 0, json["saved_count"]
+    assert json["confidential_advisor_note"]["lock_version"].present?
+
+    note = ConfidentialAdvisorNote.find_by!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id
+    )
+    assert_equal "Autosaved confidential note", note.body
+  end
+
+  test "first submitted advisor feedback notifies the student" do
+    @survey.update!(advisor_numeric_feedback_enabled: false)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    AdvisorFeedbackSubmission.where(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id
+    ).delete_all
+    Notification.where(user: @student.user, title: [ "Advisor Feedback Submitted", "Advisor Feedback Revised" ]).delete_all
+
+    assert_difference -> { Notification.where(user: @student.user, title: "Advisor Feedback Submitted").count }, 1 do
+      perform_enqueued_jobs(only: SurveyNotificationJob) do
+        post feedbacks_path,
+             params: {
+               submission_intent: "submit",
+               survey_id: @survey.id,
+               student_id: @student.student_id,
+               ratings: {
+                 q1.id.to_s => { comments: "Ready for review" }
+               }
+             }
+      end
+    end
+
+    assert_response :see_other
+    notification = Notification.find_by!(user: @student.user, title: "Advisor Feedback Submitted")
+    assert_match @survey.title, notification.message
+    assert_match "Review it in your survey record", notification.message
+    submission = AdvisorFeedbackSubmission.find_by!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id
+    )
+    assert submission.submitted_feedback_signature.present?
+  end
+
+  test "revised submitted advisor feedback notifies the student when draft changed after last submit" do
+    @survey.update!(advisor_numeric_feedback_enabled: false)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    Feedback.where(student_id: @student.student_id, survey_id: @survey.id, advisor_id: @advisor.advisor_id).delete_all
+    feedback = Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id,
+      category_id: q1.category_id,
+      question_id: q1.id,
+      comments: "Draft revision"
+    )
+    AdvisorFeedbackSubmission.where(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id
+    ).delete_all
+    AdvisorFeedbackSubmission.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id,
+      last_saved_at: 1.hour.ago,
+      submitted_at: 1.day.ago,
+      submitted_feedback_signature: [ [ q1.id, q1.category_id, nil, "Original submitted" ] ].to_json
+    )
+    Notification.where(user: @student.user, title: [ "Advisor Feedback Submitted", "Advisor Feedback Revised" ]).delete_all
+
+    assert_difference -> { Notification.where(user: @student.user, title: "Advisor Feedback Revised").count }, 1 do
+      perform_enqueued_jobs(only: SurveyNotificationJob) do
+        post feedbacks_path,
+             params: {
+               submission_intent: "submit",
+               survey_id: @survey.id,
+               student_id: @student.student_id,
+               ratings: {
+                 q1.id.to_s => {
+                   id: feedback.id,
+                   lock_version: feedback.lock_version,
+                   comments: "Draft revision"
+                 }
+               }
+             }
+      end
+    end
+
+    assert_response :see_other
+    notification = Notification.find_by!(user: @student.user, title: "Advisor Feedback Revised")
+    assert_match "updated feedback", notification.message
+  end
+
+  test "unchanged submitted advisor feedback does not notify the student again" do
+    @survey.update!(advisor_numeric_feedback_enabled: false)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+    Feedback.where(student_id: @student.student_id, survey_id: @survey.id, advisor_id: @advisor.advisor_id).delete_all
+    feedback = Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id,
+      category_id: q1.category_id,
+      question_id: q1.id,
+      comments: "Already submitted"
+    )
+    AdvisorFeedbackSubmission.where(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id
+    ).delete_all
+    submitted_at = 1.day.ago
+    AdvisorFeedbackSubmission.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @advisor.advisor_id,
+      last_saved_at: 1.hour.ago,
+      submitted_at: submitted_at,
+      submitted_feedback_signature: [ [ q1.id, q1.category_id, nil, "Already submitted" ] ].to_json
+    )
+    Notification.where(user: @student.user, title: [ "Advisor Feedback Submitted", "Advisor Feedback Revised" ]).delete_all
+
+    assert_no_difference -> { Notification.where(user: @student.user, title: [ "Advisor Feedback Submitted", "Advisor Feedback Revised" ]).count } do
+      perform_enqueued_jobs(only: SurveyNotificationJob) do
+        post feedbacks_path,
+             params: {
+               submission_intent: "submit",
+               survey_id: @survey.id,
+               student_id: @student.student_id,
+               ratings: {
+                 q1.id.to_s => {
+                   id: feedback.id,
+                   lock_version: feedback.lock_version,
+                   comments: "Already submitted"
+                 }
+               }
+             }
+      end
+    end
+
+    assert_response :see_other
+  end
+
   test "batch create responds with JSON on validation error" do
     q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
 
@@ -273,10 +909,6 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     json = JSON.parse(response.body)
     assert_equal "No category or ratings provided", json["error"]
   end
-
-  # === Create Action - Single Feedback (Edge Cases) ===
-  # Note: The single feedback path has a bug - question_id is not in permitted params
-  # so feedback_params[:question_id] is nil, making category_id nil too
 
   test "create with feedback param but no question_id shows error" do
     params = {
@@ -318,6 +950,154 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     json = JSON.parse(response.body)
     assert_equal "No category or ratings provided", json["error"]
+  end
+
+  test "create allows confidential note save without ratings param" do
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      confidential_advisor_note: { body: "Note-only without ratings param" }
+    }
+
+    assert_difference "ConfidentialAdvisorNote.count", 1 do
+      post feedbacks_path, params: params
+    end
+
+    assert_response :redirect
+    assert_redirected_to survey_records_path
+  end
+
+  test "create with feedback question_id saves per-question feedback" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      feedback: {
+        survey_id: @survey.id,
+        student_id: @student.student_id,
+        question_id: q1.id,
+        average_score: "4",
+        comments: "Single"
+      }
+    }
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: params
+    end
+
+    assert_redirected_to survey_records_path
+    feedback = Feedback.order(:created_at).last
+    assert_equal q1.id, feedback.question_id
+    assert_equal q1.category_id, feedback.category_id
+    assert_equal 4.0, feedback.average_score
+    assert_equal "Single", feedback.comments
+  end
+
+  test "admin create with feedback question_id saves under assigned advisor" do
+    sign_in @admin_user
+    @student.update!(advisor_id: @advisor.advisor_id)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: {
+        feedback: {
+          survey_id: @survey.id,
+          student_id: @student.student_id,
+          question_id: q1.id,
+          average_score: "3",
+          comments: "Admin entered"
+        }
+      }
+    end
+
+    feedback = Feedback.order(:created_at).last
+    assert_equal @advisor.advisor_id, feedback.advisor_id
+    assert_equal q1.id, feedback.question_id
+    assert_equal 3.0, feedback.average_score
+  end
+
+  test "batch create returns JSON error when confidential note lock is stale" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    note = ConfidentialAdvisorNote.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id,
+      body: "Initial"
+    )
+    stale_lock_version = note.lock_version
+    note.update!(body: "Concurrent update")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      ratings: {
+        q1.id.to_s => { average_score: "4", comments: "Good" }
+      },
+      confidential_advisor_note: { body: "My update", lock_version: stale_lock_version.to_s }
+    }
+
+    post feedbacks_path, params: params, as: :json
+
+    assert_response :unprocessable_entity
+    json = JSON.parse(response.body)
+    assert_includes json.fetch("errors").fetch("confidential_advisor_note").join(" "), "updated by someone else"
+  end
+
+  test "note-only batch create returns JSON errors when confidential note lock is stale" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    note = ConfidentialAdvisorNote.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id,
+      body: "Initial"
+    )
+    stale_lock_version = note.lock_version
+    note.update!(body: "Concurrent update")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      # ratings must be present to take the batch path, but can be empty inputs
+      # to trigger the note-only save behavior.
+      ratings: {
+        q1.id.to_s => { average_score: "", comments: "" }
+      },
+      confidential_advisor_note: { body: "My update", lock_version: stale_lock_version.to_s }
+    }
+
+    post feedbacks_path,
+         params: params,
+         as: :json,
+         headers: { "ACCEPT" => "application/json" }
+
+    assert_response :unprocessable_entity
+    json = JSON.parse(response.body)
+    assert_includes json.fetch("errors").fetch("confidential_advisor_note").join(" "), "updated by someone else"
+  end
+
+  test "direct note-only create returns JSON errors when confidential note lock is stale" do
+    note = ConfidentialAdvisorNote.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id,
+      body: "Initial"
+    )
+    stale_lock_version = note.lock_version
+    note.update!(body: "Concurrent update")
+
+    post feedbacks_path,
+         params: {
+           survey_id: @survey.id,
+           student_id: @student.student_id,
+           confidential_advisor_note: { body: "My update", lock_version: stale_lock_version.to_s }
+         },
+         as: :json,
+         headers: { "ACCEPT" => "application/json" }
+
+    assert_response :unprocessable_entity
+    json = JSON.parse(response.body)
+    assert_includes json.fetch("errors").fetch("confidential_advisor_note").join(" "), "updated by someone else"
   end
 
   # === Update Action ===
@@ -381,6 +1161,29 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert json["average_score"].present?
   end
 
+  test "update is blocked when feedback survey is archived" do
+    feedback = Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      category_id: @cat1.id,
+      advisor_id: @advisor.advisor_id,
+      average_score: 3,
+      comments: "Original"
+    )
+    @survey.update!(is_active: false)
+
+    patch feedback_path(feedback), params: {
+      feedback: {
+        comments: "Should not save"
+      }
+    }
+
+    assert_redirected_to survey_records_path
+    assert_match "feedback is read-only", flash[:alert].to_s.downcase
+    feedback.reload
+    assert_equal "Original", feedback.comments
+  end
+
   # === Destroy Action ===
 
   test "destroy deletes feedback and redirects" do
@@ -417,6 +1220,25 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_response :no_content
   end
 
+  test "destroy is blocked when feedback survey is archived" do
+    feedback = Feedback.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      category_id: @cat1.id,
+      advisor_id: @advisor.advisor_id,
+      average_score: 3,
+      comments: "To keep"
+    )
+    @survey.update!(is_active: false)
+
+    assert_no_difference "Feedback.count" do
+      delete feedback_path(feedback)
+    end
+
+    assert_redirected_to survey_records_path
+    assert_match "feedback is read-only", flash[:alert].to_s.downcase
+  end
+
   # === Edge Cases ===
 
   test "batch create with invalid question raises error due to null category_id" do
@@ -430,10 +1252,8 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    # Will raise ActiveRecord::NotNullViolation because category_id is nil
-    assert_raises(ActiveRecord::NotNullViolation) do
-      post feedbacks_path, params: params
-    end
+    post feedbacks_path, params: params
+    assert_response :unprocessable_entity
   end
 
   test "new loads context properly" do
@@ -456,5 +1276,91 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     post feedbacks_path, params: params
 
     assert_response :unprocessable_entity
+  end
+
+  test "new shows confidential notes section for admin" do
+    sign_out @adv_user
+    sign_in @admin_user
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+    assert_response :success
+    assert_includes response.body, "Confidential advisor notes"
+  end
+
+  test "new shows confidential notes section for admin when student has no assigned advisor" do
+    sign_out @adv_user
+    sign_in @admin_user
+    @student.update!(advisor_id: nil)
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+
+    assert_response :success
+    assert_includes response.body, "Confidential advisor notes"
+    assert_select "textarea[name='confidential_advisor_note[body]']"
+  end
+
+  test "new blocks non-owner advisor" do
+    sign_out @adv_user
+    sign_in @other_adv_user
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+
+    assert_redirected_to survey_records_path
+    assert_match "not assigned", flash[:alert]
+  end
+
+  test "create blocks non-owner advisor direct rating post" do
+    sign_out @adv_user
+    sign_in @other_adv_user
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+
+    assert_no_difference "Feedback.count" do
+      post feedbacks_path, params: {
+        survey_id: @survey.id,
+        student_id: @student.student_id,
+        ratings: {
+          q1.id.to_s => { average_score: "4", comments: "Should not save" }
+        }
+      }
+    end
+
+    assert_redirected_to survey_records_path
+    assert_match "not assigned", flash[:alert]
+  end
+
+  test "note-only create does not save confidential note for non-owner advisor" do
+    sign_out @adv_user
+    sign_in @other_adv_user
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      confidential_advisor_note: { body: "Should not persist" }
+    }
+
+    assert_no_difference "ConfidentialAdvisorNote.count" do
+      post feedbacks_path, params: params
+    end
+
+    assert_response :redirect
+    assert_redirected_to survey_records_path
+  end
+
+  test "create rejects non-local return_to to prevent open redirect" do
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Q1", question_order: 1, question_type: "short_answer")
+
+    params = {
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      return_to: "//evil.example.com/phish",
+      ratings: {
+        q1.id.to_s => { average_score: "4", comments: "Good" }
+      }
+    }
+
+    post feedbacks_path, params: params
+
+    assert_response :redirect
+    assert_redirected_to survey_records_path
   end
 end

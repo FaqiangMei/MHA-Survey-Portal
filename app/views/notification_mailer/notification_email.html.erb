@@ -1,0 +1,7 @@
+<h1 class="c-page-title"><%= @notification.title %></h1>
+
+<p><%= simple_format(@notification.display_message) %></p>
+
+<% if @target_url.present? %>
+  <p><%= link_to "View in TAMU Competency Assessment Tracking", @target_url %></p>
+<% end %>

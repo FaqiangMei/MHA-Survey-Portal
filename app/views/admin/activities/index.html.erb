@@ -1,0 +1,85 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Admin activity</p>
+          <h1 class="c-page-title c-page-title--brand">Recent Activities</h1>
+          <p class="c-page-subtitle">A single timeline for survey change logs, student submissions, advisor feedback, and admin actions.</p>
+        </div>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
+      </header>
+    </section>
+
+    <section class="c-card u-stack u-stack--xl">
+      <section class="u-stack u-stack--md">
+        <header class="u-stack u-stack--sm">
+          <h2 class="c-section-title c-heading-inline">Activity feed</h2>
+          <p class="c-lede">Search across survey, student, actor, and action details to narrow the timeline.</p>
+        </header>
+
+        <div class="c-card c-card--flush">
+          <div class="c-panel-header c-panel-header--with-border">
+            <div class="c-callout">
+              <%= form_with url: admin_activities_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" do %>
+                <div class="c-toolbar__item u-relative u-flex-1">
+                  <%= text_field_tag :q, @search_query, placeholder: "Search logs by survey, student, actor, or action", class: "c-input c-search-input u-w-full" %>
+                </div>
+                <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
+                  <%= submit_tag "Search", class: button_classes(:secondary) %>
+                  <% if @search_query.present? %>
+                    <%= link_to "Reset", admin_activities_path, class: button_classes(:subtle) %>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <% if @entries.blank? %>
+            <div class="c-empty-state">
+              <p class="c-empty-state__body"><%= @search_query.present? ? "No logs matched your search." : "No activity logs yet." %></p>
+            </div>
+          <% else %>
+            <div class="c-table-wrapper">
+              <table class="c-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Timestamp</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Activity</th>
+                    <th scope="col">User</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @entries.each do |entry| %>
+                    <tr>
+                      <td class="u-whitespace-nowrap">
+                        <%= l(entry[:timestamp], format: :long) %>
+                      </td>
+                      <td class="u-whitespace-nowrap">
+                        <span class="c-pill c-pill--muted"><%= entry[:type] %></span>
+                      </td>
+                      <td>
+                        <p class="c-table__title">
+                          <% if entry[:link].present? %>
+                            <%= link_to entry[:title], entry[:link], class: "u-link" %>
+                          <% else %>
+                            <%= entry[:title] %>
+                          <% end %>
+                        </p>
+                        <% if entry[:subtitle].present? %>
+                          <p class="c-table__meta"><%= entry[:subtitle] %></p>
+                        <% end %>
+                      </td>
+                      <td class="u-whitespace-nowrap"><%= entry[:actor] %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </section>
+    </section>
+  </div>
+</main>

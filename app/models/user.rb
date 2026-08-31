@@ -4,7 +4,7 @@
 class User < ApplicationRecord
   self.primary_key = :id
 
-  devise :omniauthable, omniauth_providers: [ :google_oauth2 ]
+  devise :omniauthable, :timeoutable, omniauth_providers: [ :google_oauth2 ]
 
   enum :role, { student: "student", advisor: "advisor", admin: "admin" }, prefix: true
 
@@ -12,6 +12,8 @@ class User < ApplicationRecord
   has_one :advisor_profile, class_name: "Advisor", foreign_key: :advisor_id, inverse_of: :user, dependent: :destroy
   has_one :student_profile, class_name: "Student", foreign_key: :student_id, inverse_of: :user, dependent: :destroy
   has_many :notifications, dependent: :destroy
+  has_many :archived_students, class_name: "Student", foreign_key: :archived_by_id, inverse_of: :archived_by, dependent: :nullify
+  has_many :student_advisor_assignments_made, class_name: "StudentAdvisorAssignment", foreign_key: :assigned_by_id, inverse_of: :assigned_by, dependent: :nullify
   has_many :created_surveys, class_name: "Survey", foreign_key: :created_by_id, inverse_of: :creator, dependent: :nullify
   has_many :survey_change_logs, foreign_key: :admin_id, inverse_of: :admin, dependent: :nullify
 
@@ -21,6 +23,7 @@ class User < ApplicationRecord
   validates :text_scale_percent, numericality: { only_integer: true, greater_than_or_equal_to: 100, less_than_or_equal_to: 200 }, allow_nil: true
 
   after_commit :ensure_role_profile!, on: [ :create, :update ]
+  after_commit :reconcile_pending_grade_import_rows_for_student, on: [ :create, :update ], if: :should_reconcile_pending_grade_import_rows_for_student?
 
   scope :students, -> { where(role: roles[:student]) }
   scope :advisors, -> { where(role: roles[:advisor]) }
@@ -93,5 +96,17 @@ class User < ApplicationRecord
     when self.class.roles[:student]
       student_profile || create_student_profile!
     end
+  end
+
+  def should_reconcile_pending_grade_import_rows_for_student?
+    role_student? && previous_changes.key?("email")
+  end
+
+  def reconcile_pending_grade_import_rows_for_student
+    return unless student_profile.present?
+
+    GradeImports::PendingRowReconciler.call(student: student_profile)
+  rescue StandardError => e
+    Rails.logger.error("Pending grade import reconciliation failed for user #{id}: #{e.class}: #{e.message}")
   end
 end

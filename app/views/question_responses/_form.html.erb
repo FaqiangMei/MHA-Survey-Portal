@@ -1,7 +1,7 @@
 <%= form_with(model: question_response, local: true) do |form| %>
   <% if question_response.errors.any? %>
     <div style="color: red">
-      <h2><%= pluralize(question_response.errors.count, "error") %> prohibited this question_response from being saved:</h2>
+      <h2 class="c-panel-title"><%= pluralize(question_response.errors.count, "error") %> prohibited this question_response from being saved:</h2>
 
       <ul>
         <% question_response.errors.each do |error| %>
@@ -13,17 +13,17 @@
 
   <div>
     <%= form.label :student_id, "Student", style: "display: block" %>
-    <%= form.collection_select :student_id, Student.order(:student_id), :student_id, :full_name, include_blank: true %>
+    <%= form.collection_select :student_id, Student.order(:student_id), :student_id, :full_name, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>
     <%= form.label :advisor_id, "Advisor", style: "display: block" %>
-    <%= form.collection_select :advisor_id, Advisor.order(:advisor_id), :advisor_id, :display_name, include_blank: true %>
+    <%= form.collection_select :advisor_id, Advisor.order(:advisor_id), :advisor_id, :display_name, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>
     <%= form.label :question_id, style: "display: block" %>
-    <%= form.collection_select :question_id, Question.order(:question_order), :id, :question_text, include_blank: true %>
+    <%= form.collection_select :question_id, Question.order(:question_order), :id, :question_text, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>

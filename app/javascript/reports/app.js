@@ -5,12 +5,11 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React
 const h = React.createElement
 const TARGET_SCORE = 4
 const EXCEEDS_THRESHOLD = 4.5
-const GOAL_THRESHOLD = 0.85
-const PROGRAM_GOAL_PERCENT = 80
 
 const COLORS = {
   student: "#500000",
   advisor: "#2563eb",
+  course: "#c2410c",
   achieved: "#16a34a",
   notMet: "#dc2626",
   exceeds: "#6366f1",
@@ -69,11 +68,13 @@ const API_ENDPOINTS = {
   benchmark: "/api/reports/benchmark",
   competency: "/api/reports/competency-summary",
   competencyDetail: "/api/reports/competency-detail",
-  track: "/api/reports/course-summary"
+  track: "/api/reports/track-summary",
+  employment: "/api/reports/employment-summary"
 }
 
 const DEFAULT_FILTERS = {
   track: "all",
+  program_year: "all",
   semester: "all",
   advisor_id: "all",
   category_id: "all",
@@ -81,14 +82,11 @@ const DEFAULT_FILTERS = {
   student_id: "all",
   competency: "all"
 }
-
-const FALLBACK_EXPORT_URLS = {
-  pdf: "/reports/dashboard/export_pdf",
-  excel: "/reports/export_excel"
-}
+const DASHBOARD_FILTER_KEYS = Object.keys(DEFAULT_FILTERS)
 
 const EMPTY_OPTIONS = Object.freeze({
   tracks: [],
+  program_years: [],
   semesters: [],
   advisors: [],
   categories: [],
@@ -180,6 +178,9 @@ const describeActiveFilters = (filters, options) => {
   if (mergedFilters.track !== "all") {
     parts.push(`Track: ${mergedFilters.track}`)
   }
+  if (mergedFilters.program_year !== "all") {
+    parts.push(`Year: ${mergedFilters.program_year}`)
+  }
   if (mergedFilters.semester !== "all") {
     parts.push(`Semester: ${mergedFilters.semester}`)
   }
@@ -219,11 +220,52 @@ const buildQueryString = (filters) => {
   return query ? `?${query}` : ""
 }
 
-const replacePdfSection = (baseUrl, sectionKey) => {
-  if (!sectionKey) return baseUrl
-  const pattern = /(\/reports\/)([^/]+)(\/export_pdf\b)/
-  if (!pattern.test(baseUrl)) return baseUrl
-  return baseUrl.replace(pattern, `$1${sectionKey}$3`)
+const buildUrlWithQuery = (baseUrl, filters) => {
+  if (!baseUrl) return ""
+
+  const query = buildQueryString(filters)
+  if (!query) return baseUrl
+
+  return `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${query.slice(1)}`
+}
+
+const normalizeDashboardFilters = (filters = {}) => {
+  const normalized = { ...DEFAULT_FILTERS }
+
+  DASHBOARD_FILTER_KEYS.forEach((key) => {
+    const value = filters[key]
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      normalized[key] = String(value)
+    }
+  })
+
+  return normalized
+}
+
+const updatePrimaryDashboardDownload = (filters) => {
+  const links = document.querySelectorAll("[data-report-primary-download='true']")
+  if (!links.length) return
+
+  links.forEach((link) => {
+    const baseUrl = link.dataset.reportDownloadBaseUrl || link.href
+    link.href = buildUrlWithQuery(baseUrl, filters)
+  })
+}
+
+const syncDashboardUrl = (filters) => {
+  if (!window.history || !window.location) return
+
+  const url = new URL(window.location.href)
+  url.searchParams.set("report_tab", "dashboard")
+  DASHBOARD_FILTER_KEYS.forEach((key) => url.searchParams.delete(key))
+
+  Object.entries(filters || {}).forEach(([ key, value ]) => {
+    if (value && value !== "all") {
+      url.searchParams.set(key, value)
+    }
+  })
+
+  window.history.replaceState({}, "", url)
 }
 
 const fetchJson = async (url) => {
@@ -258,13 +300,13 @@ const ErrorState = ({ message, onRetry }) => {
     children.push(
       h("button", {
         type: "button",
-        className: "reports-button reports-button--primary",
+        className: "btn btn-primary",
         onClick: onRetry
       }, "Try again")
     )
   }
 
-  return h("div", { className: "reports-panel reports-panel--error", role: "alert" }, children)
+  return h("div", { className: "c-analytics-panel c-analytics-panel--error", role: "alert" }, children)
 }
 
 const FilterBar = ({ filters, options, onChange, onReset }) => {
@@ -286,6 +328,14 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
       list: mergedOptions.tracks,
       getValue: (value) => value,
       getLabel: (value) => titleize(value)
+    },
+    {
+      name: "program_year",
+      label: "Year",
+      defaultLabel: "All years",
+      list: mergedOptions.program_years,
+      getValue: (value) => value,
+      getLabel: (value) => value
     },
     {
       name: "semester",
@@ -337,8 +387,8 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
     }
   ]
 
-  return h("section", { className: "reports-panel reports-filters", "aria-label": "Dashboard filters" }, [
-    h("div", { className: "reports-filters__grid" },
+  return h("section", { className: "c-analytics-panel c-analytics-filters", "aria-label": "Dashboard filters" }, [
+    h("div", { className: "c-analytics-filters__grid" },
       selectConfigs.map((config) => {
         const value = mergedFilters[config.name] ?? "all"
         const optionsNodes = [
@@ -355,60 +405,104 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
           )
         })
 
-        return h("label", { key: config.name, className: "reports-field" }, [
+        return h("label", { key: config.name, className: "c-analytics-field" }, [
           h("span", null, config.label),
           h("select", { name: config.name, value, onChange: handleChange }, optionsNodes)
         ])
       })
     ),
-    h("button", { type: "button", className: "reports-button", onClick: onReset }, "Reset filters")
+    h("button", { type: "button", className: "btn btn-secondary", onClick: onReset }, "Reset filters")
   ])
 }
 
 const SummaryCards = ({ cards }) =>
-  h("section", { className: "reports-summary" },
-    cards.map((card) => {
-      const headerChildren = [ h("p", { className: "reports-summary__label" }, card.title) ]
+  h("section", { className: "c-analytics-summary" },
+    cards
+      .filter((card) => !["overall_average", "overall_advisor_average"].includes(card.key))
+      .map((card) => {
+      const headerChildren = [ h("p", { className: "c-analytics-summary__label" }, card.title) ]
       if (card.meta && card.meta.name) {
-        headerChildren.push(h("span", { className: "reports-summary__meta" }, card.meta.name))
+        headerChildren.push(h("span", { className: "c-analytics-summary__meta" }, card.meta.name))
       }
 
-      const valueChildren = [ h("strong", null, formatMetricValue(card.value, card.unit, card.precision)) ]
-      if (card.meta && card.meta.advisor_average !== undefined && card.meta.advisor_average !== null) {
-        valueChildren.push(
-          h("span", { className: "reports-summary__subtext" }, `Advisor avg ${formatMetricValue(card.meta.advisor_average, "score", 1)}`)
-        )
-      }
+        const trackSummaries = Array.isArray(card.meta?.tracks) ? card.meta.tracks : []
+        const showTrackSummaries = trackSummaries.length > 0
+
+        let valueNode
+        if (showTrackSummaries) {
+          const trackRows = trackSummaries.map((track) => {
+            const detailParts = []
+            if (track.source_label) detailParts.push(track.source_label)
+            if (track.students_met_goal !== undefined && track.students_met_goal !== null) {
+              detailParts.push(`Students meeting goal: ${track.students_met_goal}`)
+            }
+
+            const children = [
+              h("span", { className: "c-analytics-summary__meta" }, track.label),
+              h("strong", null, formatMetricValue(track.percent, "percent", 0))
+            ]
+
+            if (detailParts.length > 0) {
+              children.push(
+                h("span", { className: "c-analytics-summary__subtext" }, detailParts.join(" • "))
+              )
+            }
+
+            return h("div", { key: track.label, className: "c-analytics-summary__value-track" }, children)
+          })
+          valueNode = h("div", { className: "c-analytics-summary__value c-analytics-summary__value--tracks" }, trackRows)
+        } else {
+          const valueChildren = [ h("strong", null, formatMetricValue(card.value, card.unit, card.precision)) ]
+          if (card.meta && card.meta.advisor_average !== undefined && card.meta.advisor_average !== null) {
+            valueChildren.push(
+              h("span", { className: "c-analytics-summary__subtext" }, `Advisor avg ${formatMetricValue(card.meta.advisor_average, "score", 1)}`)
+            )
+          }
+          valueNode = h("div", { className: "c-analytics-summary__value" }, valueChildren)
+        }
 
       const footerChildren = [
-        h("span", { className: `reports-summary__trend reports-summary__trend--${card.change_direction || "flat"}` }, formatChange(card.change, card.unit)),
-        h("span", { className: "reports-summary__description" }, card.description)
+        h("span", { className: `c-analytics-summary__trend c-analytics-summary__trend--${card.change_direction || "flat"}` }, formatChange(card.change, card.unit)),
+        h("span", { className: "c-analytics-summary__description" }, card.description)
       ]
 
       if (card.meta && card.meta.goal_percent) {
         footerChildren.push(
-          h("span", { className: "reports-summary__description" }, `Program goal: ${formatMetricValue(card.meta.goal_percent, "percent", 0)}`)
+          h("span", { className: "c-analytics-summary__description" }, `Program goal: ${formatMetricValue(card.meta.goal_percent, "percent", 0)}`)
         )
       }
       if (card.meta && card.meta.students_met_goal !== undefined) {
         footerChildren.push(
-          h("span", { className: "reports-summary__description" }, `Students meeting goal: ${card.meta.students_met_goal}`)
+          h("span", { className: "c-analytics-summary__description" }, `Students meeting goal: ${card.meta.students_met_goal}`)
         )
       }
 
-      return h("article", { key: card.key, className: "reports-summary__card", "aria-label": card.title }, [
+      return h("article", { key: card.key, className: "c-analytics-summary__card", "aria-label": card.title }, [
         h("header", null, headerChildren),
-        h("div", { className: "reports-summary__value" }, valueChildren),
+        valueNode,
         h("footer", null, footerChildren)
       ])
     })
   )
 
-const TrendChart = ({ timeline }) => {
+const ChartViewport = ({ children, label, size = "wide" }) =>
+  h("div", {
+    className: "c-chart-scroll",
+    role: "region",
+    "aria-label": label,
+    tabIndex: 0
+  },
+    h("div", { className: `c-chart-scroll__inner c-chart-scroll__inner--${size}` }, children)
+  )
+
+const TrendChart = ({ timeline, yAxisMode }) => {
   const canvasRef = useRef(null)
 
   useEffect(() => {
     if (!canvasRef.current || !Array.isArray(timeline) || timeline.length === 0) return undefined
+
+    const percentMode = yAxisMode === "percent"
+    const metricUnit = percentMode ? "percent" : "score"
 
     const ctx = canvasRef.current.getContext("2d")
     const chart = new Chart(ctx, {
@@ -418,7 +512,7 @@ const TrendChart = ({ timeline }) => {
         datasets: [
           {
             label: "Student",
-            data: timeline.map((point) => point.student),
+            data: timeline.map((point) => percentMode ? point.student_target_percent : point.student),
             borderColor: COLORS.student,
             backgroundColor: "rgba(80, 0, 0, 0.15)",
             tension: 0.3,
@@ -428,12 +522,22 @@ const TrendChart = ({ timeline }) => {
           },
           {
             label: "Advisor",
-            data: timeline.map((point) => point.advisor),
+            data: timeline.map((point) => percentMode ? point.advisor_target_percent : point.advisor),
             borderColor: COLORS.advisor,
             backgroundColor: "rgba(37, 99, 235, 0.15)",
             tension: 0.3,
             borderWidth: 2,
             pointBackgroundColor: COLORS.advisor,
+            pointRadius: 4
+          },
+          {
+            label: "Course",
+            data: timeline.map((point) => percentMode ? point.course_target_percent : point.course),
+            borderColor: COLORS.course,
+            backgroundColor: "rgba(194, 65, 12, 0.15)",
+            tension: 0.3,
+            borderWidth: 2,
+            pointBackgroundColor: COLORS.course,
             pointRadius: 4
           }
         ]
@@ -447,7 +551,7 @@ const TrendChart = ({ timeline }) => {
             callbacks: {
               label(context) {
                 const value = context.raw
-                return `${context.dataset.label}: ${formatMetricValue(value, "score", 2)}`
+                return `${context.dataset.label}: ${formatMetricValue(value, metricUnit, percentMode ? 1 : 2)}`
               }
             }
           }
@@ -455,10 +559,10 @@ const TrendChart = ({ timeline }) => {
         scales: {
           y: {
             suggestedMin: 0,
-            suggestedMax: 5,
+            suggestedMax: percentMode ? 100 : 5,
             ticks: {
               callback(value) {
-                return Number(value).toFixed(1)
+                return percentMode ? `${Number(value).toFixed(0)}%` : Number(value).toFixed(1)
               }
             }
           }
@@ -467,40 +571,64 @@ const TrendChart = ({ timeline }) => {
     })
 
     return () => chart.destroy()
-  }, [ timeline ])
+  }, [ timeline, yAxisMode ])
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Monthly average scores" },
-    h("canvas", { ref: canvasRef })
+  const ariaLabel = yAxisMode === "percent" ? "% meeting target over time" : "Monthly average scores"
+
+  return h(ChartViewport, { label: ariaLabel, size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": ariaLabel },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
 
 
-const CompetencyAchievementChart = ({ items }) => {
+const CompetencyAchievementChart = ({ items, yAxisMode }) => {
   const canvasRef = useRef(null)
 
   useEffect(() => {
     if (!canvasRef.current || !Array.isArray(items) || items.length === 0) return undefined
+
+    const percentMode = yAxisMode === "percent"
+    const metricUnit = percentMode ? "percent" : "score"
+    const datasets = [
+      {
+        label: percentMode ? "Student %" : "Student Avg",
+        data: items.map((item) => {
+          if (percentMode) return safeNumber(item.student_target_percent) ?? 0
+          return item.student_average || 0
+        }),
+        backgroundColor: COLORS.student,
+        borderRadius: 6
+      },
+      {
+        label: percentMode ? "Advisor %" : "Advisor Avg",
+        data: items.map((item) => {
+          if (percentMode) return safeNumber(item.advisor_target_percent) ?? 0
+          return item.advisor_average || 0
+        }),
+        backgroundColor: COLORS.advisor,
+        borderRadius: 6
+      }
+    ]
+
+    datasets.push({
+      label: percentMode ? "Course %" : "Course Avg",
+      data: items.map((item) => {
+        if (percentMode) return safeNumber(item.course_target_percent) ?? 0
+        return item.course_average || 0
+      }),
+      backgroundColor: COLORS.course,
+      borderRadius: 6
+    })
 
     const labels = items.map((item) => item.name)
     const chart = new Chart(canvasRef.current.getContext("2d"), {
       type: "bar",
       data: {
         labels,
-        datasets: [
-          {
-            label: "Student Avg",
-            data: items.map((item) => item.student_average || 0),
-            backgroundColor: COLORS.student,
-            borderRadius: 6
-          },
-          {
-            label: "Advisor Avg",
-            data: items.map((item) => item.advisor_average || 0),
-            backgroundColor: COLORS.advisor,
-            borderRadius: 6
-          }
-        ]
+        datasets
       },
       options: {
         responsive: true,
@@ -512,7 +640,7 @@ const CompetencyAchievementChart = ({ items }) => {
               label(context) {
                 const label = context.dataset.label
                 const value = context.raw
-                return `${label}: ${formatMetricValue(value, "score", 2)}`
+                return `${label}: ${formatMetricValue(value, metricUnit, percentMode ? 1 : 2)}`
               }
             }
           }
@@ -526,9 +654,11 @@ const CompetencyAchievementChart = ({ items }) => {
           },
           y: {
             beginAtZero: true,
-            suggestedMax: 5,
+            suggestedMax: percentMode ? 100 : 5,
             ticks: {
-              precision: 1
+              callback(value) {
+                return percentMode ? `${Number(value).toFixed(0)}%` : Number(value).toFixed(1)
+              }
             }
           }
         }
@@ -536,42 +666,64 @@ const CompetencyAchievementChart = ({ items }) => {
     })
 
     return () => chart.destroy()
-  }, [ items ])
+  }, [ items, yAxisMode ])
 
   if (!Array.isArray(items) || items.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No competency data available for the selected filters.")
+    return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Average score by competency", size: "xwide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
-const DomainAverageChart = ({ items }) => {
+const DomainAverageChart = ({ items, yAxisMode }) => {
   const canvasRef = useRef(null)
 
   useEffect(() => {
     if (!canvasRef.current || !Array.isArray(items) || items.length === 0) return undefined
+
+    const percentMode = yAxisMode === "percent"
+    const metricUnit = percentMode ? "percent" : "score"
+    const datasets = [
+      {
+        label: percentMode ? "Student %" : "Student Avg",
+        data: items.map((item) => {
+          if (percentMode) return safeNumber(item.student_target_percent) ?? 0
+          return item.student_average || 0
+        }),
+        backgroundColor: COLORS.student,
+        borderRadius: 6
+      },
+      {
+        label: percentMode ? "Advisor %" : "Advisor Avg",
+        data: items.map((item) => {
+          if (percentMode) return safeNumber(item.advisor_target_percent) ?? 0
+          return item.advisor_average || 0
+        }),
+        backgroundColor: COLORS.advisor,
+        borderRadius: 6
+      }
+    ]
+
+    datasets.push({
+      label: percentMode ? "Course %" : "Course Avg",
+      data: items.map((item) => {
+        if (percentMode) return safeNumber(item.course_target_percent) ?? 0
+        return item.course_average || 0
+      }),
+      backgroundColor: COLORS.course,
+      borderRadius: 6
+    })
 
     const labels = items.map((item) => item.name)
     const chart = new Chart(canvasRef.current.getContext("2d"), {
       type: "bar",
       data: {
         labels,
-        datasets: [
-          {
-            label: "Student Avg",
-            data: items.map((item) => item.student_average || 0),
-            backgroundColor: COLORS.student,
-            borderRadius: 6
-          },
-          {
-            label: "Advisor Avg",
-            data: items.map((item) => item.advisor_average || 0),
-            backgroundColor: COLORS.advisor,
-            borderRadius: 6
-          }
-        ]
+        datasets
       },
       options: {
         responsive: true,
@@ -583,7 +735,7 @@ const DomainAverageChart = ({ items }) => {
               label(context) {
                 const label = context.dataset.label
                 const value = context.raw
-                return `${label}: ${formatMetricValue(value, "score", 2)}`
+                return `${label}: ${formatMetricValue(value, metricUnit, percentMode ? 1 : 2)}`
               }
             }
           }
@@ -597,9 +749,11 @@ const DomainAverageChart = ({ items }) => {
           },
           y: {
             beginAtZero: true,
-            suggestedMax: 5,
+            suggestedMax: percentMode ? 100 : 5,
             ticks: {
-              precision: 1
+              callback(value) {
+                return percentMode ? `${Number(value).toFixed(0)}%` : Number(value).toFixed(1)
+              }
             }
           }
         }
@@ -607,14 +761,16 @@ const DomainAverageChart = ({ items }) => {
     })
 
     return () => chart.destroy()
-  }, [ items ])
+  }, [ items, yAxisMode ])
 
   if (!Array.isArray(items) || items.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No competency data available for the selected filters.")
+    return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Average score by domain", size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -639,6 +795,12 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
             label: "Advisor Avg",
             data: data.items.map((entry) => entry.advisor_average),
             backgroundColor: COLORS.advisor,
+            borderRadius: 6
+          },
+          {
+            label: "Course Avg",
+            data: data.items.map((entry) => entry.course_average),
+            backgroundColor: COLORS.course,
             borderRadius: 6
           }
         ]
@@ -684,7 +846,7 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
 
   return h("div", { className: "space-y-4" }, [
     h("div", { className: "flex flex-wrap gap-3" }, [
-      h("label", { className: "reports-field" }, [
+      h("label", { className: "c-analytics-field" }, [
         h("span", null, "Domain"),
         h("select", {
           value: selectedDomain,
@@ -694,7 +856,7 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
           ...domainOptions.map((domain) => h("option", { key: `domain-${domain.id}`, value: String(domain.id) }, domain.name))
         ])
       ]),
-      h("label", { className: "reports-field" }, [
+      h("label", { className: "c-analytics-field" }, [
         h("span", null, "Sort by"),
         h("select", {
           value: sort,
@@ -708,8 +870,10 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
       ])
     ]),
     Array.isArray(data?.items) && data.items.length > 0
-      ? h("div", { className: "reports-chart", style: { minHeight: "360px" } }, h("canvas", { ref: canvasRef }))
-      : h("p", { className: "reports-placeholder" }, "No competency data available for the selected filters.")
+      ? h(ChartViewport, { label: "Competency detail chart", size: "xwide" },
+          h("div", { className: "c-analytics-chart", style: { minHeight: "360px" } }, h("canvas", { ref: canvasRef }))
+        )
+      : h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   ])
 }
 
@@ -809,65 +973,208 @@ const TrackAchievementChart = ({ tracks }) => {
   }, [ tracks ])
 
   if (!Array.isArray(tracks) || tracks.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No track performance data available.")
+    return h("p", { className: "c-analytics-placeholder" }, "No track performance data available.")
   }
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Percent achieved by track", style: { minHeight: "360px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Percent achieved by track", size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Percent achieved by track", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
-const INLINE_EXPORT_BUTTON_CLASS = "inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+// ─── Employment charts ───────────────────────────────────────────────────────
 
-const SectionExportButtons = ({ onExport, section }) => {
-  if (!section) return null
+const EmploymentStatusChart = ({ statusCounts }) => {
+  const canvasRef = useRef(null)
 
-  return h("div", { className: "flex flex-wrap items-center gap-2" }, [
-    h("button", {
-      type: "button",
-      className: INLINE_EXPORT_BUTTON_CLASS,
-      onClick: () => onExport("pdf", section)
-    }, "PDF"),
-    h("button", {
-      type: "button",
-      className: INLINE_EXPORT_BUTTON_CLASS,
-      onClick: () => onExport("excel", section)
-    }, "Excel")
+  useEffect(() => {
+    if (!canvasRef.current || !Array.isArray(statusCounts) || statusCounts.length === 0) return undefined
+    const labels = statusCounts.map((s) => s.label)
+    const data   = statusCounts.map((s) => s.count)
+    const colors = statusCounts.map((s) => {
+      if (s.label === "Employed")      return COLORS.achieved
+      if (s.label === "Not employed")  return COLORS.notMet
+      return COLORS.notAssessed
+    })
+
+    const chart = new Chart(canvasRef.current.getContext("2d"), {
+      type: "doughnut",
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right" },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const total = data.reduce((a, b) => a + b, 0)
+                const pct   = total > 0 ? ((context.raw / total) * 100).toFixed(1) : "0.0"
+                return `${context.label}: ${context.raw} (${pct}%)`
+              }
+            }
+          }
+        }
+      }
+    })
+    return () => chart.destroy()
+  }, [ statusCounts ])
+
+  if (!Array.isArray(statusCounts) || statusCounts.length === 0) {
+    return h("p", { className: "c-analytics-placeholder" }, "No employment status data available.")
+  }
+  return h(ChartViewport, { label: "Employment status breakdown", size: "compact" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Employment status breakdown", style: { minHeight: "280px" } },
+      h("canvas", { ref: canvasRef })
+    )
+  )
+}
+
+const EmploymentHoursChart = ({ distribution }) => {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    if (!canvasRef.current || !distribution) return undefined
+    const chart = new Chart(canvasRef.current.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: distribution.labels,
+        datasets: [{
+          label: "Students",
+          data: distribution.data,
+          backgroundColor: COLORS.student,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } }
+        }
+      }
+    })
+    return () => chart.destroy()
+  }, [ distribution ])
+
+  if (!distribution) return h("p", { className: "c-analytics-placeholder" }, "No hours data available.")
+  return h(ChartViewport, { label: "Hours per week distribution", size: "compact" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Hours per week distribution", style: { minHeight: "260px" } },
+      h("canvas", { ref: canvasRef })
+    )
+  )
+}
+
+const EmploymentFlexibilityChart = ({ distribution }) => {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    if (!canvasRef.current || !distribution) return undefined
+    const chart = new Chart(canvasRef.current.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: distribution.labels,
+        datasets: [{
+          label: "Students",
+          data: distribution.data,
+          backgroundColor: COLORS.advisor,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxRotation: 30, minRotation: 0 } },
+          y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } }
+        }
+      }
+    })
+    return () => chart.destroy()
+  }, [ distribution ])
+
+  if (!distribution) return h("p", { className: "c-analytics-placeholder" }, "No flexibility data available.")
+  return h(ChartViewport, { label: "Work schedule flexibility distribution", size: "compact" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Work schedule flexibility distribution", style: { minHeight: "260px" } },
+      h("canvas", { ref: canvasRef })
+    )
+  )
+}
+
+const EmploymentTab = ({ data, onExport }) => {
+  if (!data) return h("p", { className: "c-analytics-placeholder" }, "Loading employment data…")
+
+  const { total_respondents, employment_rate, status_counts, hours_distribution, flexibility_distribution } = data
+
+  return h("div", { className: "space-y-8" }, [
+    // Summary banner
+    h("div", { className: "flex flex-wrap gap-4" }, [
+      h("div", { className: "rounded-lg border border-slate-200 bg-white px-5 py-3 shadow-sm" }, [
+        h("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500" }, "Total respondents"),
+        h("p", { className: "text-2xl font-bold text-slate-900" }, String(total_respondents ?? "—"))
+      ]),
+      employment_rate !== null && employment_rate !== undefined
+        ? h("div", { className: "rounded-lg border border-slate-200 bg-white px-5 py-3 shadow-sm" }, [
+            h("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500" }, "Employment rate"),
+            h("p", { className: "text-2xl font-bold text-slate-900" }, `${employment_rate}%`)
+          ])
+        : null
+    ].filter(Boolean)),
+
+    // Status donut
+    h("div", { className: "space-y-2" }, [
+      h("h3", { className: "text-sm font-semibold text-slate-700" }, "Employment Status"),
+      h(EmploymentStatusChart, { statusCounts: status_counts })
+    ]),
+
+    // Hours + Flexibility side by side on wide screens
+    h("div", { className: "grid gap-6 md:grid-cols-2" }, [
+      h("div", { className: "space-y-2" }, [
+        h("h3", { className: "text-sm font-semibold text-slate-700" }, "Hours per Week"),
+        h(EmploymentHoursChart, { distribution: hours_distribution })
+      ]),
+      h("div", { className: "space-y-2" }, [
+        h("h3", { className: "text-sm font-semibold text-slate-700" }, "Work Schedule Flexibility"),
+        h(EmploymentFlexibilityChart, { distribution: flexibility_distribution })
+      ])
+    ])
   ])
 }
 
 const VIEW_TOGGLE_BASE = "inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
 
-const ViewToggle = ({ mode, onChange, singleStudentDisabled }) => {
-  const cohortActive = mode === "cohort"
-  const studentActive = mode === "student"
-
+const YAxisToggle = ({ mode, onChange }) => {
+  const scoreActive = mode !== "percent"
+  const percentActive = mode === "percent"
   const buttonClass = (active) => `${VIEW_TOGGLE_BASE} ${active ? "border-amber-500 bg-amber-100 text-amber-900" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`
 
   return h("div", { className: "flex flex-wrap items-center gap-2" }, [
+    h("span", { className: "text-xs font-medium text-slate-600" }, "Y-axis:"),
     h("button", {
       type: "button",
-      className: buttonClass(cohortActive),
-      onClick: () => onChange("cohort"),
-      "aria-pressed": cohortActive
-    }, "Cohort view"),
+      className: buttonClass(scoreActive),
+      onClick: () => onChange("score"),
+      "aria-pressed": scoreActive
+    }, "Average score"),
     h("button", {
       type: "button",
-      className: buttonClass(studentActive),
-      onClick: () => onChange("student"),
-      disabled: singleStudentDisabled,
-      "aria-pressed": studentActive
-    }, "Single student")
+      className: buttonClass(percentActive),
+      onClick: () => onChange("percent"),
+      "aria-pressed": percentActive
+    }, "% meeting target")
   ])
 }
 
 const TabNavigation = ({ tabs, activeKey, onChange }) => {
   if (!Array.isArray(tabs) || tabs.length === 0) return null
 
-  return h("div", { className: "reports-tabs__list", role: "tablist" },
+  return h("div", { className: "c-tabs", role: "tablist" },
     tabs.map((tab) => {
       const isActive = tab.key === activeKey
-      const className = `reports-tabs__button${isActive ? " reports-tabs__button--active" : ""}`
+      const className = `c-tab${isActive ? " is-active" : ""}`
       return h("button", {
         key: tab.key,
         type: "button",
@@ -899,22 +1206,23 @@ const StatusLegend = ({ statuses = [ "exceeds", "achieved", "not_met", "not_asse
   )
 }
 
-const ReportsApp = ({ exportUrls = {} }) => {
+const ReportsApp = ({ initialFilters = {} }) => {
+  const initialDashboardFilters = useMemo(() => normalizeDashboardFilters(initialFilters), [ initialFilters ])
   const [ options, setOptions ] = useState(EMPTY_OPTIONS)
-  const [ filters, setFilters ] = useState(DEFAULT_FILTERS)
+  const [ filters, setFilters ] = useState(initialDashboardFilters)
   const [ benchmark, setBenchmark ] = useState(null)
   const [ competencies, setCompetencies ] = useState([])
   const [ tracks, setTracks ] = useState([])
   const [ competencyDetail, setCompetencyDetail ] = useState(null)
   const [ loading, setLoading ] = useState(true)
   const [ error, setError ] = useState(null)
-  const [ viewMode, setViewMode ] = useState("cohort")
-  const [ activeTab, setActiveTab ] = useState("trend")
+  const [ activeTab, setActiveTab ] = useState("competency")
+  const [ yAxisMode, setYAxisMode ] = useState("percent")
   const [ competencyDetailDomain, setCompetencyDetailDomain ] = useState("all")
   const [ competencyDetailSort, setCompetencyDetailSort ] = useState("student")
-  const filtersRef = useRef(DEFAULT_FILTERS)
+  const [ employment, setEmployment ] = useState(null)
+  const filtersRef = useRef(initialDashboardFilters)
 
-  const resolvedExportUrls = useMemo(() => ({ ...FALLBACK_EXPORT_URLS, ...(exportUrls || {}) }), [ exportUrls ])
   const filtersDescription = useMemo(() => describeActiveFilters(filters, options), [ filters, options ])
 
   const loadData = useCallback(async (nextFilters) => {
@@ -924,11 +1232,12 @@ const ReportsApp = ({ exportUrls = {} }) => {
       const inputFilters = (nextFilters && typeof nextFilters === "object") ? nextFilters : filtersRef.current
       const resolvedFilters = { ...DEFAULT_FILTERS, ...inputFilters }
       const query = buildQueryString(resolvedFilters)
-      const [ benchmarkRes, competencyRes, trackRes, competencyDetailRes ] = await Promise.all([
+      const [ benchmarkRes, competencyRes, trackRes, competencyDetailRes, employmentRes ] = await Promise.all([
         fetchJson(`${API_ENDPOINTS.benchmark}${query}`),
         fetchJson(`${API_ENDPOINTS.competency}${query}`),
         fetchJson(`${API_ENDPOINTS.track}${query}`),
-        fetchJson(`${API_ENDPOINTS.competencyDetail}${query}`)
+        fetchJson(`${API_ENDPOINTS.competencyDetail}${query}`),
+        fetchJson(`${API_ENDPOINTS.employment}${query}`)
       ])
 
       filtersRef.current = resolvedFilters
@@ -937,9 +1246,10 @@ const ReportsApp = ({ exportUrls = {} }) => {
       setCompetencies(Array.isArray(competencyRes) ? competencyRes : [])
       setTracks(Array.isArray(trackRes) ? trackRes : [])
       setCompetencyDetail(competencyDetailRes)
+      setEmployment(employmentRes)
     } catch (err) {
       console.error(err)
-      setError(err.message || "Unable to load reports data")
+      setError(err.message || "We could not load the report data.")
     } finally {
       setLoading(false)
     }
@@ -952,6 +1262,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
       const data = await fetchJson(API_ENDPOINTS.filters)
       const preparedOptions = {
         tracks: Array.isArray(data.tracks) ? data.tracks : [],
+        program_years: Array.isArray(data.program_years) ? data.program_years : [],
         semesters: Array.isArray(data.semesters) ? data.semesters : [],
         advisors: Array.isArray(data.advisors) ? data.advisors : [],
         categories: Array.isArray(data.categories) ? data.categories : [],
@@ -960,68 +1271,32 @@ const ReportsApp = ({ exportUrls = {} }) => {
         competencies: Array.isArray(data.competencies) ? data.competencies : []
       }
       setOptions(preparedOptions)
-      await loadData(DEFAULT_FILTERS)
+      await loadData(initialDashboardFilters)
     } catch (err) {
       console.error(err)
       setOptions(EMPTY_OPTIONS)
-      setError(err.message || "Unable to load filters")
+      setError(err.message || "We could not load the report filters.")
       setLoading(false)
     }
-  }, [ loadData ])
+  }, [ initialDashboardFilters, loadData ])
 
   const handleFilterChange = useCallback((nextFilters) => {
     const merged = { ...DEFAULT_FILTERS, ...(nextFilters || {}) }
-    setViewMode(merged.student_id && merged.student_id !== "all" ? "student" : "cohort")
     loadData(merged)
   }, [ loadData ])
 
   const handleReset = useCallback(() => {
-    setViewMode("cohort")
     loadData(DEFAULT_FILTERS)
   }, [ loadData ])
-
-  const handleExport = useCallback((format, sectionKey) => {
-    if (format === "pdf") {
-      const base = resolvedExportUrls.pdf
-      if (!base) return
-
-      const targetPath = replacePdfSection(base, sectionKey)
-      const query = buildQueryString(filters)
-      window.location.href = `${targetPath}${query}`
-      return
-    }
-
-    const base = resolvedExportUrls.excel
-    if (!base) return
-
-    const queryFilters = { ...filters }
-    if (sectionKey) {
-      queryFilters.section = sectionKey
-    }
-
-    const query = buildQueryString(queryFilters)
-    window.location.href = `${base}${query}`
-  }, [ filters, resolvedExportUrls ])
-
-  const handleViewModeChange = useCallback((nextMode) => {
-    if (nextMode === viewMode) return
-    if (nextMode === "cohort") {
-      setViewMode("cohort")
-      const nextFilters = { ...filtersRef.current, student_id: "all" }
-      loadData(nextFilters)
-      return
-    }
-
-    setViewMode("student")
-    if ((filtersRef.current.student_id || "all") === "all") {
-      return
-    }
-    loadData(filtersRef.current)
-  }, [ loadData, viewMode ])
 
   useEffect(() => {
     loadFilters()
   }, [ loadFilters ])
+
+  useEffect(() => {
+    updatePrimaryDashboardDownload(filters)
+    syncDashboardUrl(filters)
+  }, [ filters ])
 
   useEffect(() => {
     const domainIds = new Set((competencyDetail?.domains || []).map((domain) => String(domain.id)))
@@ -1049,47 +1324,33 @@ const ReportsApp = ({ exportUrls = {} }) => {
 
   const summaryCards = Array.isArray(benchmark?.cards) ? benchmark.cards : []
   const timeline = Array.isArray(benchmark?.timeline) ? benchmark.timeline : []
-  const studentSelectionRequired = viewMode === "student" && (filters.student_id === "all")
-  const singleStudentDisabled = !Array.isArray(options.students) || options.students.length === 0
 
 
   const chartTabs = useMemo(() => {
     const tabs = []
 
     tabs.push({
-      key: "trend",
-      label: "Trend",
-      title: "Progress Over Time",
-      description: "Monthly average scores for students and advisors so you can spot improvements or regression at a glance.",
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "trend" }),
-      content: timeline.length > 0
-        ? h(TrendChart, { timeline })
-        : h("p", { className: "reports-placeholder" }, "No trend data available."),
-      footnote: h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
+      key: "competency",
+      label: "Competency",
+      title: "Num Achieved by Competency",
+      description: "Side-by-side comparison of student self-ratings, advisor ratings, and course-derived ratings averaged per competency.",
+      axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
+      content: h(CompetencyAchievementChart, { items: competencyAchievementItems, yAxisMode }),
+      footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
+        "Averages are calculated based on all responses within each competency.",
+        filtersDescription && filtersDescription !== "None" ? h("span", { className: "block" }, `Filters applied: ${filtersDescription}`) : null
+      ].filter(Boolean))
     })
 
     tabs.push({
       key: "domain",
       label: "Domain",
       title: "Num Achieved by Domain",
-      description: "Side-by-side comparison of student self-ratings and advisor ratings averaged per domain.",
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "domain" }),
-      content: h(DomainAverageChart, { items: competencies }),
+      description: "Side-by-side comparison of student self-ratings, advisor ratings, and course-derived ratings averaged per domain.",
+      axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
+      content: h(DomainAverageChart, { items: competencies, yAxisMode }),
       footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
         "Averages are calculated based on all responses within each domain.",
-        filtersDescription && filtersDescription !== "None" ? h("span", { className: "block" }, `Filters applied: ${filtersDescription}`) : null
-      ].filter(Boolean))
-    })
-
-    tabs.push({
-      key: "competency",
-      label: "Competency",
-      title: "Num Achieved by Competency",
-      description: "Side-by-side comparison of student self-ratings and advisor ratings averaged per competency.",
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "competency" }),
-      content: h(CompetencyAchievementChart, { items: competencyAchievementItems }),
-      footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
-        "Averages are calculated based on all responses within each competency.",
         filtersDescription && filtersDescription !== "None" ? h("span", { className: "block" }, `Filters applied: ${filtersDescription}`) : null
       ].filter(Boolean))
     })
@@ -1099,7 +1360,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
       label: "Track",
       title: "% All Competency Achieved by Track",
       description: "Horizontal stacked bars highlight attainment percentages alongside missing and unassessed counts.",
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "track" }),
       content: h(React.Fragment, null, [
         h(StatusLegend, { statuses: [ "achieved", "not_met", "not_assessed" ] }),
         h(TrackAchievementChart, { tracks })
@@ -1109,8 +1369,31 @@ const ReportsApp = ({ exportUrls = {} }) => {
         : null
     })
 
+    tabs.push({
+      key: "trend",
+      label: "Trend",
+      title: "Progress Over Time",
+      description: "Monthly average scores for students, advisors, and course ratings so you can spot improvements or regression at a glance.",
+      axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
+      content: timeline.length > 0
+        ? h(TrendChart, { timeline, yAxisMode })
+        : h("p", { className: "c-analytics-placeholder" }, "No trend data available."),
+      footnote: h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
+    })
+
+    tabs.push({
+      key: "employment",
+      label: "Employment",
+      title: "Employment Across Respondents",
+      description: "Employment status, hours worked per week, and schedule flexibility across all respondents in the current filter selection.",
+      content: h(EmploymentTab, { data: employment }),
+      footnote: (filtersDescription && filtersDescription !== "None")
+        ? h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
+        : null
+    })
+
     return tabs
-  }, [ competencies, competencyAchievementItems, filtersDescription, handleExport, handleViewModeChange, singleStudentDisabled, studentSelectionRequired, timeline, tracks, viewMode ])
+  }, [ competencies, competencyAchievementItems, employment, filtersDescription, timeline, tracks, yAxisMode ])
 
   useEffect(() => {
     if (!Array.isArray(chartTabs) || chartTabs.length === 0) return
@@ -1133,29 +1416,31 @@ const ReportsApp = ({ exportUrls = {} }) => {
     return h(ErrorState, { message: "No analytics are available for the selected filters.", onRetry: loadFilters })
   }
 
-  return h("div", { className: "reports-layout space-y-8" }, [
+  return h("div", { className: "c-analytics-layout space-y-8" }, [
     h(FilterBar, { filters, options, onChange: handleFilterChange, onReset: handleReset }),
     summaryCards.length > 0 ? h(SummaryCards, { cards: summaryCards }) : null,
-    h("section", { className: "reports-panel space-y-5" }, [
+    h("section", { className: "c-analytics-panel space-y-5" }, [
       h("div", { className: "space-y-1" }, [
         h("h2", null, "Analytics Visualizations"),
         h("p", null, "Use the tabs below to switch between the available charts.")
       ]),
-      h("div", { className: "reports-tabs space-y-4" }, [
+      h("div", { className: "c-tabs-wrap space-y-4" }, [
         h(TabNavigation, { tabs: chartTabs, activeKey: activeTab, onChange: setActiveTab }),
         activeTabConfig
-          ? h("div", { className: "reports-tab__body space-y-4" }, [
-              h("header", { className: "reports-panel__header flex flex-wrap items-start justify-between gap-4" }, [
-                h("div", { className: "space-y-1" }, [
-                  h("h2", null, activeTabConfig.title),
-                  h("p", null, activeTabConfig.description)
-                ]),
-                activeTabConfig.toolbar
+          ? h("div", { className: "c-tab-panel space-y-4" }, [
+              h("header", { className: "c-analytics-panel__header flex flex-wrap items-start justify-between gap-4" }, [
+                h("div", { className: "space-y-2" }, [
+                  h("div", { className: "space-y-1" }, [
+                    h("h2", null, activeTabConfig.title),
+                    h("p", null, activeTabConfig.description)
+                  ]),
+                  activeTabConfig.axisToggle
+                ].filter(Boolean))
               ]),
               activeTabConfig.content,
               activeTabConfig.footnote
             ].filter(Boolean))
-          : h("p", { className: "reports-placeholder" }, "No charts available.")
+          : h("p", { className: "c-analytics-placeholder" }, "No charts available.")
       ])
     ])
   ].filter(Boolean))

@@ -1,0 +1,175 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Admin tools</p>
+          <h1 class="c-page-title c-page-title--brand">Maintenance Mode</h1>
+          <p class="c-page-subtitle">Redirect the site to the public maintenance page for non-admin users.</p>
+        </div>
+
+        <div class="u-actions">
+          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <span class="c-status-badge <%= @maintenance_enabled ? 'c-status-badge--success' : 'c-status-badge--muted' %>">
+            <%= @maintenance_enabled ? "Enabled" : "Disabled" %>
+          </span>
+        </div>
+      </header>
+    </section>
+
+    <section class="u-stack u-stack--lg">
+      <section class="c-card c-card--spacious u-stack u-stack--lg">
+        <div class="u-responsive-split u-items-start">
+          <div class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Current status</p>
+            <h2 class="c-section-title c-heading-inline">
+              <%= @maintenance_enabled ? "Maintenance redirect is active" : "Normal access is active" %>
+            </h2>
+            <p class="c-lede">
+              <% if @maintenance_enabled %>
+                Non-admin users are redirected to the public maintenance page. Admins can still sign in and manage the portal.
+              <% else %>
+                Students and advisors can access the portal normally. Turn this on only when the site should be unavailable during support work.
+              <% end %>
+            </p>
+          </div>
+
+          <%= form_with url: admin_maintenance_path, method: :patch, data: { turbo: true } do %>
+            <%= hidden_field_tag :enabled, "0" %>
+            <%= render ToggleSwitchComponent.new(
+              id: "maintenance-mode-toggle",
+              name: "enabled",
+              checked: @maintenance_enabled,
+              label: nil,
+              confirm_on: "Turn ON maintenance mode? Non-admin users will be redirected to the maintenance page.",
+              confirm_off: "Turn OFF maintenance mode? Students and advisors will regain access immediately."
+            ) %>
+          <% end %>
+        </div>
+
+        <div class="c-callout <%= @maintenance_enabled ? 'c-callout--warning' : 'c-callout--info' %>">
+          <div class="c-callout__title">
+            <%= @maintenance_enabled ? "Students and advisors are redirected" : "Maintenance mode is off" %>
+          </div>
+          <p>
+            Public page:
+            <%= link_to maintenance_path, class: "u-link" do %>
+              <strong>/maintenance</strong>
+            <% end %>
+          </p>
+        </div>
+      </section>
+
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Availability</p>
+          <h2 class="c-section-title c-heading-inline">What stays available</h2>
+        </div>
+
+        <div class="c-timeline" role="list">
+          <div class="c-timeline__item" role="listitem">
+            <span class="c-dot c-dot--brand" aria-hidden="true"></span>
+            <div class="u-stack u-stack--sm">
+              <div class="c-h3">Admin access</div>
+              <p class="c-lede">Admins can browse and manage the portal normally.</p>
+            </div>
+          </div>
+
+          <div class="c-timeline__item" role="listitem">
+            <span class="c-dot c-dot--muted" aria-hidden="true"></span>
+            <div class="u-stack u-stack--sm">
+              <div class="c-h3">Sign-in flow</div>
+              <p class="c-lede">Authentication endpoints remain reachable so you can always get back in.</p>
+            </div>
+          </div>
+
+          <div class="c-timeline__item" role="listitem">
+            <span class="c-dot c-dot--muted" aria-hidden="true"></span>
+            <div class="u-stack u-stack--sm">
+              <div class="c-h3">Public maintenance page</div>
+              <p class="c-lede">Users will land on a friendly status page with support contact info.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <% if @data_model_health.present? %>
+        <% issue_count = @data_model_health[:issue_count].to_i %>
+        <% health_checks = @data_model_health[:sections].flat_map(&:checks).select { |check| check.count.to_i.positive? } %>
+        <% v6_schema_issue = @data_model_health[:sections].any? { |section| section.key == :v6_schema && !section.ok? } %>
+        <section class="c-card c-card--spacious u-stack u-stack--md">
+          <header class="u-responsive-split">
+            <div>
+              <p class="c-eyebrow">Guardrails</p>
+              <h2 class="c-section-title c-heading-inline">Data Health</h2>
+              <p class="c-page-subtitle">Quick checks for V6 schema readiness, lifecycle, advisor history, competency links, and course references.</p>
+            </div>
+            <span class="c-status-badge <%= issue_count.zero? ? 'c-status-badge--success' : 'c-status-badge--info' %>">
+              <%= issue_count.zero? ? "Clean" : pluralize(issue_count, "issue") %>
+            </span>
+          </header>
+
+          <% if health_checks.blank? %>
+            <div class="c-callout c-callout--info">
+              <div class="c-callout__title">No data-model issues found</div>
+              <p class="c-lede">The current schema links and lifecycle defaults look consistent.</p>
+            </div>
+          <% else %>
+            <% if v6_schema_issue %>
+              <div class="c-callout c-callout--warning">
+                <div class="c-callout__title">V6 schema migration is incomplete</div>
+                <p>
+                  Course target setup, grade import target checks, and reports need the V6 course catalog tables.
+                  Reset or copy the dev database, then run migrations before testing these workflows.
+                </p>
+              </div>
+            <% end %>
+
+            <div class="c-card c-card--flush c-table-wrapper">
+              <table class="c-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Area</th>
+                    <th scope="col">Check</th>
+                    <th scope="col">Count</th>
+                    <th scope="col">Severity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @data_model_health[:sections].each do |section| %>
+                    <% section.checks.select { |check| check.count.to_i.positive? }.each do |check| %>
+                      <tr>
+                        <td><span class="c-pill c-pill--muted"><%= section.label %></span></td>
+                        <td><%= check.label %></td>
+                        <td class="u-whitespace-nowrap"><%= check.count %></td>
+                        <td class="u-whitespace-nowrap"><%= check.severity.to_s.titleize %></td>
+                      </tr>
+                    <% end %>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+
+          <% legacy_target_issue_count = health_checks.select { |check| %i[target_levels_using_legacy_program_year target_levels_using_old_class_codes].include?(check.key) }.sum { |check| check.count.to_i } %>
+          <% if legacy_target_issue_count.positive? %>
+            <div class="c-callout c-callout--warning">
+              <div class="c-callout__title">Legacy target level storage detected</div>
+              <p>
+                Normalize these rows after confirming the target values look right in Program Configuration.
+                This copies them into cohort-specific target records and removes the legacy duplicates.
+              </p>
+              <div class="u-actions u-actions--start u-mt-sm">
+                <%= button_to "Normalize target levels",
+                              normalize_target_levels_admin_maintenance_path,
+                              method: :post,
+                              class: button_classes(:secondary),
+                              data: { turbo_confirm: "Normalize legacy target levels into cohort-specific records? Legacy duplicate rows will be removed only after replacement records exist." } %>
+              </div>
+            </div>
+          <% end %>
+        </section>
+      <% end %>
+    </section>
+  </div>
+</main>

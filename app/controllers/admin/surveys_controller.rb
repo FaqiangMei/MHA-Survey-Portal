@@ -4,7 +4,7 @@
 require "securerandom"
 
 class Admin::SurveysController < Admin::BaseController
-  before_action :set_survey, only: %i[edit update destroy preview archive activate]
+  before_action :set_survey, only: %i[edit update destroy preview copy copy_to_semester archive activate]
   before_action :prepare_supporting_data, only: %i[new create edit update]
 
   # Lists active and archived surveys with optional search and track filters.
@@ -15,22 +15,19 @@ class Admin::SurveysController < Admin::BaseController
   def index
     @search_query = params[:q].to_s.strip
     @selected_track = params[:track].presence
-    @program_semesters = ProgramSemester.ordered
-    @current_program_semester = ProgramSemester.current
-    @new_program_semester = ProgramSemester.new
 
     allowed_sort_columns = {
       "title" => "surveys.title",
-      "semester" => "surveys.semester",
+      "semester" => "program_semesters.name",
       "updated_at" => "surveys.updated_at",
-      "question_count" => "question_count",
-      "category_count" => "category_count"
+      "category_count" => "category_count",
+      "section_count" => "section_count"
     }
 
     @sort_column = params[:sort].presence_in(allowed_sort_columns.keys) || "updated_at"
     @sort_direction = params[:direction] == "asc" ? "asc" : "desc"
 
-    active_scope = Survey.active.left_joins(:track_assignments)
+    active_scope = Survey.active.left_joins(:track_assignments, :program_semester)
 
     if @selected_track.present?
       if @selected_track == unassigned_track_token
@@ -43,35 +40,39 @@ class Admin::SurveysController < Admin::BaseController
     if @search_query.present?
       term = "%#{@search_query.downcase}%"
       active_scope = active_scope.where(
-        "LOWER(surveys.title) LIKE :term OR LOWER(surveys.semester) LIKE :term OR LOWER(COALESCE(surveys.description, '')) LIKE :term",
+        "LOWER(surveys.title) LIKE :term OR LOWER(program_semesters.name) LIKE :term OR LOWER(COALESCE(surveys.description, '')) LIKE :term",
         term: term
       )
     end
 
-    active_scope = active_scope.distinct
-
     active_scope = active_scope
-      .left_joins(:categories, :questions)
+      .left_joins(:categories, :questions, :sections, :survey_assignments)
       .select(
         "surveys.*, " \
+        "COUNT(DISTINCT survey_sections.id) AS section_count, " \
         "COUNT(DISTINCT categories.id) AS category_count, " \
-        "COUNT(DISTINCT questions.id) AS question_count"
+        "COUNT(DISTINCT questions.id) AS question_count, " \
+        "COUNT(DISTINCT survey_assignments.id) AS assignment_count, " \
+        "COUNT(DISTINCT CASE WHEN survey_assignments.completed_at IS NOT NULL THEN survey_assignments.id END) AS completed_assignment_count"
       )
-      .group("surveys.id")
+      .group("surveys.id", "program_semesters.name")
 
     order_expression = allowed_sort_columns[@sort_column]
     active_scope = active_scope.order(Arel.sql("#{order_expression} #{@sort_direction}"))
     active_scope = active_scope.order("surveys.id ASC")
 
-    @active_surveys = active_scope.preload(:track_assignments).load
+    @active_surveys = active_scope.preload(:track_assignments, :program_semester).load
+    @active_survey_groups = surveys_grouped_by_semester(@active_surveys)
 
     @track_filter_options = (
-      Survey::TRACK_OPTIONS +
+      Survey.track_options +
       SurveyTrackAssignment.distinct.pluck(:track)
     ).compact.map(&:to_s).reject(&:blank?).uniq.sort
     @unassigned_track_token = unassigned_track_token
+    @copy_target_semesters = ProgramSemester.operational.ordered
 
-    @archived_surveys = Survey.archived.includes(:categories, :track_assignments, :creator).order(updated_at: :desc)
+    @archived_surveys = Survey.archived.includes(:categories, :track_assignments, :creator, :program_semester).order(updated_at: :desc)
+    @archived_survey_groups = surveys_grouped_by_semester(@archived_surveys)
     @recent_logs = SurveyChangeLog.recent.includes(:survey, :admin).limit(12)
   end
 
@@ -123,24 +124,240 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [void]
   def update
+    autosave_request = params[:autosave].to_s == "1"
+    force_deadline_for_everyone = params[:force_deadline_for_everyone].to_s == "1"
     tracks = selected_tracks
     before_snapshot = survey_snapshot(@survey)
 
-    @survey.assign_attributes(survey_params)
+    before_target_levels = if Question.column_names.include?("program_target_level")
+                             @survey.questions.pluck(:id, :program_target_level).to_h
+    else
+                             {}
+    end
+
+    previous_available_from = @survey.available_from
+    previous_available_until = @survey.available_until
+
+    if autosave_request && Rails.env.development?
+      raw = params[:survey].is_a?(ActionController::Parameters) ? params[:survey] : ActionController::Parameters.new
+      sections_keys = raw[:sections_attributes].is_a?(ActionController::Parameters) ? raw[:sections_attributes].keys : []
+      categories_keys = raw[:categories_attributes].is_a?(ActionController::Parameters) ? raw[:categories_attributes].keys : []
+      questions_count = 0
+      if raw[:categories_attributes].is_a?(ActionController::Parameters)
+        raw[:categories_attributes].each_value do |cat|
+          next unless cat.is_a?(ActionController::Parameters)
+          qa = cat[:questions_attributes]
+          questions_count += qa.keys.size if qa.is_a?(ActionController::Parameters)
+        end
+      end
+
+      Rails.logger.info(
+        "[autosave] survey=#{@survey.id} incoming sections=#{sections_keys.size} categories=#{categories_keys.size} questions=#{questions_count}"
+      )
+    end
+
+    permitted_params = survey_params
+    scrub_stale_section_attributes!(permitted_params)
+
+    @survey.assign_attributes(permitted_params)
     resolve_category_sections(@survey)
 
     if @survey.save
+      if autosave_request && Rails.env.development?
+        Rails.logger.info(
+          "[autosave] survey=#{@survey.id} persisted sections=#{@survey.sections.size} categories=#{@survey.categories.size} questions=#{@survey.questions.size}"
+        )
+      end
+      if before_target_levels.present?
+        after_target_levels = @survey.questions.reload.pluck(:id, :program_target_level).to_h
+
+        touched_question_ids = []
+
+        before_target_levels.each do |question_id, before_level|
+          after_level = after_target_levels[question_id]
+          next if before_level == after_level
+          next if before_level.blank? && after_level.blank?
+
+          touched_question_ids << question_id
+        end
+
+        before_target_levels.each do |question_id, before_level|
+          next if after_target_levels.key?(question_id)
+          next if before_level.blank?
+
+          touched_question_ids << question_id
+        end
+
+        after_target_levels.each do |question_id, after_level|
+          next if before_target_levels.key?(question_id)
+          next if after_level.blank?
+
+          touched_question_ids << question_id
+        end
+
+        touched_question_ids.uniq!
+
+        if touched_question_ids.present?
+          completed_count = SurveyAssignment.where(survey_id: @survey.id).where.not(completed_at: nil).count
+          if completed_count.positive?
+            flash[:warning] = "Target levels changed for #{touched_question_ids.size} question(s). #{completed_count} student(s) have already submitted this survey; reports and exports may reflect the updated targets."
+          end
+        end
+      end
+
+      sync_competency_targets_from_questions!(survey: @survey, tracks: tracks)
+
+        if force_deadline_for_everyone ||
+          previous_available_from != @survey.available_from ||
+          previous_available_until != @survey.available_until
+        all_assignments_scope = SurveyAssignment.where(survey_id: @survey.id)
+        has_offerings = SurveyOffering.data_source_ready? && SurveyOffering.where(survey_id: @survey.id).exists?
+
+        inherited_scope_for = lambda do |scope:, column:, previous_value:|
+          column_name = case column.to_sym
+          when :available_from
+            :available_from
+          when :available_until
+            :available_until
+          else
+            raise ArgumentError, "Unsupported assignment inheritance column: #{column.inspect}"
+          end
+
+          assignments = SurveyAssignment.arel_table
+          assignment_column = assignments[column_name]
+
+          if previous_value.nil?
+            scope.where(column_name => nil)
+          else
+            scope.where(
+              assignment_column.eq(previous_value).or(
+                Arel::Nodes::NamedFunction.new("DATE", [ assignment_column ]).eq(previous_value.to_date)
+              )
+            )
+          end
+        end
+
+        if has_offerings
+          updates = {
+            available_from: @survey.available_from,
+            available_until: @survey.available_until,
+            updated_at: Time.current
+          }
+
+          if SurveyOffering.column_names.include?("portfolio_due_date")
+            updates[:portfolio_due_date] = @survey.available_until
+          end
+
+          SurveyOffering.where(survey_id: @survey.id).update_all(updates)
+
+          if force_deadline_for_everyone
+            all_assignments_scope.update_all(
+              available_until: nil,
+              updated_at: Time.current
+            )
+          else
+            if previous_available_from != @survey.available_from
+              inherited_scope_for.call(
+                scope: all_assignments_scope,
+                column: :available_from,
+                previous_value: previous_available_from
+              ).update_all(
+                available_from: @survey.available_from,
+                updated_at: Time.current
+              )
+            end
+
+            if previous_available_until != @survey.available_until
+              inherited_scope_for.call(
+                scope: all_assignments_scope,
+                column: :available_until,
+                previous_value: previous_available_until
+              ).update_all(
+                available_until: @survey.available_until,
+                updated_at: Time.current
+              )
+            end
+          end
+        else
+          if force_deadline_for_everyone
+            all_assignments_scope.update_all(
+              available_until: nil,
+              updated_at: Time.current
+            )
+          else
+            if previous_available_from != @survey.available_from
+              inherited_scope_for.call(
+                scope: all_assignments_scope,
+                column: :available_from,
+                previous_value: previous_available_from
+              ).update_all(
+                available_from: @survey.available_from,
+                updated_at: Time.current
+              )
+            end
+
+            if previous_available_until != @survey.available_until
+              inherited_scope_for.call(
+                scope: all_assignments_scope,
+                column: :available_until,
+                previous_value: previous_available_until
+              ).update_all(
+                available_until: @survey.available_until,
+                updated_at: Time.current
+              )
+            end
+          end
+        end
+        end
+
       persist_category_section_links
       @survey.assign_tracks!(tracks)
       description = change_summary(before_snapshot, survey_snapshot(@survey), tracks)
       @survey.log_change!(admin: current_user, action: "update", description: description)
       SurveyNotificationJob.perform_later(event: :survey_updated, survey_id: @survey.id, metadata: { summary: description })
-      redirect_to admin_surveys_path, notice: "Survey updated successfully."
+      notice = if force_deadline_for_everyone
+        "Survey updated successfully. Personal assignment deadlines were cleared so everyone now follows the survey deadline, including completed responses."
+      else
+        "Survey updated successfully."
+      end
+      redirect_to admin_surveys_path, notice: notice
     else
+      Rails.logger.info("[autosave] survey=#{@survey.id} save FAILED: #{@survey.errors.full_messages.to_sentence}") if autosave_request && Rails.env.development?
       build_default_structure(@survey)
       ensure_section_form_state(@survey)
       render :edit, status: :unprocessable_entity
     end
+  end
+
+  # Rails nested attributes will raise ActiveRecord::RecordNotFound if the form
+  # submits an id that no longer exists for this survey (e.g., stale DOM after
+  # deletes + reload races). Drop those entries so updates remain idempotent.
+  def scrub_stale_section_attributes!(permitted_params)
+    sections = permitted_params[:sections_attributes]
+    return unless sections.present?
+
+    sections_hash = sections.respond_to?(:to_h) ? sections.to_h : sections
+    return unless sections_hash.is_a?(Hash)
+
+    valid_ids = @survey.sections.pluck(:id).map(&:to_s).to_set
+
+    scrubbed = {}
+    sections_hash.each do |key, attrs|
+      next unless attrs.present?
+
+      attrs_hash = attrs.respond_to?(:to_h) ? attrs.to_h : attrs
+      next unless attrs_hash.is_a?(Hash)
+
+      submitted_id = attrs_hash[:id] || attrs_hash["id"]
+      if submitted_id.present? && !valid_ids.include?(submitted_id.to_s)
+        Rails.logger.info("[survey_update] dropping stale section id=#{submitted_id} for survey=#{@survey.id}") if Rails.env.development?
+        next
+      end
+
+      scrubbed[key] = attrs
+    end
+
+    permitted_params[:sections_attributes] = scrubbed
   end
 
   # Deletes a survey and records the action in the change log.
@@ -153,7 +370,8 @@ class Admin::SurveysController < Admin::BaseController
     redirect_to admin_surveys_path, notice: "Survey deleted successfully."
   end
 
-  # Archives a survey, removing any track assignments and recording the action.
+  # Archives a survey while preserving its track configuration for future
+  # reactivation and recording the action.
   #
   # @return [void]
   def archive
@@ -163,14 +381,14 @@ class Admin::SurveysController < Admin::BaseController
       Survey.transaction do
         @survey.lock!
         removed_assignments = purge_incomplete_assignments!(@survey)
-        @survey.update!(is_active: false)
-        @survey.assign_tracks!([])
+        @survey.update!(is_active: false, available_until: nil)
+        @survey.survey_assignments.update_all(available_until: nil, updated_at: Time.current)
       end
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
       redirect_to edit_admin_survey_path(@survey), alert: e.message and return
     end
 
-    summary = "Survey archived and unassigned from all tracks"
+    summary = "Survey archived"
     if removed_assignments.positive?
       assignment_label = removed_assignments == 1 ? "assignment" : "assignments"
       summary += "; removed #{removed_assignments} pending #{assignment_label}"
@@ -205,28 +423,42 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [void]
   def preview
-    @category_groups = @survey.categories.includes(:section, :questions).order(:id)
-    @categories = @category_groups
-    @questions = @survey.questions.includes(:category).order(:question_order)
-    @category_names = @category_groups.map(&:name)
-    @track_list = @survey.track_list
-    @computed_required = {}
+    offering_scope = @survey.offerings
+    preview_offering = offering_scope.where.not(class_of: nil).order(:class_of).first || offering_scope.order(:class_of).first
+    preview_track = preview_offering&.track || @survey.track_list.first
+    preview_class_of = preview_offering&.class_of
+    preview_student = OpenStruct.new(
+      student_id: 0,
+      advisor: nil,
+      user: nil,
+      track: preview_track,
+      program_year: preview_class_of
+    )
+    @preview_survey_response = SurveyResponse.new(
+      student: preview_student,
+      survey: @survey,
+      answers_override: {}
+    )
+  end
 
-    @category_groups.each do |category|
-      category.questions.each do |question|
-        required = question.is_required?
+  def copy
+    prepare_copy_options
+  end
 
-        if !required && question.question_type_multiple_choice?
-          options = question.answer_options_list.map(&:strip).map(&:downcase)
-          is_flexibility_scale = (options == %w[1 2 3 4 5]) &&
-                                 question.question_text.to_s.downcase.include?("flexible")
-          required = !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
-        end
+  def copy_to_semester
+    prepare_copy_options
+    target_semester = ProgramSemester.find_by(id: copy_survey_params[:target_program_semester_id])
+    copied_survey = Surveys::CopyToSemester.call(
+      source_survey: @survey,
+      target_semester: target_semester,
+      actor: current_user
+    )
 
-        @computed_required[question.id] = required
-      end
-    end
-    @survey.log_change!(admin: current_user, action: "preview", description: "Previewed from admin panel")
+    redirect_to edit_admin_survey_path(copied_survey),
+                notice: "Survey copied to #{copied_survey.semester}. No students were assigned."
+  rescue Surveys::CopyToSemester::Error, ActiveRecord::RecordInvalid => e
+    flash.now[:alert] = e.message
+    render :copy, status: :unprocessable_entity
   end
 
   private
@@ -235,18 +467,18 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [void]
   def set_survey
-    @survey = Survey.includes(:sections, categories: :section).find(params[:id])
+    relation = Survey.includes(:sections, categories: :section)
+    relation = relation.includes(:offerings) if SurveyOffering.data_source_ready?
+    @survey = relation.find(params[:id])
   end
 
   def purge_incomplete_assignments!(survey)
     assignments = survey.survey_assignments.incomplete
     return 0 unless assignments.exists?
-
-    question_ids = survey.questions.select(:id)
     removed = 0
 
     assignments.find_each do |assignment|
-      StudentQuestion.where(student_id: assignment.student_id, question_id: question_ids).delete_all
+      SurveyResponseVersion.where(survey_assignment_id: assignment.id).update_all(survey_assignment_id: nil)
       assignment.destroy!
       removed += 1
     end
@@ -259,28 +491,57 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [ActionController::Parameters]
   def survey_params
-    params.require(:survey).permit(
+    question_attributes = [
+      :id,
+      :question_text,
+      :description,
+      :tooltip_text,
+      :question_type,
+      :question_order,
+      :answer_options,
+      :prompt_format,
+      :integer_min,
+      :integer_max,
+      :is_required,
+      :has_evidence_field,
+      :_destroy
+    ]
+
+    question_attributes << :has_feedback if Question.new.respond_to?(:has_feedback)
+    question_attributes << :program_target_level if Question.new.respond_to?(:program_target_level)
+    question_attributes << :parent_question_id if Question.new.respond_to?(:parent_question_id)
+    question_attributes << :sub_question_order if Question.new.respond_to?(:sub_question_order)
+
+    permitted = params.require(:survey).permit(
       :title,
       :description,
       :semester,
+      :available_from,
+      :available_until,
       :is_active,
+      :show_course_competencies_with_survey,
+      :advisor_numeric_feedback_enabled,
+      track_list: [],
+      offerings_attributes: [
+        :id,
+        :review_meetings_start,
+        :review_meetings_end
+      ],
+      legend_attributes: [
+        :id,
+        :title,
+        :body,
+        :_destroy
+      ],
       categories_attributes: [
         :id,
         :name,
         :description,
+        :position,
         :section_form_uid,
         :_destroy,
         questions_attributes: [
-          :id,
-          :question_text,
-          :description,
-          :tooltip_text,
-          :question_type,
-          :question_order,
-          :answer_options,
-          :is_required,
-          :has_evidence_field,
-          :_destroy
+          *question_attributes
         ]
       ],
       sections_attributes: [
@@ -292,14 +553,19 @@ class Admin::SurveysController < Admin::BaseController
         :_destroy
       ]
     )
+
+    permitted.delete(:track_list)
+    permitted
   end
 
   # Extracts and normalizes track selections from the submitted parameters.
   #
   # @return [Array<String>] list of unique track identifiers chosen by the admin
   def selected_tracks
-    permitted = params.fetch(:survey, {}).permit(track_list: [])
-    Array(permitted[:track_list])
+    raw = params[:survey]
+    values = raw.is_a?(ActionController::Parameters) ? raw[:track_list] : nil
+
+    Array(values)
       .map { |value| Survey.canonical_track(value) }
       .compact
       .uniq
@@ -310,9 +576,78 @@ class Admin::SurveysController < Admin::BaseController
   #
   # @return [void]
   def prepare_supporting_data
-    @available_tracks = Survey::TRACK_OPTIONS
+    @available_tracks = Survey.track_options
     @question_types = Question.question_types.keys
     @program_semester_options = ProgramSemester.ordered.pluck(:name)
+  end
+
+  def prepare_copy_options
+    @copy_target_semesters = ProgramSemester.operational.ordered.where.not(id: @survey.program_semester_id)
+    @target_program_semester_id = copy_survey_params[:target_program_semester_id].presence ||
+                                  @copy_target_semesters.first&.id
+  end
+
+  def copy_survey_params
+    params.fetch(:survey_copy, ActionController::Parameters.new).permit(:target_program_semester_id)
+  end
+
+  def surveys_grouped_by_semester(surveys)
+    surveys
+      .group_by { |survey| survey.program_semester&.name.presence || survey.semester.presence || "Unscheduled" }
+      .sort_by { |semester_name, rows| semester_group_sort_key(semester_name, rows.first) }
+  end
+
+  def semester_group_sort_key(semester_name, survey)
+    if (match = semester_name.to_s.match(/\A(\w+)\s+(\d{4})\z/))
+      term_order = { "winter" => 0, "spring" => 1, "summer" => 2, "fall" => 3 }[match[1].downcase] || 99
+      return [ -match[2].to_i, -term_order, semester_name.to_s ]
+    end
+
+    timestamp = survey&.updated_at&.to_time&.to_i || 0
+    [ -timestamp, semester_name.to_s ]
+  end
+
+  # Phase 1 single-source transition:
+  # mirror per-question target level edits into competency_target_levels,
+  # while retaining Question#program_target_level for compatibility.
+  def sync_competency_targets_from_questions!(survey:, tracks:)
+    return unless survey&.respond_to?(:questions)
+
+    titles = Reports::DataAggregator::COMPETENCY_TITLES
+    return if titles.blank?
+
+    selected_tracks = Array(tracks).map { |track| Survey.canonical_track(track) || track }
+    selected_tracks = selected_tracks.compact.reject(&:blank?).uniq
+    selected_tracks = survey.track_list if selected_tracks.blank?
+    return if selected_tracks.blank?
+
+    competency_questions = survey.questions.where(question_text: titles)
+    return if competency_questions.empty?
+
+    competency_questions.find_each do |question|
+      title = question.question_text.to_s.strip
+      next if title.blank?
+
+      level = question.respond_to?(:program_target_level) ? question.program_target_level.presence : nil
+
+      selected_tracks.each do |track|
+        attrs = {
+          program_semester_id: survey.program_semester_id,
+          track: track,
+          class_of: nil,
+          competency_title: title
+        }
+
+        if level.blank?
+          CompetencyTargetLevel.where(attrs).delete_all
+          next
+        end
+
+        record = CompetencyTargetLevel.find_or_initialize_by(attrs)
+        record.target_level = level.to_i
+        record.save!
+      end
+    end
   end
 
   # Ensures the survey has at least one category with a question scaffolded for
@@ -368,10 +703,16 @@ class Admin::SurveysController < Admin::BaseController
   # @param survey [Survey]
   # @return [Hash]
   def survey_snapshot(survey)
+    snapshot_time = lambda do |value|
+      value&.in_time_zone&.strftime("%Y-%m-%d %H:%M")
+    end
+
     {
       title: survey.title,
       semester: survey.semester,
       description: survey.description,
+      available_from: snapshot_time.call(survey.available_from),
+      available_until: snapshot_time.call(survey.available_until),
       is_active: survey.is_active,
       tracks: survey.track_list,
       categories: survey.categories.map do |category|
@@ -392,23 +733,47 @@ class Admin::SurveysController < Admin::BaseController
   # @return [String]
   def change_summary(before, after, tracks)
     diffs = []
-    %i[title semester description is_active].each do |attribute|
+    %i[title semester description available_from available_until is_active].each do |attribute|
       before_value = before[attribute]
       after_value = after[attribute]
       next if before_value == after_value
 
-      diffs << "#{attribute.to_s.humanize} changed from '#{before_value}' to '#{after_value}'"
+      diffs << "#{survey_change_label(attribute)} changed from #{survey_change_value(attribute, before_value)} to #{survey_change_value(attribute, after_value)}."
     end
 
     if before[:tracks].sort != tracks.sort
-      diffs << "Tracks updated to #{tracks.join(', ')}"
+      diffs << "Tracks updated to #{tracks.join(', ')}."
     end
 
     before_counts = before[:categories].map { |c| c[:question_count] }
     after_counts = after[:categories].map { |c| c[:question_count] }
-    diffs << "Category/question structure updated" if before_counts != after_counts
+    diffs << "Category or question structure updated." if before_counts != after_counts
 
-    diffs.present? ? diffs.join("; ") : "No structural changes detected"
+    diffs.present? ? diffs.join(" ") : "No question or structure changes were detected."
+  end
+
+  def survey_change_label(attribute)
+    {
+      available_from: "Open date",
+      available_until: "Due date",
+      is_active: "Is active"
+    }.fetch(attribute, attribute.to_s.humanize)
+  end
+
+  def survey_change_value(attribute, value)
+    return "not set" if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+
+    case attribute
+    when :available_from, :available_until
+      parsed_time = Time.zone.parse(value.to_s)
+      parsed_time ? parsed_time.to_fs(:long) : value
+    when :is_active
+      ActiveModel::Type::Boolean.new.cast(value) ? "active" : "archived"
+    else
+      "'#{value}'"
+    end
+  rescue ArgumentError
+    value
   end
 
   # Token representing surveys with no track assignments when filtering.

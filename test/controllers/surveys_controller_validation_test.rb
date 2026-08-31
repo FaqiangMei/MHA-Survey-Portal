@@ -12,6 +12,110 @@ class SurveysControllerValidationTest < ActionController::TestCase
     @survey = surveys(:fall_2025)
   end
 
+  test "evidence_accessible returns invalid for malformed uri" do
+    accessible, reason = @controller.send(:evidence_accessible?, "not a url")
+    assert_equal false, accessible
+    assert_equal :invalid, reason
+  end
+
+  test "evidence_accessible returns invalid for non-https urls" do
+    accessible, reason = @controller.send(:evidence_accessible?, "http://sites.google.com/tamu.edu/demo/home")
+    assert_equal false, accessible
+    assert_equal :invalid, reason
+  end
+
+  test "evidence_accessible returns invalid for non-allowlisted hosts" do
+    accessible, reason = @controller.send(:evidence_accessible?, "https://example.com/file")
+    assert_equal false, accessible
+    assert_equal :invalid, reason
+  end
+
+  test "evidence_accessible rejects docs host as invalid" do
+    accessible, reason = @controller.send(:evidence_accessible?, "https://docs.google.com/document/d/abc123/edit")
+    assert_equal false, accessible
+    assert_equal :invalid, reason
+  end
+
+  test "evidence_accessible rejects drive host as invalid" do
+    accessible, reason = @controller.send(:evidence_accessible?, "https://drive.google.com/file/d/timeout123/view")
+    assert_equal false, accessible
+    assert_equal :invalid, reason
+  end
+
+  test "evidence_accessible flags forbidden when HEAD succeeds but sniff indicates sign-in" do
+    url = "https://sites.google.com/tamu.edu/abc123/home"
+    stub_request(:head, url).to_return(status: 200)
+    stub_request(:get, url).to_return(status: 200, body: "Sign in to continue")
+
+    accessible, reason = @controller.send(:evidence_accessible?, url)
+    assert_equal false, accessible
+    assert_equal :forbidden, reason
+  end
+
+  test "evidence_accessible handles HEAD not allowed by falling back to GET" do
+    url = "https://sites.google.com/tamu.edu/method_not_allowed/home"
+    stub_request(:head, url).to_return(status: 405)
+    # Minimal range GET returns 200, then sniff GET returns forbidden marker
+    stub_request(:get, url).to_return(status: 200, body: "Request access")
+
+    accessible, reason = @controller.send(:evidence_accessible?, url)
+    assert_equal false, accessible
+    assert_equal :forbidden, reason
+  end
+
+  test "evidence_accessible rejects redirects to non-allowlisted hosts" do
+    url = "https://sites.google.com/tamu.edu/redir/home"
+    stub_request(:head, url).to_return(status: 302, headers: { "Location" => "https://accounts.google.com/signin" })
+
+    accessible, reason = @controller.send(:evidence_accessible?, url)
+    assert_equal false, accessible
+    assert_equal :forbidden, reason
+  end
+
+  test "evidence_accessible returns too_many_redirects after redirect limit" do
+    url1 = "https://sites.google.com/tamu.edu/r1/home"
+    url2 = "https://sites.google.com/tamu.edu/r2/home"
+    url3 = "https://sites.google.com/tamu.edu/r3/home"
+    url4 = "https://sites.google.com/tamu.edu/r4/home"
+    url5 = "https://sites.google.com/tamu.edu/r5/home"
+
+    stub_request(:head, url1).to_return(status: 302, headers: { "Location" => url2 })
+    stub_request(:head, url2).to_return(status: 302, headers: { "Location" => url3 })
+    stub_request(:head, url3).to_return(status: 302, headers: { "Location" => url4 })
+    stub_request(:head, url4).to_return(status: 302, headers: { "Location" => url5 })
+
+    accessible, reason = @controller.send(:evidence_accessible?, url1)
+    assert_equal false, accessible
+    assert_equal :too_many_redirects, reason
+  end
+
+  test "evidence_accessible returns error for redirects without location" do
+    url = "https://sites.google.com/tamu.edu/no_location/home"
+    stub_request(:head, url).to_return(status: 302)
+
+    accessible, reason = @controller.send(:evidence_accessible?, url)
+    assert_equal false, accessible
+    assert_equal :error, reason
+  end
+
+  test "evidence_accessible returns not_found for 404" do
+    url = "https://sites.google.com/tamu.edu/missing/home"
+    stub_request(:head, url).to_return(status: 404)
+
+    accessible, reason = @controller.send(:evidence_accessible?, url)
+    assert_equal false, accessible
+    assert_equal :not_found, reason
+  end
+
+  test "evidence_accessible returns error on unexpected exceptions" do
+    url = "https://sites.google.com/tamu.edu/explode/home"
+    stub_request(:head, url).to_raise(StandardError.new("boom"))
+
+    accessible, reason = @controller.send(:evidence_accessible?, url)
+    assert_equal false, accessible
+    assert_equal :error, reason
+  end
+
   test "submit re-renders show with 422 when required answers missing" do
     # post with empty answers
     post :submit, params: { id: @survey.id, answers: {} }
@@ -31,11 +135,11 @@ class SurveysControllerValidationTest < ActionController::TestCase
     @survey.reload
     answers = {}
     @survey.questions.each do |q|
-      answers[q.id.to_s] = (q.id == ev.id) ? "https://not-drive.example.com/file" : "Ok"
+      answers[q.id.to_s] = (q.id == ev.id) ? "https://example.com/file" : "Ok"
     end
     post :submit, params: { id: @survey.id, answers: answers }
     assert_response :unprocessable_entity
     body = @response.body.to_s.downcase
-    assert(body.include?("invalid") || body.include?("invalid google") || body.include?("invalid link"))
+    assert(body.include?("highlighted") || body.include?("published google sites") || body.include?("anyone with the link"))
   end
 end

@@ -1,15 +1,18 @@
-<main class="main-content">
-  <section class="dashboard-section">
-    <div class="section-header">
-      <div>
-        <h1 class="section-title">Edit Question</h1>
-        <p class="section-subtitle">Update the prompt content, order, and tags.</p>
-      </div>
-      <div class="section-actions">
-        <%= link_to "Back to Question Bank", admin_questions_path, class: "btn" %>
-      </div>
-    </div>
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Survey admin</p>
+          <h1 class="c-page-title c-page-title--brand">Edit Question</h1>
+          <p class="c-page-subtitle">Update the prompt content, order, and tags.</p>
+        </div>
+        <%= link_to "Back to Question Bank", admin_questions_path, class: button_classes(:secondary) %>
+      </header>
+    </section>
 
-    <%= render "form", question: @question %>
-  </section>
+    <section class="c-card u-stack u-stack--lg">
+      <%= render "form", question: @question %>
+    </section>
+  </div>
 </main>

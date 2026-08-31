@@ -1,0 +1,503 @@
+<main class="c-main c-main--dashboard">
+  <% tabs = [
+    ["Tracks", "tracks", "Manage the available program tracks across the portal."],
+    ["Majors", "majors", "Control the degree and major options students can select."],
+    ["Cohorts", "years", "Maintain class-year options used for reporting and assignment."],
+    ["Semesters", "semesters", "Define survey terms and choose the current active semester."],
+    ["Competency Targets", "targets", "Set benchmark proficiency targets by semester, track, and class."],
+    ["Course Targets", "course_targets", "Set course-level competency targets by semester and course."]
+  ] %>
+
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Academic setup</p>
+          <h1 class="c-page-title c-page-title--brand">Program Configuration</h1>
+          <p class="c-page-subtitle">Manage program structure and competency targets in one place.</p>
+        </div>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+      </header>
+    </section>
+
+    <section class="c-card c-card--compact u-stack u-stack--md">
+      <nav class="c-tab-list" aria-label="Program setup tabs">
+        <% tabs.each do |label, value, description| %>
+          <% active = @tab == value %>
+          <%= link_to label,
+                admin_program_setup_path(tab: value),
+                class: "c-tab-link #{active ? 'is-active' : ''}",
+                title: description,
+                aria: (active ? { current: "page" } : {}),
+                data: { turbo: false } %>
+        <% end %>
+      </nav>
+    </section>
+
+    <% if @tab == "tracks" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Tracks</h2>
+            <p class="c-panel-subtitle">Drag to reorder track options. Details like key and position stay inside the edit modal.</p>
+            <p id="tracks-reorder-status" class="c-reorder-status">Order saves after drag.</p>
+          </div>
+          <button type="button" class="<%= button_classes(:primary) %>" data-open-modal="program-track-create">Add Track</button>
+        </header>
+
+        <% if @program_tracks.blank? %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No tracks yet. Add the first track to make it available in student profiles and reports.</p>
+          </div>
+        <% else %>
+          <ul class="c-setup-list"
+              data-program-setup-sortable="true"
+              data-reorder-url="<%= reorder_admin_program_tracks_path %>"
+              data-reorder-status-target="tracks-reorder-status">
+            <% @program_tracks.each do |track| %>
+              <% modal_id = "program-track-edit-#{track.id}" %>
+              <li class="c-setup-list__item" data-sortable-item data-sortable-id="<%= track.id %>">
+                <button type="button" class="c-reorder-handle" data-drag-handle aria-label="Reorder <%= track.name %>" title="Drag to reorder">::</button>
+                <div class="c-setup-list__body">
+                  <p class="c-table__title"><%= track.name %></p>
+                </div>
+                <div class="c-setup-list__actions">
+                  <%= status_badge(track.active? ? "Active" : "Inactive", value: track.active? ? "active" : "neutral") %>
+                  <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+                </div>
+
+                <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                  <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                    <header class="c-modal__header">
+                      <div>
+                        <p class="c-eyebrow">Track</p>
+                        <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= track.name %></h3>
+                        <p class="c-modal__subtitle">Update the display name, internal key, sort position, and active state for this track.</p>
+                      </div>
+                      <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                    </header>
+                    <div class="c-modal__body c-modal__body--form u-stack u-stack--md">
+                      <%= form_with model: [:admin, track], local: true, class: "c-modal-form" do |form| %>
+                        <div class="c-modal-form__grid">
+                          <div class="c-field">
+                            <%= form.label :name, "Name", class: "c-label" %>
+                            <%= form.text_field :name, required: true, class: "c-input" %>
+                          </div>
+                          <div class="c-field">
+                            <%= form.label :key, "Key", class: "c-label" %>
+                            <%= form.text_field :key, class: "c-input" %>
+                          </div>
+                          <div class="c-field">
+                            <%= form.label :position, "Position", class: "c-label" %>
+                            <%= form.number_field :position, min: 0, step: 1, class: "c-input" %>
+                          </div>
+                          <label class="c-choice-label">
+                            <%= form.check_box :active, class: "c-choice" %>
+                            <span>Active</span>
+                          </label>
+                        </div>
+                        <div class="c-modal-actions">
+                          <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                          <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-close-modal>Cancel</button>
+                        </div>
+                      <% end %>
+                      <div class="c-modal-danger-zone">
+                        <div>
+                          <p class="c-modal-danger-zone__title">Delete track</p>
+                          <p class="c-modal-danger-zone__text">Removes this option from future setup lists.</p>
+                        </div>
+                        <%= button_to "Delete track",
+                              admin_program_track_path(track),
+                              method: :delete,
+                              data: { turbo_confirm: "Delete #{track.name}? This removes the track from future setup lists." },
+                              class: button_classes(:danger, extra_classes: "btn-sm") %>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+
+        <div id="program-track-create" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+          <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="program-track-create-title">
+            <header class="c-modal__header">
+              <div>
+                <p class="c-eyebrow">Track</p>
+                <h3 id="program-track-create-title" class="c-modal__title">Add Track</h3>
+                <p class="c-modal__subtitle">Create a track option for student profiles, survey rules, and reports.</p>
+              </div>
+              <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+            </header>
+            <div class="c-modal__body c-modal__body--form">
+              <%= form_with model: [:admin, @new_program_track], url: admin_program_tracks_path, local: true, class: "c-modal-form" do |form| %>
+                <div class="c-modal-form__grid">
+                  <div class="c-field">
+                    <%= form.label :name, "Track name", class: "c-label" %>
+                    <%= form.text_field :name, required: true, class: "c-input", placeholder: "Residential" %>
+                  </div>
+                  <div class="c-field">
+                    <%= form.label :key, "Key", class: "c-label" %>
+                    <%= form.text_field :key, class: "c-input", placeholder: "Auto-generated if blank" %>
+                  </div>
+                  <div class="c-field">
+                    <%= form.label :position, "Position", class: "c-label" %>
+                    <%= form.number_field :position, min: 0, step: 1, class: "c-input" %>
+                  </div>
+                  <label class="c-choice-label">
+                    <%= form.check_box :active, class: "c-choice", checked: true %>
+                    <span>Active</span>
+                  </label>
+                </div>
+                <div class="c-modal-actions">
+                  <%= form.submit "Save track", class: button_classes(:primary) %>
+                  <button type="button" class="<%= button_classes(:secondary) %>" data-close-modal>Cancel</button>
+                </div>
+              <% end %>
+            </div>
+          </section>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "majors" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Majors</h2>
+            <p class="c-panel-subtitle">Manage the degree/program values students can select.</p>
+          </div>
+          <button type="button" class="<%= button_classes(:primary) %>" data-open-modal="major-create">Add Major</button>
+        </header>
+
+        <% if @majors.blank? %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No majors yet. Add the first major to make it available on student profiles.</p>
+          </div>
+        <% else %>
+          <ul class="c-setup-list">
+            <% @majors.each do |major| %>
+              <% modal_id = "major-edit-#{major.id}" %>
+              <li class="c-setup-list__item">
+                <div class="c-setup-list__body">
+                  <p class="c-table__title"><%= major.name %></p>
+                </div>
+                <div class="c-setup-list__actions">
+                  <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+                </div>
+
+                <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                  <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                    <header class="c-modal__header">
+                      <div>
+                        <p class="c-eyebrow">Major</p>
+                        <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= major.name %></h3>
+                        <p class="c-modal__subtitle">Update the program name shown in student account and reporting workflows.</p>
+                      </div>
+                      <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                    </header>
+                    <div class="c-modal__body c-modal__body--form u-stack u-stack--md">
+                      <%= form_with model: [:admin, major], local: true, class: "c-modal-form" do |form| %>
+                        <div class="c-field">
+                          <%= form.label :name, "Name", class: "c-label" %>
+                          <%= form.text_field :name, required: true, class: "c-input" %>
+                        </div>
+                        <div class="c-modal-actions">
+                          <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                          <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-close-modal>Cancel</button>
+                        </div>
+                      <% end %>
+                      <div class="c-modal-danger-zone">
+                        <div>
+                          <p class="c-modal-danger-zone__title">Delete major</p>
+                          <p class="c-modal-danger-zone__text">Removes this option from future student profile lists.</p>
+                        </div>
+                        <%= button_to "Delete major",
+                              admin_major_path(major),
+                              method: :delete,
+                              data: { turbo_confirm: "Delete #{major.name}? This removes the major from future setup lists." },
+                              class: button_classes(:danger, extra_classes: "btn-sm") %>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+
+        <div id="major-create" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+          <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="major-create-title">
+            <header class="c-modal__header">
+              <div>
+                <p class="c-eyebrow">Major</p>
+                <h3 id="major-create-title" class="c-modal__title">Add Major</h3>
+                <p class="c-modal__subtitle">Create a program option that students can select on their account profile.</p>
+              </div>
+              <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+            </header>
+            <div class="c-modal__body c-modal__body--form">
+              <%= form_with model: [:admin, @new_major], url: admin_majors_path, local: true, class: "c-modal-form" do |form| %>
+                <div class="c-field">
+                  <%= form.label :name, "Major / Program name", class: "c-label" %>
+                  <%= form.text_field :name, required: true, class: "c-input", placeholder: "Health Administration" %>
+                </div>
+                <div class="c-modal-actions">
+                  <%= form.submit "Save major", class: button_classes(:primary) %>
+                  <button type="button" class="<%= button_classes(:secondary) %>" data-close-modal>Cancel</button>
+                </div>
+              <% end %>
+            </div>
+          </section>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "years" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Cohort Years</h2>
+            <p class="c-panel-subtitle">Drag to reorder cohort options. Cohort year and position remain editable in the modal.</p>
+            <p id="years-reorder-status" class="c-reorder-status">Order saves after drag.</p>
+          </div>
+          <button type="button" class="<%= button_classes(:primary) %>" data-open-modal="program-year-create">Add Cohort</button>
+        </header>
+
+        <% if @program_years.blank? %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No cohort years yet. Add the first year to make it available for reporting and assignment.</p>
+          </div>
+        <% else %>
+          <ul class="c-setup-list"
+              data-program-setup-sortable="true"
+              data-reorder-url="<%= reorder_admin_program_years_path %>"
+              data-reorder-status-target="years-reorder-status">
+            <% @program_years.each do |year| %>
+              <% modal_id = "program-year-edit-#{year.id}" %>
+              <li class="c-setup-list__item" data-sortable-item data-sortable-id="<%= year.id %>">
+                <button type="button" class="c-reorder-handle" data-drag-handle aria-label="Reorder Class of <%= year.value %>" title="Drag to reorder">::</button>
+                <div class="c-setup-list__body">
+                  <p class="c-table__title">Class of <%= year.value %></p>
+                </div>
+                <div class="c-setup-list__actions">
+                  <%= status_badge(year.active? ? "Active" : "Inactive", value: year.active? ? "active" : "neutral") %>
+                  <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+                </div>
+
+                <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                  <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                    <header class="c-modal__header">
+                      <div>
+                        <p class="c-eyebrow">Cohort</p>
+                        <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit Class of <%= year.value %></h3>
+                        <p class="c-modal__subtitle">Update the cohort year, manual sort position, and availability for this option.</p>
+                      </div>
+                      <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                    </header>
+                    <div class="c-modal__body c-modal__body--form u-stack u-stack--md">
+                      <%= form_with model: [:admin, year], local: true, class: "c-modal-form" do |form| %>
+                        <div class="c-modal-form__grid">
+                          <div class="c-field">
+                            <%= form.label :value, "Class of year", class: "c-label" %>
+                            <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "c-input" %>
+                          </div>
+                          <div class="c-field">
+                            <%= form.label :position, "Position", class: "c-label" %>
+                            <%= form.number_field :position, min: 0, step: 1, class: "c-input" %>
+                          </div>
+                          <label class="c-choice-label">
+                            <%= form.check_box :active, class: "c-choice" %>
+                            <span>Active</span>
+                          </label>
+                        </div>
+                        <div class="c-modal-actions">
+                          <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                          <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-close-modal>Cancel</button>
+                        </div>
+                      <% end %>
+                      <div class="c-modal-danger-zone">
+                        <div>
+                          <p class="c-modal-danger-zone__title">Delete cohort</p>
+                          <p class="c-modal-danger-zone__text">Removes this class year from future setup lists.</p>
+                        </div>
+                        <%= button_to "Delete cohort",
+                              admin_program_year_path(year),
+                              method: :delete,
+                              data: { turbo_confirm: "Delete Class of #{year.value}? This removes the cohort from future setup lists." },
+                              class: button_classes(:danger, extra_classes: "btn-sm") %>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+
+        <div id="program-year-create" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+          <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="program-year-create-title">
+            <header class="c-modal__header">
+              <div>
+                <p class="c-eyebrow">Cohort</p>
+                <h3 id="program-year-create-title" class="c-modal__title">Add Cohort Year</h3>
+                <p class="c-modal__subtitle">Create a class-year option used by student profiles, reports, and target rules.</p>
+              </div>
+              <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+            </header>
+            <div class="c-modal__body c-modal__body--form">
+              <%= form_with model: [:admin, @new_program_year], url: admin_program_years_path, local: true, class: "c-modal-form" do |form| %>
+                <div class="c-modal-form__grid">
+                  <div class="c-field">
+                    <%= form.label :value, "Class of year", class: "c-label" %>
+                    <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "c-input" %>
+                  </div>
+                  <div class="c-field">
+                    <%= form.label :position, "Position", class: "c-label" %>
+                    <%= form.number_field :position, min: 0, step: 1, class: "c-input" %>
+                  </div>
+                  <label class="c-choice-label">
+                    <%= form.check_box :active, class: "c-choice", checked: true %>
+                    <span>Active</span>
+                  </label>
+                </div>
+                <div class="c-modal-actions">
+                  <%= form.submit "Save cohort", class: button_classes(:primary) %>
+                  <button type="button" class="<%= button_classes(:secondary) %>" data-close-modal>Cancel</button>
+                </div>
+              <% end %>
+            </div>
+          </section>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "semesters" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Program Semesters</h2>
+            <p class="c-panel-subtitle">Semesters are displayed in chronological order and drive survey, target, and import filters.</p>
+          </div>
+          <div class="u-actions">
+            <% if @current_program_semester.present? %>
+              <%= status_badge("Current: #{@current_program_semester.name}", value: "active") %>
+            <% else %>
+              <%= status_badge("No current semester", value: "closed") %>
+            <% end %>
+            <button type="button" class="<%= button_classes(:primary) %>" data-open-modal="program-semester-create">Add Semester</button>
+          </div>
+        </header>
+
+        <% if @program_semesters.blank? %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No semesters yet. Add the first semester to begin configuring survey terms.</p>
+          </div>
+        <% else %>
+          <ul class="c-setup-list">
+            <% @program_semesters.each do |semester| %>
+              <% modal_id = "program-semester-edit-#{semester.id}" %>
+              <li class="c-setup-list__item">
+                <div class="c-setup-list__body">
+                  <p class="c-table__title"><%= semester.name %></p>
+                </div>
+                <div class="c-setup-list__actions">
+                  <% if semester.current? %>
+                    <%= status_badge("Current", value: "active") %>
+                  <% else %>
+                    <%= status_badge(semester.status.to_s.titleize.presence || "Planned", value: semester.status.presence || "neutral") %>
+                  <% end %>
+                  <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+                </div>
+
+                <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                  <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                    <header class="c-modal__header">
+                      <div>
+                        <p class="c-eyebrow">Semester</p>
+                        <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= semester.name %></h3>
+                        <p class="c-modal__subtitle">Update the semester label and decide whether it should be the current active term.</p>
+                      </div>
+                      <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                    </header>
+                    <div class="c-modal__body c-modal__body--form u-stack u-stack--md">
+                      <%= form_with model: [:admin, semester], local: true, class: "c-modal-form" do |form| %>
+                        <div class="c-field">
+                          <%= form.label :name, "Semester name", class: "c-label" %>
+                          <%= form.text_field :name, required: true, class: "c-input" %>
+                        </div>
+                        <label class="c-choice-label c-choice-label--top">
+                          <%= form.check_box :current, class: "c-choice" %>
+                          <span>
+                            <span class="c-table__title">Set as current semester</span>
+                            <span class="c-help">Only one semester can be current at a time.</span>
+                          </span>
+                        </label>
+                        <div class="c-modal-actions">
+                          <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                          <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-close-modal>Cancel</button>
+                        </div>
+                      <% end %>
+                      <div class="c-modal-danger-zone">
+                        <div>
+                          <p class="c-modal-danger-zone__title">Delete semester</p>
+                          <p class="c-modal-danger-zone__text">Removes this semester from future setup lists.</p>
+                        </div>
+                        <%= button_to "Delete semester",
+                              admin_program_semester_path(semester),
+                              method: :delete,
+                              data: { turbo_confirm: "Delete #{semester.name}? This removes the semester from future setup lists." },
+                              class: button_classes(:danger, extra_classes: "btn-sm") %>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+
+        <div id="program-semester-create" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+          <section class="c-modal c-modal--form" role="dialog" aria-modal="true" aria-labelledby="program-semester-create-title">
+            <header class="c-modal__header">
+              <div>
+                <p class="c-eyebrow">Semester</p>
+                <h3 id="program-semester-create-title" class="c-modal__title">Add Semester</h3>
+                <p class="c-modal__subtitle">Create a term for surveys, competency targets, imports, and reports.</p>
+              </div>
+              <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+            </header>
+            <div class="c-modal__body c-modal__body--form">
+              <%= form_with model: [:admin, @new_program_semester], url: admin_program_semesters_path, local: true, class: "c-modal-form" do |form| %>
+                <div class="c-field">
+                  <%= form.label :name, "Semester name", class: "c-label" %>
+                  <%= form.text_field :name, required: true, class: "c-input", placeholder: "Fall 2026" %>
+                </div>
+                <label class="c-choice-label c-choice-label--top">
+                  <%= form.check_box :current, class: "c-choice" %>
+                  <span>
+                    <span class="c-table__title">Set as current semester</span>
+                    <span class="c-help">Existing current semester will be turned off automatically.</span>
+                  </span>
+                </label>
+                <div class="c-modal-actions">
+                  <%= form.submit "Save semester", class: button_classes(:primary) %>
+                  <button type="button" class="<%= button_classes(:secondary) %>" data-close-modal>Cancel</button>
+                </div>
+              <% end %>
+            </div>
+          </section>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "targets" %>
+      <%= render "target_levels_tab" %>
+    <% end %>
+
+    <% if @tab == "course_targets" %>
+      <%= render "course_targets_tab" %>
+    <% end %>
+  </div>
+</main>

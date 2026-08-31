@@ -11,8 +11,8 @@ class SurveyResponse
     # @param student [Student]
     # @param survey [Survey]
     # @return [SurveyResponse]
-    def build(student:, survey:)
-      new(student: student, survey: survey)
+    def build(student:, survey:, answers_override: nil, as_of: nil)
+      new(student: student, survey: survey, answers_override: answers_override, as_of: as_of)
     end
 
     # Rehydrates a response from a composite param ("studentId-surveyId").
@@ -47,9 +47,11 @@ class SurveyResponse
     end
   end
 
-  def initialize(student:, survey:)
+  def initialize(student:, survey:, answers_override: nil, as_of: nil)
     @student = student
     @survey = survey
+    @answers_override = answers_override
+    @as_of = as_of
   end
 
   # @return [String] composite identifier combining student and survey
@@ -96,6 +98,8 @@ class SurveyResponse
 
   # @return [Time, nil] most recent update across responses
   def completion_date
+    return @as_of if @as_of.present?
+
     @completion_date ||= question_responses.maximum(:updated_at)
   end
 
@@ -107,8 +111,7 @@ class SurveyResponse
   # @return [Integer] number of answered required questions
   def answered_required_count
     @answered_required_count ||= required_questions.count do |question|
-      answer = answers[question.id]
-      present_answer?(answer)
+      present_answer?(answers[question.id])
     end
   end
 
@@ -119,14 +122,14 @@ class SurveyResponse
 
   # @return [Integer] number of answered questions (required + optional)
   def answered_total_count
-    @answered_total_count ||= question_responses.count do |response|
-      present_answer?(response.answer)
+    @answered_total_count ||= progress_questions.count do |question|
+      present_answer?(answers[question.id])
     end
   end
 
   # @return [Integer] total questions in the survey (required + optional)
   def total_questions
-    @total_questions ||= survey.questions.size
+    @total_questions ||= progress_questions.size
   end
 
   # @return [Integer] total required questions in the survey
@@ -155,17 +158,9 @@ class SurveyResponse
 
   # @return [Array<Question>] questions that are considered required
   def required_questions
-    @required_questions ||= survey.questions.select do |question|
-      required = question.is_required?
-
-      if !required && question.question_type_multiple_choice?
-        options = question.answer_options_list.map(&:strip).map(&:downcase)
-        is_flexibility_scale = (options == %w[1 2 3 4 5]) &&
-                               question.question_text.to_s.downcase.include?("flexible")
-        required = !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
-      end
-
-      required
+    @required_questions ||= begin
+      branch_parent_ids = SurveyQuestionRules.branch_parent_ids(progress_questions)
+      progress_questions.select { |question| required_for_completion?(question, branch_parent_ids: branch_parent_ids) }
     end
   end
 
@@ -176,14 +171,38 @@ class SurveyResponse
 
   # @return [ActiveRecord::Relation<StudentQuestion>] responses for survey questions
   def question_responses
-    question_ids = survey.questions.select(:id)
-    @question_responses ||= StudentQuestion
+    return @question_responses if defined?(@question_responses)
+
+    if @answers_override
+      override_answers = normalized_answers_override
+      question_ids = override_answers.keys.select { |key| key.is_a?(Integer) }
+      questions = Question.includes(:category).where(id: question_ids).index_by(&:id)
+      timestamp = @as_of || Time.current
+
+      @question_responses = question_ids.filter_map do |qid|
+        question = questions[qid]
+        next unless question
+
+        OpenStruct.new(
+          question_id: qid,
+          question: question,
+          answer: override_answers[qid],
+          created_at: timestamp,
+          updated_at: timestamp
+        )
+      end
+    else
+      question_ids = survey.questions.select(:id)
+      @question_responses = StudentQuestion
                               .where(student_id: student.student_id, question_id: question_ids)
                               .includes(question: :category)
+    end
   end
 
   # @return [Hash{Integer => Object}] answers keyed by question id
   def answers
+    return normalized_answers_override if @answers_override
+
     @answers ||= question_responses.index_by(&:question_id).transform_values(&:answer)
   end
 
@@ -211,6 +230,24 @@ class SurveyResponse
 
   private
 
+  # @return [Array<Question>] questions ordered for progress statistics
+  def progress_questions
+    @progress_questions ||= survey.questions.to_a
+  end
+
+  # Mirrors the controllers' required-question logic used for validation and dashboards.
+  #
+  # @param question [Question]
+  # @param branch_parent_ids [Array<Integer>]
+  # @return [Boolean]
+  def required_for_completion?(question, branch_parent_ids: [])
+    SurveyQuestionRules.required_for_submission?(question, answers:, branch_parent_ids:)
+  end
+
+  def normalized_answer_value(value)
+    SurveyQuestionRules.normalize_answer_value(value)
+  end
+
   # Determines whether a stored answer should count as present for statistics.
   #
   # @param value [Object]
@@ -223,6 +260,20 @@ class SurveyResponse
       value.any?(&:present?)
     else
       value.present?
+    end
+  end
+
+  def normalized_answers_override
+    @normalized_answers_override ||= begin
+      raw = @answers_override || {}
+      raw.each_with_object({}) do |(key, value), memo|
+        normalized_key = if key.is_a?(String) && key.match?(/\A\d+\z/)
+          key.to_i
+        else
+          key
+        end
+        memo[normalized_key] = value
+      end
     end
   end
 end

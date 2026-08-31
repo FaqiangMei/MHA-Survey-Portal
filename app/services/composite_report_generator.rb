@@ -10,6 +10,16 @@ class CompositeReportGenerator
 
   CACHE_TTL = 6.hours
   MAX_EVIDENCE_HISTORY = Integer(ENV.fetch("COMPOSITE_REPORT_MAX_EVIDENCE_HISTORY", 5))
+  PDF_RENDER_VERSION = 5
+
+  # Survey titles follow "<RMHA|EMHA> <Checkpoint> Competency Survey" (see
+  # SurveyAssignments::AutoAssigner). No dedicated checkpoint column exists,
+  # so the checkpoint is inferred from the title.
+  CHECKPOINT_PATTERNS = {
+    "Initial" => /\binitial\b/i,
+    "Mid-point" => /\bmid.?point\b/i,
+    "Final" => /\bfinal\b/i
+  }.freeze
   # Lightweight value object so callers can ensure temporary files are cleaned up.
   class Result
     attr_reader :path, :size_bytes
@@ -33,10 +43,11 @@ class CompositeReportGenerator
 
   include ActiveSupport::NumberHelper
 
-  def initialize(survey_response:, cache: true, logger: Rails.logger)
+  def initialize(survey_response:, cache: true, logger: Rails.logger, viewer_mode: :staff)
     @survey_response = survey_response
     @cache_enabled = cache
     @logger = logger || Rails.logger
+    @viewer_mode = viewer_mode.to_sym
   end
 
   # Renders (or retrieves) the PDF payload for the survey response composite report.
@@ -77,6 +88,7 @@ class CompositeReportGenerator
     feedback_created = feedback_entries.filter_map { |f| f.created_at&.to_i }
 
     components = [
+      PDF_RENDER_VERSION,
       @survey_response.student_id,
       student.updated_at&.to_i,
       student.user&.updated_at&.to_i,
@@ -180,6 +192,8 @@ class CompositeReportGenerator
   end
 
   def build_pdf_file(html)
+    zoom = ENV.fetch("WKHTMLTOPDF_ZOOM", "1.0")
+    dpi = ENV.fetch("WKHTMLTOPDF_DPI", "192")
     WickedPdf.new.pdf_from_string(
       html,
       encoding: "UTF-8",
@@ -192,9 +206,11 @@ class CompositeReportGenerator
       print_media_type: true,
       quiet: true,
       extra: [
-        "--dpi", "96",
-        "--image-dpi", "96",
-        "--image-quality", "60",
+        "--enable-local-file-access",
+        "--dpi", dpi.to_s,
+        "--image-dpi", "300",
+        "--image-quality", "95",
+        "--zoom", zoom.to_s,
         "--no-outline",
         "--javascript-delay", "500"
       ],
@@ -214,8 +230,11 @@ class CompositeReportGenerator
       responses_by_question: responses_by_question,
       answers_by_question: answers_by_question,
       feedbacks_by_category: feedbacks_by_category,
+      feedback_submission_by_advisor: feedback_submission_by_advisor,
       feedback_summary: feedback_summary,
       evidence_history_by_category: evidence_history_by_category,
+      grade_derived_competencies: GradeImports::DerivedScorebook.for_student(student),
+      checkpoint_progress: checkpoint_progress,
       generated_at: generated_at,
       answered_count: answered_count,
       total_questions: total_questions,
@@ -223,6 +242,70 @@ class CompositeReportGenerator
       required_total_questions: required_total_questions,
       progress_summary: progress_summary
     }
+  end
+
+  # Self-assessment scores for this student across every checkpoint survey
+  # in the same program family (e.g. "RMHA Initial/Mid-point/Final
+  # Competency Survey"), so the report can show growth over time rather
+  # than just a single point-in-time snapshot.
+  #
+  # @return [Hash, nil] { checkpoints: [...], rows: [{ competency:, scores: {...} }] },
+  #   or nil when fewer than two checkpoints have any self-assessment data.
+  def checkpoint_progress
+    return @checkpoint_progress if defined?(@checkpoint_progress)
+
+    checkpoint_surveys = checkpoint_family_surveys
+    scores_by_checkpoint = checkpoint_surveys.transform_values { |s| competency_self_assessment_scores(s) }
+    present_checkpoints = CHECKPOINT_PATTERNS.keys.select { |label| scores_by_checkpoint[label].present? }
+
+    if present_checkpoints.size < 2
+      return @checkpoint_progress = nil
+    end
+
+    rows = Reports::DataAggregator::COMPETENCY_TITLES.filter_map do |title|
+      scores = present_checkpoints.index_with { |label| scores_by_checkpoint[label][title] }
+      next if scores.values.all?(&:nil?)
+
+      { competency: title, scores: scores }
+    end
+
+    @checkpoint_progress = rows.any? ? { checkpoints: present_checkpoints, rows: rows } : nil
+  end
+
+  # @return [Hash{String => Survey}] checkpoint label ("Initial"/"Mid-point"/"Final") => Survey
+  def checkpoint_family_surveys
+    prefix = survey.title.to_s[/\A(RMHA|EMHA)/i]
+    candidates = prefix ? Survey.where("title LIKE ?", "#{prefix}%") : [ survey ]
+
+    candidates.each_with_object({}) do |candidate_survey, memo|
+      label = checkpoint_label_for(candidate_survey.title)
+      memo[label] = candidate_survey if label
+    end
+  end
+
+  def checkpoint_label_for(title)
+    CHECKPOINT_PATTERNS.find { |_label, pattern| title.to_s.match?(pattern) }&.first
+  end
+
+  # @return [Hash{String => Integer}] competency title => self-assessment score, for one survey
+  def competency_self_assessment_scores(survey_for_checkpoint)
+    survey_response = SurveyResponse.build(student: student, survey: survey_for_checkpoint)
+    answers = survey_response.answers
+    return {} if answers.blank?
+
+    questions = Question.joins(:category).where(categories: { survey_id: survey_for_checkpoint.id }, question_type: "dropdown").includes(category: :section)
+
+    questions.each_with_object({}) do |question, scores|
+      next unless question.category&.section&.mha_competency?
+      next unless Reports::DataAggregator::COMPETENCY_TITLES.include?(question.question_text)
+
+      raw_answer = answers[question.id] || answers[question.id.to_s]
+      next if raw_answer.blank?
+
+      value = raw_answer.is_a?(Hash) ? (raw_answer["answer"] || raw_answer[:answer] || raw_answer["value"] || raw_answer[:value]) : raw_answer
+      numeric = value.to_s[/\d+/]
+      scores[question.question_text] = numeric.to_i if numeric
+    end
   end
 
   def student
@@ -238,7 +321,12 @@ class CompositeReportGenerator
   end
 
   def categories
-    @categories ||= survey.categories.includes(:questions, :section).order(:id).to_a
+    scope = survey.categories.includes(:questions, :section)
+    @categories ||= if Category.column_names.include?("position")
+                     scope.order(:position, :id).to_a
+    else
+                     scope.order(:id).to_a
+    end
   end
 
   def question_responses
@@ -254,12 +342,21 @@ class CompositeReportGenerator
   end
 
   def feedback_scope
-    base = Feedback.where(student_id: student.student_id, survey_id: survey.id).includes(:category, :advisor)
-    if advisor&.advisor_id
-      base.where(advisor_id: advisor.advisor_id)
-    else
-      base
-    end
+    scope = Feedback.where(student_id: student.student_id, survey_id: survey.id).includes(:category, :advisor)
+    return scope unless viewer_mode == :student
+
+    submitted_advisor_ids = AdvisorFeedbackSubmission
+      .submitted
+      .where(student_id: student.student_id, survey_id: survey.id)
+      .pluck(:advisor_id)
+
+    scope.where(advisor_id: submitted_advisor_ids)
+  end
+
+  def feedback_submission_by_advisor
+    @feedback_submission_by_advisor ||= AdvisorFeedbackSubmission
+      .where(student_id: student.student_id, survey_id: survey.id)
+      .index_by(&:advisor_id)
   end
 
   def feedback_records
@@ -313,6 +410,10 @@ class CompositeReportGenerator
 
   def progress_summary
     @progress_summary ||= @survey_response.progress_summary
+  end
+
+  def viewer_mode
+    @viewer_mode
   end
 
   def log_html_size(html)

@@ -2,7 +2,7 @@
 <html lang="en" data-text-scale="<%= (user_signed_in? ? (current_user.text_scale_percent || 100) : 100) %>" style="font-size: <%= ((user_signed_in? ? (current_user.text_scale_percent || 100) : 100).to_f * 16.0 / 100.0).round(2) %>px;">
   <head>
     
-    <title><%= content_for(:title) || "Health App" %></title>
+    <title><%= browser_title(content_for(:title)) %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -14,24 +14,44 @@
     <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
     <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
 
-  <%= favicon_link_tag "tamu-logo.png", rel: "icon", type: "image/png" %>
-  <%= favicon_link_tag "tamu-logo.png", rel: "apple-touch-icon", type: "image/png" %>
+  <%= favicon_link_tag app_icon_asset, rel: "icon", type: "image/png" %>
+  <%= favicon_link_tag app_icon_asset, rel: "apple-touch-icon", type: "image/png" %>
 
   <%# Includes all consolidated stylesheet %>
   <%= tailwind_stylesheet_tag %>
-    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= consolidated_stylesheet_tags %>
     <%= javascript_importmap_tags %>
-    <%# App-wide text scaling: sets a CSS variable based on the user's saved preference (percent) so rem-based sizing scales proportionally. Defaults to 1.0 (100%). %>
+    <%# App-wide text scaling: scales BOTH Tailwind rem units and our design-token font-size variables. %>
+    <% font_scale = (user_signed_in? ? (current_user.text_scale_percent || 100) : 100).to_f / 100.0 %>
     <style>
-      :root { --app-font-scale: <%= (user_signed_in? ? (current_user.text_scale_percent || 100) : 100).to_f / 100.0 %>; }
-      /* Set a baseline root font size that other rem-based styles (Tailwind) will scale from. */
+      :root {
+        --app-font-scale: <%= format("%.2f", font_scale) %>;
+
+        /* Scale token-based font sizes (these are used all over our custom CSS). */
+        --font-size-xs: calc(13px * var(--app-font-scale));
+        --font-size-sm: calc(15px * var(--app-font-scale));
+        --font-size-base: calc(17px * var(--app-font-scale));
+        --font-size-lg: calc(19px * var(--app-font-scale));
+        --font-size-xl: calc(21px * var(--app-font-scale));
+        --font-size-2xl: calc(25px * var(--app-font-scale));
+        --font-size-3xl: calc(29px * var(--app-font-scale));
+        --font-size-4xl: calc(33px * var(--app-font-scale));
+        --font-size-5xl: calc(41px * var(--app-font-scale));
+        --font-size-6xl: calc(49px * var(--app-font-scale));
+      }
+
+      /* Scale rem-based sizing (Tailwind, spacing, etc.) */
       html { font-size: calc(16px * var(--app-font-scale)); }
-      /* Ensure line-height and spacing (which use rems) scale proportionally. */
+
       body { line-height: 1.45; }
     </style>
   </head>
 
-  <body class="min-h-screen bg-slate-50 text-slate-800 antialiased">
+  <body
+    class="<%= ["min-h-screen bg-slate-50 text-slate-800 antialiased", (content_for?(:body_class) ? yield(:body_class) : nil)].compact.join(" ") %>"
+    data-impersonating="<%= impersonating? ? "true" : "false" %>"
+    data-impersonation-kind="<%= impersonation_kind %>"
+  >
     <style>
       /* Smoothly transition margin changes when browser/toolbars adjust the page */
       html, body { transition: margin-top 0.3s ease !important; will-change: margin-top; }
@@ -48,211 +68,315 @@
           <%= render "shared/admin_navbar", active_page: @active_nav %>
         <% end %>
       <% elsif content_for?(:header) %>
-        <header class="w-full">
+        <header class="u-w-full">
           <%= yield :header %>
         </header>
       <% end %>
 
-      <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-        <div class="layout-shell">
-          <!-- Compact Google Translate toggle (top-right under navbar). Click to open language selector panel. -->
-          <div id="gt-compact" aria-hidden="false" class="translate-fab">
-            <button id="gt-toggle" aria-label="Translate site" title="Translate site" class="translate-fab__button">
-              <span class="translate-fab__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img" focusable="false">
-                  <path d="M12 2a9.93 9.93 0 0 0-7.07 2.93A9.93 9.93 0 0 0 2 12c0 2.66 1.04 5.2 2.93 7.07A9.93 9.93 0 0 0 12 22c2.66 0 5.2-1.04 7.07-2.93A9.93 9.93 0 0 0 22 12c0-2.66-1.04-5.2-2.93-7.07A9.93 9.93 0 0 0 12 2zm6.23 6h-2.72a14.66 14.66 0 0 0-1.09-3.3A8.05 8.05 0 0 1 18.23 8zm-4.13 0h-4.2A12.77 12.77 0 0 1 12 4.1 12.77 12.77 0 0 1 14.1 8zm-6.33 0H5.05A8.05 8.05 0 0 1 9.58 4.7 14.66 14.66 0 0 0 7.77 8zm-.46 2a20.36 20.36 0 0 0 .55 4H5.52a8 8 0 0 1 0-4h2.37zm2.52 0h4.1a18.66 18.66 0 0 1 0 4h-4.1a18.66 18.66 0 0 1 0-4zm6.03 0h2.37a8 8 0 0 1 0 4h-2.37c.38-1.34.56-2.67.56-4zm-5.13 7.9a12.77 12.77 0 0 1-2.1-3.9h4.2a12.77 12.77 0 0 1-2.1 3.9zm-2.33-.27A14.66 14.66 0 0 0 9.58 19.3 8.05 8.05 0 0 1 5.05 16h2.72zm4.76 0H16.5a8.05 8.05 0 0 1-4.53 3.3 14.66 14.66 0 0 0 1.09-3.3z" />
-                </svg>
-              </span>
-              <span class="translate-fab__text">
-                <span class="translate-fab__eyebrow">Language</span>
-                <span class="translate-fab__label">Translate</span>
-              </span>
-            </button>
-            <div id="gt-panel" class="translate-panel" style="display:none;">
-              <div class="translate-panel__header">
-                <p>Choose a language</p>
-                <small>Powered by Google Translate</small>
-              </div>
-              <div id="google_translate_element" class="translate-widget">Loading...</div>
-            </div>
-          </div>
-          <% if flash.any? %>
-            <div class="space-y-3">
-              <% flash.each do |key, value| %>
-                <% messages = Array(value).map(&:to_s) %>
-                <section class="<%= flash_classes(key) %>" role="alert">
-                  <div class="flex-1">
-                    <p class="text-xs font-semibold uppercase tracking-wide"><%= flash_title(key) %></p>
-                    <div class="mt-1 text-sm leading-relaxed">
-                      <%= safe_join(messages.map { |msg| tag.span(msg.html_safe) }, tag.br) %>
-                    </div>
-                  </div>
-                </section>
-              <% end %>
-            </div>
-          <% end %>
+      <%= render "shared/flash_stack" %>
 
+      <main class="flex-1 px-2 py-4 sm:px-3 lg:px-4">
+        <div class="c-layout-shell">
           <%= yield %>
         </div>
       </main>
     </div>
   </body>
     <script>
-      // Google Translate widget loader + compact toggle/panel behavior
-      function googleTranslateElementInit() {
-        try {
-          // If the google select already exists inside our container, nothing to do
-          if (document.querySelector('#google_translate_element select.goog-te-combo')) return;
-          // Create the widget into the container (idempotent for the container)
-          if (window.google && window.google.translate) {
-            new google.translate.TranslateElement({pageLanguage: 'en', layout: google.translate.TranslateElement.InlineLayout.SIMPLE}, 'google_translate_element');
+      (function () {
+        function installInlineModalFallback() {
+          if (window.__inlineModalFallbackInitialized === true) return;
+          window.__inlineModalFallbackInitialized = true;
+
+          function setModalOpen(modal, open) {
+            if (!modal) return;
+            modal.classList.toggle("hidden", !open);
+            document.body.classList.toggle("is-modal-open", !!document.querySelector("[data-inline-modal]:not(.hidden)"));
+
+            if (open) {
+              window.requestAnimationFrame(function () {
+                var focusTarget = modal.querySelector("[data-close-modal], button, input, select, textarea, a");
+                if (focusTarget && typeof focusTarget.focus === "function") focusTarget.focus();
+              });
+            }
           }
-        } catch (e) { console.warn('googleTranslateElementInit', e); }
-      }
-      (function() {
-        if (!window.__googleTranslateScriptInjected) {
-          window.__googleTranslateScriptInjected = true;
-          var s = document.createElement('script');
-          s.type = 'text/javascript';
-          s.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-          s.async = true;
-          document.head.appendChild(s);
+
+          document.addEventListener("click", function (event) {
+            var target = event.target && event.target.closest ? event.target : event.target && event.target.parentElement;
+            if (!target) return;
+
+            var trigger = target.closest("[data-open-modal]");
+            if (trigger) {
+              var modal = document.getElementById(trigger.getAttribute("data-open-modal") || "");
+              if (!modal) return;
+
+              event.preventDefault();
+              setModalOpen(modal, true);
+              return;
+            }
+
+            var closeButton = target.closest("[data-close-modal]");
+            if (closeButton) {
+              var closeModal = closeButton.closest("[data-inline-modal]");
+              if (!closeModal) return;
+
+              event.preventDefault();
+              setModalOpen(closeModal, false);
+              return;
+            }
+
+            if (target.matches && target.matches("[data-inline-modal]")) {
+              setModalOpen(target, false);
+            }
+          });
+
+          document.addEventListener("keydown", function (event) {
+            if (event.key !== "Escape") return;
+
+            var modal = document.querySelector("[data-inline-modal]:not(.hidden)");
+            if (modal) setModalOpen(modal, false);
+          });
         }
 
-        // Toggle panel logic and move Google's select into our panel (if needed)
-        var toggle = function() {
-          var panel = document.getElementById('gt-panel');
-          if (!panel) return;
-          panel.style.display = (panel.style.display === 'none' || panel.style.display === '') ? 'block' : 'none';
-        };
-        var btn = document.getElementById('gt-toggle');
-        if (btn) btn.addEventListener('click', toggle);
-
-        var tries = 0;
-        function adoptSelect() {
-          tries++;
-          var el = document.querySelector('#google_translate_element select.goog-te-combo');
-          var panel = document.getElementById('gt-panel');
-          if (el && panel) {
-            el.style.width = '100%';
-            el.style.height = '2.25rem';
-            el.style.display = '';
-            var parent = el.closest('#google_translate_element');
-            if (parent) {
-              Array.from(parent.children).forEach(function(c){ if (c !== el) c.style.display = 'none'; });
-            }
-            // Ensure the select triggers a reload once if Google sets translation cookie but DOM isn't updated
-            try {
-              if (!el.dataset.gtChangeBound) {
-                el.addEventListener('change', function() {
-                  // give Google a moment to set cookie/state
-                  setTimeout(function() {
-                    var m = document.cookie.match(/(^|; )googtrans=([^;]+)/);
-                    if (m && !sessionStorage.getItem('gt_reloaded')) {
-                      sessionStorage.setItem('gt_reloaded', '1');
-                      location.reload();
-                    }
-                  }, 700);
-                });
-                el.dataset.gtChangeBound = '1';
-              }
-            } catch (e) {}
-            return;
-          }
-          if (tries < 12) setTimeout(adoptSelect, 400);
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", installInlineModalFallback, { once: true });
+        } else {
+          installInlineModalFallback();
         }
-        setTimeout(adoptSelect, 600);
-        document.addEventListener('turbo:load', function() {
-          try {
-            console.log('[Google Translate] Turbo navigation detected, checking translation status...');
-
-            // If Google Translate script exists, reinitialize the element (idempotent)
-            if (window.google && window.google.translate && typeof google.translate.TranslateElement === 'function') {
-              googleTranslateElementInit();
-            }
-
-            // Try to detect an active translation via cookie (format: /source/target)
-            var match = document.cookie.match(/googtrans=([^;]+)/);
-            if (match && match[1] && match[1] !== '/auto/en') {
-              console.log('[Google Translate] Translation cookie found, attempting to reapply language for new content...');
-              var lang = match[1].split('/').pop();
-              var combo = document.querySelector('.goog-te-combo');
-              if (combo) {
-                try {
-                  combo.value = lang;
-                  combo.dispatchEvent(new Event('change'));
-                } catch (e) {
-                  console.warn('[Google Translate] Failed to dispatch change on combo, will try fallback reload', e);
-                  // Final fallback: reload once to ensure translation is applied
-                  if (!sessionStorage.getItem('gt_turbo_reloaded')) {
-                    sessionStorage.setItem('gt_turbo_reloaded', '1');
-                    location.reload();
-                  }
-                }
-              } else {
-                // select not present yet — wait a bit then retry once before reload
-                setTimeout(function() {
-                  var combo2 = document.querySelector('.goog-te-combo');
-                  if (combo2) {
-                    try { combo2.value = lang; combo2.dispatchEvent(new Event('change')); } catch (e) { console.warn('[Google Translate] retry failed', e); }
-                  } else {
-                    console.log('[Google Translate] No combo found after retry, fallback reload.');
-                    if (!sessionStorage.getItem('gt_turbo_reloaded')) {
-                      sessionStorage.setItem('gt_turbo_reloaded', '1');
-                      location.reload();
-                    }
-                  }
-                }, 1000);
-              }
-            }
-          } catch (e) {
-            console.warn('[Google Translate] Turbo translation refresh failed', e);
-          }
-
-          // ensure adoptSelect runs again to re-parent Google's select into our panel
-          tries = 0; setTimeout(adoptSelect, 250);
-        });
       })();
-    // Detect Google Translate toolbar iframe and add/remove top margin to avoid covering content
-    document.addEventListener("DOMContentLoaded", function() {
-      function adjustForGoogleBar() {
-        try {
-          // Look for iframes that Google Translate may inject (ids can vary; use prefix match)
-          var frame = document.querySelector('iframe[id^="goog-gt-"]') || document.querySelector('iframe.goog-te-banner-frame');
-          if (frame && frame.clientHeight) {
-            var h = frame.clientHeight + 'px';
-            document.body.style.setProperty('margin-top', h, 'important');
-            document.documentElement.style.setProperty('margin-top', h, 'important');
-            document.body.style.setProperty('transform', 'none', 'important');
-          } else if (frame) {
-            // Fallback to a sensible default height
-            document.body.style.setProperty('margin-top', '40px', 'important');
-            document.documentElement.style.setProperty('margin-top', '40px', 'important');
-            document.body.style.setProperty('transform', 'none', 'important');
-          } else {
-            // Remove any inline overrides so the page returns to its natural layout
-            document.body.style.removeProperty('margin-top');
-            document.documentElement.style.removeProperty('margin-top');
-            document.body.style.removeProperty('transform');
+    </script>
+    <script>
+      (function () {
+        function installComboboxBehavior() {
+          if (window.__comboboxBehaviorInitialized === true) return;
+          window.__comboboxBehaviorInitialized = true;
+
+          function closestElement(target, selector) {
+            if (!target) return null;
+            if (target.closest) return target.closest(selector);
+            return target.parentElement && target.parentElement.closest ? target.parentElement.closest(selector) : null;
           }
-        } catch (e) {
-          // ignore errors
+
+          function comboboxInputFor(widget) {
+            return widget && widget.querySelector("[data-combobox-input='true']");
+          }
+
+          function comboboxHiddenFor(widget) {
+            return widget && widget.querySelector("[data-combobox-value='true']");
+          }
+
+          function comboboxMenuFor(widget) {
+            return widget && widget.querySelector("[data-combobox-menu='true']");
+          }
+
+          function setOpen(widget, open) {
+            var input = comboboxInputFor(widget);
+            var menu = comboboxMenuFor(widget);
+            if (!input || !menu) return;
+
+            menu.classList.toggle("hidden", !open);
+            menu.classList.toggle("u-hidden", !open);
+            input.setAttribute("aria-expanded", open ? "true" : "false");
+          }
+
+          function filter(widget) {
+            var input = comboboxInputFor(widget);
+            if (!input) return;
+
+            var q = (input.value || "").trim().toLowerCase();
+            var visible = 0;
+            widget.querySelectorAll("[data-combobox-option='true']").forEach(function (option) {
+              var haystack = (option.getAttribute("data-combobox-option-search") || "").toLowerCase();
+              var match = q === "" || haystack.indexOf(q) !== -1;
+              option.hidden = !match;
+              if (match) visible += 1;
+            });
+
+            var empty = widget.querySelector("[data-combobox-empty='true']");
+            if (empty) empty.hidden = !(q !== "" && visible === 0);
+          }
+
+          function visibleOptions(widget) {
+            return Array.from(widget.querySelectorAll("[data-combobox-option='true']")).filter(function (option) {
+              return !option.hidden;
+            });
+          }
+
+          function selectOption(widget, option) {
+            var input = comboboxInputFor(widget);
+            var hidden = comboboxHiddenFor(widget);
+            if (!input || !hidden || !option) return;
+
+            hidden.value = option.getAttribute("data-combobox-option-value") || "";
+            input.value = option.getAttribute("data-combobox-option-label") || "";
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            setOpen(widget, false);
+          }
+
+          document.addEventListener("focusin", function (event) {
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var widget = input && closestElement(input, "[data-combobox='true']");
+            if (!widget) return;
+
+            filter(widget);
+            setOpen(widget, true);
+          });
+
+          document.addEventListener("input", function (event) {
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var widget = input && closestElement(input, "[data-combobox='true']");
+            if (!widget) return;
+
+            var hidden = comboboxHiddenFor(widget);
+            if (hidden) hidden.value = "";
+            filter(widget);
+            setOpen(widget, true);
+          });
+
+          document.addEventListener("mousedown", function (event) {
+            if (closestElement(event.target, "[data-combobox-option='true']")) {
+              event.preventDefault();
+            }
+          });
+
+          document.addEventListener("click", function (event) {
+            var option = closestElement(event.target, "[data-combobox-option='true']");
+            if (option) {
+              var optionWidget = closestElement(option, "[data-combobox='true']");
+              selectOption(optionWidget, option);
+              return;
+            }
+
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var activeWidget = input && closestElement(input, "[data-combobox='true']");
+            if (activeWidget) {
+              filter(activeWidget);
+              setOpen(activeWidget, true);
+              return;
+            }
+
+            document.querySelectorAll("[data-combobox='true']").forEach(function (widget) {
+              if (!widget.contains(event.target)) setOpen(widget, false);
+            });
+          });
+
+          document.addEventListener("keydown", function (event) {
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var widget = input && closestElement(input, "[data-combobox='true']");
+            if (!widget) return;
+
+            if (event.key === "Escape") {
+              setOpen(widget, false);
+              return;
+            }
+
+            if (event.key === "Enter") {
+              var firstOption = visibleOptions(widget)[0];
+              if (!firstOption) return;
+
+              event.preventDefault();
+              selectOption(widget, firstOption);
+            }
+          });
         }
-      }
 
-      adjustForGoogleBar();
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", installComboboxBehavior, { once: true });
+        } else {
+          installComboboxBehavior();
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        function installMobileNavFallback() {
+          if (window.__mobileNavigationInitialized === true) return;
+          window.__mobileNavigationInitialized = true;
 
-      var observer = new MutationObserver(function() { adjustForGoogleBar(); });
-      observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
-      // Also periodically check for a short time in case the iframe is injected asynchronously
-      var checks = 0;
-      var interval = setInterval(function() {
-        adjustForGoogleBar();
-        checks++;
-        if (checks > 20) clearInterval(interval);
-      }, 300);
-    });
-  </script>
+          function drawerFor(button) {
+            var id = button && button.getAttribute("aria-controls");
+            return id ? document.getElementById(id) : null;
+          }
+
+          function mobileViewport() {
+            return window.matchMedia("(max-width: 1024px)").matches;
+          }
+
+          function setOpen(drawer, open) {
+            if (!drawer) return;
+            var button = document.querySelector("[data-mobile-nav-toggle][aria-controls='" + drawer.id + "']");
+            var header = drawer.closest(".c-app-header");
+            var backdrop = header && header.querySelector("[data-mobile-nav-backdrop]");
+
+            drawer.classList.toggle("is-open", open);
+            if (mobileViewport()) {
+              drawer.setAttribute("aria-hidden", open ? "false" : "true");
+            } else {
+              drawer.removeAttribute("aria-hidden");
+            }
+            if (button) button.setAttribute("aria-expanded", open ? "true" : "false");
+            if (backdrop) {
+              backdrop.hidden = !open;
+              backdrop.classList.toggle("is-open", open);
+            }
+            document.body.classList.toggle("is-mobile-nav-open", !!document.querySelector("[data-mobile-nav-drawer].is-open"));
+          }
+
+          function closeAll() {
+            document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+              setOpen(drawer, false);
+            });
+          }
+
+          function syncState() {
+            document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+              if (mobileViewport()) {
+                drawer.setAttribute("aria-hidden", drawer.classList.contains("is-open") ? "false" : "true");
+              } else {
+                setOpen(drawer, false);
+                drawer.removeAttribute("aria-hidden");
+              }
+            });
+          }
+
+          syncState();
+
+          document.addEventListener("click", function (event) {
+            var target = event.target && event.target.closest ? event.target : event.target.parentElement;
+            if (!target) return;
+
+            var toggle = target.closest("[data-mobile-nav-toggle]");
+            if (toggle) {
+              event.preventDefault();
+              var drawer = drawerFor(toggle);
+              if (!drawer) return;
+              var isOpen = drawer.classList.contains("is-open");
+              closeAll();
+              if (!isOpen) setOpen(drawer, true);
+              return;
+            }
+
+            var close = target.closest("[data-mobile-nav-close], [data-mobile-nav-backdrop]");
+            if (close) {
+              event.preventDefault();
+              closeAll();
+            }
+          });
+
+          document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") closeAll();
+          });
+
+          window.addEventListener("resize", syncState);
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", installMobileNavFallback, { once: true });
+        } else {
+          installMobileNavFallback();
+        }
+      })();
+    </script>
     <script>
       // Ensure root font-size is enforced at runtime (helps override any CSS ordering issues)
       (function() {

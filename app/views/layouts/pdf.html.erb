@@ -5,81 +5,168 @@
   <title>Survey Response PDF</title>
   <style>
     /* Base typography */
-    @page { margin: 1.2cm 1.2cm; }
-    html, body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #24303a; font-size: 13px; }
+    @page { margin: 1.15cm 1.1cm; }
+    html, body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #24303a; font-size: 11.5px; line-height: 1.36; }
+    * { box-sizing: border-box; }
+    /* wkhtmltopdf fixed elements overlay content; reserve space for footer */
+    body { padding-bottom: 26px; }
 
     /* Header */
-    .pdf-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .pdf-brand { font-size: 18px; font-weight: 700; color: #1f6feb; }
-    .pdf-meta { text-align: right; font-size: 12px; color: #586069; line-height: 1.4; }
+    /* wkhtmltopdf flex support can be inconsistent; use table layout for reliability. */
+    .pdf-header { display: table; width: 100%; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 2px solid #500000; }
+    .pdf-header-left { display: table-cell; vertical-align: middle; }
+    .pdf-header-right { display: table-cell; vertical-align: middle; text-align: right; }
 
-    /* Info box */
-    .user-info { border: 1px solid #e6eef8; background: #fbfdff; padding: 10px 12px; border-radius: 6px; margin-bottom: 14px; display: flex; gap: 20px; }
-    .user-info .col { min-width: 160px; }
+    .pdf-logo-badge { background: #500000; padding: 6px 10px; border-radius: 5px; display: inline-block; line-height: 0; vertical-align: middle; }
+    .pdf-logo { height: 26px; width: auto; display: inline-block; vertical-align: middle; image-rendering: -webkit-optimize-contrast; }
+    .pdf-brand { display: inline-block; vertical-align: middle; margin-left: 10px; }
+    .pdf-brand { font-size: 17px; font-weight: 800; color: #500000; white-space: nowrap; word-break: keep-all; line-height: 1.1; }
+    .pdf-meta { text-align: right; font-size: 12px; color: #586069; line-height: 1.4; }
+    .pdf-meta-block { margin-top: -4px; margin-bottom: 8px; text-align: right; font-size: 11px; color: #586069; line-height: 1.4; }
+
+    .pdf-title-card { border: 1px solid #ead7d7; border-left: 5px solid #500000; background: #fff8f6; padding: 11px 12px; margin: 0 0 10px 0; page-break-inside: avoid; }
+    .pdf-title-kicker { font-size: 10.5px; color: #815854; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .pdf-title-subtext { margin: 4px 0 0; color: #475569; font-size: 11.5px; }
+
+    /* Info box (use table layout for wkhtmltopdf reliability) */
+    .user-info { border: 1px solid #e2e8f0; background: #ffffff; padding: 8px 10px; border-radius: 5px; margin-bottom: 10px; display: table; width: 100%; }
+    .user-info .col { display: table-cell; width: 50%; vertical-align: top; padding-right: 14px; }
+    .user-info .col:last-child { padding-right: 0; }
     .user-info .label { font-size: 11px; color: #6b7785; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
     .user-info .value { font-weight: 600; color: #102a43; }
 
-    h1.survey-title { font-size: 20px; margin: 0 0 8px 0; color: #102a43; }
-    h2.section-title { font-size: 16px; margin: 18px 0 10px 0; color: #0f172a; }
-    h3.category-title { font-size: 14px; margin: 12px 0 6px 0; color: #134e4a; }
+    h1.c-item-title { font-size: 20px; margin: 0; color: #0f172a; line-height: 1.15; }
+    h2.c-section-title { font-size: 14px; margin: 15px 0 8px 0; color: #0f172a; }
+    h3.category-title,
+    .c-h3 { font-size: 12.5px; margin: 0 0 5px 0; color: #0f172a; }
+    .c-heading-inline { display: inline-block; padding-bottom: 3px; border-bottom: 2px solid #500000; }
+
+    .report-facts { width: 100%; border-collapse: collapse; margin: 0 0 9px; table-layout: fixed; font-size: 11.5px; page-break-inside: avoid; }
+    .report-facts th,
+    .report-facts td { border: 1px solid #e4e9f0; padding: 6px 8px; vertical-align: top; }
+    .report-facts th { width: 15%; background: #f8fafc; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; text-align: left; }
+    .report-facts td { width: 35%; color: #0f172a; background: #ffffff; }
+    .report-fact-muted { display: block; color: #64748b; font-size: 10.8px; margin-top: 2px; word-break: break-word; }
+
+    .pdf-stat-row { display: table; width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 8px 0; margin: 0 -8px 12px; page-break-inside: avoid; }
+    .pdf-stat { display: table-cell; width: 33.333%; border: 1px solid #e2e8f0; border-top: 3px solid #500000; background: #ffffff; padding: 8px 10px; vertical-align: top; }
+    .pdf-stat-label { font-size: 10.5px; color: #6b7785; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+    .pdf-stat-value { font-size: 18px; font-weight: 800; color: #500000; line-height: 1.05; }
+    .pdf-stat-value--date { font-size: 14px; }
+    .pdf-stat-subtext { font-size: 10.8px; color: #64748b; margin-top: 2px; }
 
     .metrics-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-    .metric-card { border: 1px solid #e6eef8; background: #fbfdff; padding: 10px 12px; border-radius: 6px; min-width: 150px; }
+    .metric-card { border: 1px solid #e2e8f0; background: #ffffff; padding: 10px 12px; border-radius: 10px; min-width: 150px; }
     .metric-label { font-size: 11px; color: #6b7785; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
     .metric-value { font-size: 14px; font-weight: 600; color: #102a43; }
 
-    .pdf-section { margin-bottom: 18px; }
-    .category-block { border: 1px solid #dbe7ff; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; background: #f8fbff; }
-    .category-header { margin-bottom: 6px; }
-    .category-description { font-size: 12px; color: #475569; }
+    .c-card { border: 1px solid #e2e8f0; background: #ffffff; padding: 10px 12px; margin-bottom: 12px; page-break-inside: avoid; }
+    .c-card--muted { background: #f8fafc; }
+    .c-panel-header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+    .c-panel-title { font-size: 14px; margin: 0; color: #0f172a; }
+    .u-stack > * + * { margin-top: 10px; }
+    .u-grid { display: table; width: 100%; border-collapse: separate; border-spacing: 10px 0; }
+    .u-grid > * { display: table-cell; width: 50%; vertical-align: top; }
+    .c-stat { border: 1px solid #e2e8f0; background: #ffffff; padding: 8px 10px; }
+    .c-stat--success { border-top: 3px solid #247a4d; }
+    .c-stat--warning { border-top: 3px solid #b45309; }
+    .c-stat__label { font-size: 11px; color: #6b7785; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .c-stat__value { font-size: 18px; font-weight: 800; color: #500000; }
+    .c-stat__subtext,
+    .c-help { font-size: 11px; color: #6b7785; }
 
-    .question-block { padding: 8px 10px; border-bottom: 1px solid #eef3f8; page-break-inside: avoid; }
-    .question-header { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; }
-    .question-number { color: #0b5cff; font-weight: 700; min-width: 28px; }
-    .question-body { font-weight: 600; color: #0b2a3a; }
-    .question-answer { font-size: 12px; color: #102a43; margin-bottom: 4px; }
-    .question-meta { font-size: 11px; color: #6b7280; display: flex; gap: 12px; }
+    .pdf-section { margin-bottom: 18px; page-break-inside: auto; break-inside: auto; }
+    .section-card { border: 1px solid #ead7d7; border-left: 5px solid #500000; padding: 8px 10px; margin: 10px 0 7px; background: #fff8f6; page-break-inside: avoid; break-inside: avoid; }
+    .section-kicker { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #815854; margin-bottom: 3px; }
+    .section-name { font-size: 15px; font-weight: 800; color: #0f172a; }
+    .section-description { font-size: 11.5px; color: #334155; }
+    .section-description p { margin: 6px 0 0 0; }
+
+    .category-block { border: 1px solid #e7ecf3; border-radius: 5px; padding: 8px 10px; margin-bottom: 9px; background: #ffffff; page-break-inside: auto; break-inside: auto; }
+    .category-header { margin-bottom: 7px; padding-bottom: 4px; border-bottom: 1px solid #eef2f7; }
+    .category-description { font-size: 12px; color: #475569; }
+    .category-description p { margin: 0 0 6px 0; }
+
+    .c-question-card { padding: 7px 0 8px; border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; }
+    .c-question-card:last-child { border-bottom: 0; }
+    .c-question-header { display: table; width: 100%; margin-bottom: 4px; }
+    .question-number { display: table-cell; width: 34px; color: #500000; font-weight: 800; vertical-align: top; }
+    .question-heading { display: table-cell; width: auto; vertical-align: top; }
+    .c-question-body { font-weight: 700; color: #0f172a; }
+    .target-level-wrap { margin-top: 4px; text-align: left; white-space: nowrap; }
+    .c-level-badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0; }
+    .question-description { font-size: 12px; color: #475569; margin: 2px 0 4px 36px; }
+    .question-description p { margin: 0 0 4px 0; }
+    .question-answer { font-size: 12px; color: #102a43; margin: 4px 0 3px 34px; padding: 6px 8px; background: #f8fafc; border: 1px solid #edf2f7; border-radius: 4px; }
+    .c-muted-meta { font-size: 10.5px; color: #6b7280; margin-left: 34px; }
 
     .choice-list { list-style: none; padding: 0; margin: 6px 0 0 0; }
-    .choice-item { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; border: 1px solid transparent; margin-right: 6px; font-size: 12px; }
-    .choice-item.selected { background: #e4f0ff; border-color: #c1dcff; font-weight: 600; }
-    .choice-marker { font-size: 12px; color: #0b5cff; }
+    .choice-item { display: inline-block; padding: 3px 6px; border-radius: 4px; border: 1px solid transparent; margin: 0 5px 4px 0; font-size: 12px; }
+    .choice-item.selected { background: rgba(80, 0, 0, 0.08); border-color: rgba(80, 0, 0, 0.2); font-weight: 700; }
+    .choice-marker { font-size: 12px; color: #500000; margin-right: 4px; }
 
     .answer-text { white-space: pre-wrap; word-break: break-word; }
+
+    .pdf-select { width: 100%; max-width: 320px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; padding: 6px 10px; font-size: 12px; color: #0f172a; }
+    .pdf-select:disabled { background: #ffffff; color: #0f172a; opacity: 1; }
     .history-label { font-size: 11px; font-weight: 600; margin-top: 6px; }
     .history-list { margin: 4px 0 0 14px; padding: 0; font-size: 11px; color: #475569; }
     .history-list li { margin-bottom: 2px; }
 
     .badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .badge-primary { background: #f1e7e8; color: #500000; }
     .badge-warning { background: #fef3c7; color: #92400e; }
+    .badge-success { background: #dcfce7; color: #166534; }
 
-    .empty-state { font-size: 12px; color: #6b7280; font-style: italic; }
+    .c-empty-state { font-size: 12px; color: #6b7280; font-style: italic; }
   .truncation-note { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 
-    .feedback-category { border: 1px solid #e6eef8; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; background: #ffffff; }
-    .feedback-block { border: 1px solid #dbe7ff; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; background: #f9fbff; }
-    .feedback-header { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: #334155; margin-bottom: 6px; }
-    .feedback-score { font-weight: 600; color: #0b5cff; }
-    .feedback-comments { font-size: 12px; color: #102a43; }
-    .feedback-comments p { margin: 0 0 6px 0; }
+    /* Advisor feedback blocks should match the advisor palette used on-screen. */
+    .feedback-category { border: 1px solid #e2e8f0; border-radius: 5px; padding: 8px 10px; margin-bottom: 8px; background: #ffffff; page-break-inside: avoid; break-inside: avoid; }
+    .feedback-block { border: 1px solid #c9d4e5; border-left: 4px solid #526f9c; border-radius: 5px; padding: 7px 9px; margin: 6px 0; background: #eef3fb; page-break-inside: avoid; break-inside: avoid; }
+    .feedback-header { display: table; width: 100%; font-size: 12px; color: #0f172a; margin-bottom: 4px; }
+    .feedback-header > div { display: table-cell; vertical-align: top; }
+    .feedback-header > div:last-child { text-align: right; }
+    .feedback-score { font-weight: 800; color: #500000; }
+    .feedback-comments { font-size: 12px; color: #102a43; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+    .feedback-comments p { margin: 0 0 4px 0; overflow-wrap: anywhere; word-break: break-word; }
     .feedback-empty { font-size: 12px; color: #64748b; font-style: italic; }
-    .feedback-meta { margin-top: 4px; font-size: 11px; }
+    .feedback-meta { margin-top: 2px; font-size: 11px; }
+
+    /* Competency summary table */
+    .competency-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 11.3px; page-break-inside: auto; break-inside: auto; }
+    .competency-table thead { display: table-header-group; }
+    .competency-table tfoot { display: table-footer-group; }
+    .competency-table tr { page-break-inside: avoid; break-inside: avoid; }
+    .competency-table th, .competency-table td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; page-break-inside: avoid; }
+    .competency-table th { background: #500000; color: #ffffff; font-weight: 700; }
+    .competency-table tbody tr:nth-child(even) td { background: #fafbfc; }
+    .competency-table tr.competency-average-row td { background: #fff8f6; font-weight: 700; }
+    .competency-table td.numeric { text-align: center; white-space: nowrap; }
+    .competency-table td:first-child { word-break: break-word; overflow-wrap: anywhere; }
 
     /* Footer */
     .pdf-footer { position: fixed; bottom: 6px; left: 0; right: 0; text-align: center; font-size: 11px; color: #8b99a6; }
 
     /* Small helpers */
-    .muted { color: #6b7785; }
+    .c-muted { color: #6b7785; }
   </style>
 </head>
 <body>
   <div class="pdf-header">
-    <div class="pdf-brand"><%= content_for?(:pdf_brand) ? yield(:pdf_brand) : "Health — Survey Response" %></div>
-    <div class="pdf-meta"><%= content_for?(:pdf_meta) ? yield(:pdf_meta) : "Generated: #{Time.current.strftime('%Y-%m-%d %H:%M')}" %></div>
+    <div class="pdf-header-left">
+      <span class="pdf-logo-badge">
+        <%= image_tag(pdf_image_data_uri("tamu-logo.png"), class: "pdf-logo", alt: "Texas A&M University") %>
+      </span>
+      <div class="pdf-brand"><%= content_for?(:pdf_brand) ? yield(:pdf_brand) : "#{app_full_name} - Survey Response" %></div>
+    </div>
+    <div class="pdf-header-right"></div>
   </div>
+
+  <div class="pdf-meta-block"><%= content_for?(:pdf_meta) ? yield(:pdf_meta) : "Generated: #{Time.current.strftime('%Y-%m-%d %H:%M')}" %></div>
 
   <%= yield %>
 
-  <div class="pdf-footer">This document was generated from the Health application.</div>
+  <div class="pdf-footer">This report was generated by <%= app_full_name %>.</div>
 </body>
 </html>

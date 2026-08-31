@@ -9,24 +9,18 @@ class OmniauthCallbacksController < Devise::OmniauthCallbacksController
   #
   # @return [void]
   def google_oauth2
-    # Debug: Log the OAuth params
-    Rails.logger.debug "OAuth params: #{request.env['omniauth.params']}"
-
-    # Get role from the request params (stored when user clicked login)
-    role = request.env["omniauth.params"]["role"]
-    Rails.logger.debug "Role from params: #{role}"
+    # Get role from the request params stored when the user clicked login.
+    role = request.env.fetch("omniauth.params", {})["role"]
 
     email = auth.info.email.to_s.downcase
 
     unless tamu_email?(email)
       Rails.logger.warn "Blocked OAuth login for non-TAMU email: #{email}"
       flash[:alert] = "Please sign in with your TAMU email (@tamu.edu)."
-      redirect_to new_user_session_path and return
+      redirect_to after_omniauth_failure_path_for(:user) and return
     end
 
     user = User.from_google(**from_google_params.merge(email:, role: role))
-    Rails.logger.debug "User created/found: #{user.inspect}"
-    Rails.logger.debug "User role: #{user&.role}"
 
     if user.present?
       sign_out_all_scopes
@@ -53,11 +47,10 @@ class OmniauthCallbacksController < Devise::OmniauthCallbacksController
                        end
       end
 
-      Rails.logger.debug "Redirecting to: #{redirect_path}"
       redirect_to redirect_path
     else
       flash[:alert] = t "devise.omniauth_callbacks.failure", kind: "Google", reason: "#{auth.info.email} is not authorized."
-      redirect_to new_user_session_path
+      redirect_to after_omniauth_failure_path_for(:user)
     end
   end
 

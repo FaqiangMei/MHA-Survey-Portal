@@ -1,115 +1,355 @@
 <% content_for :pdf_brand do %>
-  Health — Composite Assessment Report
+  Master of Health Administration — Assessment Report
 <% end %>
 
 <% content_for :pdf_meta do %>
-  Generated: <%= generated_at.strftime("%Y-%m-%d %H:%M") %><br>
-  Student ID: <%= student.student_id %><br>
-  Survey ID: <%= survey.id %>
+  Generated: <%= generated_at.strftime("%Y-%m-%d %H:%M") %>
 <% end %>
 
-<h1 class="survey-title"><%= survey.title %></h1>
+<% latest_student = Array(question_responses).filter_map { |entry| entry.updated_at || entry.created_at }.max %>
+<% latest_advisor = feedback_summary[:latest_feedback_at] %>
+<% status_label = survey_response.status.to_s.presence&.titleize || "In Progress" %>
 
-<div class="user-info">
-  <div class="col">
-    <div class="label">Student</div>
-    <div class="value"><%= student.full_name %></div>
-    <div class="muted"><%= student.email %></div>
+<% cohort_program_abbreviation = student.track_key == "executive" ? "EMHA" : "RMHA" %>
+<% cohort_label = [ cohort_program_abbreviation, student.program_year.present? ? "Class of #{student.program_year}" : nil ].compact.join(", ") %>
+
+<section class="pdf-title-card">
+  <div class="pdf-title-kicker">Survey Response Report</div>
+  <h1 class="c-item-title"><%= survey.title %></h1>
+  <p class="pdf-title-subtext">
+    <%= cohort_label %> &middot;
+    Student-level competency record. Handle and distribute according to FERPA and program review access rules.
+  </p>
+</section>
+
+<table class="report-facts" aria-label="Survey response report details">
+  <tbody>
+    <tr>
+      <th>Student</th>
+      <td>
+        <strong><%= student.full_name %></strong>
+        <span class="report-fact-muted"><%= student.email %></span>
+      </td>
+      <th>Advisor</th>
+      <td>
+        <strong><%= advisor&.display_name || "Unassigned" %></strong>
+        <% if advisor&.email.present? %>
+          <span class="report-fact-muted"><%= advisor.email %></span>
+        <% end %>
+      </td>
+    </tr>
+    <tr>
+      <th>Status</th>
+      <td><span class="badge badge-primary"><%= status_label %></span></td>
+      <th>Completed</th>
+      <td><%= survey_response.completion_date ? survey_response.completion_date.strftime("%Y-%m-%d") : "—" %></td>
+    </tr>
+    <tr>
+      <th>Student Update</th>
+      <td><%= latest_student ? latest_student.strftime("%Y-%m-%d") : "—" %></td>
+      <th>Advisor Update</th>
+      <td><%= latest_advisor ? latest_advisor.strftime("%Y-%m-%d") : "—" %></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="pdf-stat-row" aria-label="Survey response progress">
+  <div class="pdf-stat">
+    <div class="pdf-stat-label">Required</div>
+    <div class="pdf-stat-value"><%= required_answered_count %>/<%= required_total_questions %></div>
+    <div class="pdf-stat-subtext">required responses</div>
   </div>
-  <div class="col">
-    <div class="label">Advisor</div>
-    <div class="value"><%= advisor&.display_name || "Unassigned" %></div>
-    <% if advisor&.email.present? %>
-      <div class="muted"><%= advisor.email %></div>
-    <% end %>
-  </div>
-  <div class="col">
-    <div class="label">Status</div>
-    <div class="value"><%= survey_response.status.to_s.humanize %></div>
-    <div class="muted">Completed: <%= survey_response.completion_date ? survey_response.completion_date.strftime("%Y-%m-%d") : "—" %></div>
-  </div>
-  <div class="col">
-    <div class="label">Track</div>
-    <div class="value"><%= student.track&.titleize || "—" %></div>
-    <div class="muted">Semester: <%= survey.semester %></div>
+  <div class="pdf-stat">
+    <div class="pdf-stat-label">Generated</div>
+    <div class="pdf-stat-value pdf-stat-value--date"><%= generated_at.strftime("%Y-%m-%d") %></div>
+    <div class="pdf-stat-subtext"><%= generated_at.strftime("%H:%M") %></div>
   </div>
 </div>
 
-<div class="metrics-row">
-  <div class="metric-card">
-    <div class="metric-label">Questions Answered</div>
-    <div class="metric-value"><%= answered_count %> / <%= total_questions %></div>
-    <% if required_total_questions.to_i.positive? %>
-      <div class="metric-subtext">Required: <%= required_answered_count %> / <%= required_total_questions %></div>
+<% competency_section_title = "MHA Competency Self-Assessment" %>
+<% competency_rows = [] %>
+<% competency_rating_question_ids = [] %>
+
+<% categories.each do |cat| %>
+  <% next unless cat.section&.title.to_s == competency_section_title %>
+
+  <% cat.questions.ordered.to_a.each do |question| %>
+    <% next if question.sub_question? %>
+    <% next unless question.question_type == "dropdown" %>
+
+    <% target_level = effective_competency_target_level(question: question, survey: survey, student: student) %>
+    <% next unless target_level.present? %>
+
+    <% raw_answer = answers_by_question[question.id] || answers_by_question[question.id.to_s] %>
+    <% parts = composite_answer_parts(raw_answer) %>
+    <% selected_value = parts[:value].to_s.presence %>
+    <% option_pairs = question.answer_option_pairs %>
+
+    <% selected_option_value = nil %>
+    <% if selected_value.present? %>
+      <% selected_option_value = option_pairs.find { |(_label, value)| value.to_s == selected_value.to_s }&.last %>
+      <% selected_option_value ||= option_pairs.find { |(label, _value)| label.to_s == selected_value.to_s }&.last %>
+      <% selected_option_value ||= selected_value %>
     <% end %>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Advisor Feedback Entries</div>
-    <div class="metric-value"><%= feedback_summary[:total_entries] %></div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Average Advisor Score</div>
-    <div class="metric-value"><%= feedback_summary[:average_score] ? format('%.2f', feedback_summary[:average_score]) : "—" %></div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Latest Advisor Update</div>
-    <% latest_feedback = feedback_summary[:latest_feedback_at] %>
-    <div class="metric-value"><%= latest_feedback ? latest_feedback.strftime("%Y-%m-%d") : "—" %></div>
-  </div>
-</div>
+
+    <% student_rating_numeric = selected_option_value.to_s[/\d+/] %>
+
+    <% feedback_for_question = Array(feedbacks_by_category[cat.id]).find { |fb| fb.question_id.to_i == question.id } %>
+    <% advisor_rating_numeric = feedback_for_question ? normalize_proficiency_value(feedback_for_question.average_score) : nil %>
+    <% advisor_rating_numeric = advisor_rating_numeric.to_s[/\d+/] if advisor_rating_numeric.present? %>
+    <% grade_derived_entry = grade_derived_competencies[question.question_text.to_s] || {} %>
+
+    <% competency_rows << {
+      competency: question.question_text.to_s,
+      target_level: target_level,
+      student_rating: student_rating_numeric,
+      advisor_rating: advisor_rating_numeric,
+      grade_derived_rating: grade_derived_entry[:aggregated_level],
+      grade_derived_evidence_count: grade_derived_entry[:evidence_count],
+      grade_derived_latest_at: grade_derived_entry[:latest_updated_at],
+      grade_derived_provenance: Array(grade_derived_entry[:provenance])
+    } %>
+    <% competency_rating_question_ids << question.id %>
+  <% end %>
+<% end %>
+
+<% if competency_rows.any? %>
+  <% target_values = competency_rows.map { |row| row[:target_level].to_s[/\d+/] }.compact.map(&:to_f) %>
+  <% student_values = competency_rows.map { |row| row[:student_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
+  <% advisor_values = competency_rows.map { |row| row[:advisor_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
+  <% grade_derived_values = competency_rows.map { |row| row[:grade_derived_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
+  <% show_advisor_rating_column = advisor_values.any? %>
+  <% competency_summary_colspan = show_advisor_rating_column ? 5 : 4 %>
+  <% avg_target = target_values.any? ? (target_values.sum / target_values.size) : nil %>
+  <% avg_student = student_values.any? ? (student_values.sum / student_values.size) : nil %>
+  <% avg_advisor = advisor_values.any? ? (advisor_values.sum / advisor_values.size) : nil %>
+  <% avg_grade_derived = grade_derived_values.any? ? (grade_derived_values.sum / grade_derived_values.size) : nil %>
+
+  <section class="pdf-section">
+    <h2 class="c-section-title c-heading-inline">Competency Achievement Summary</h2>
+    <table class="competency-table">
+      <thead>
+        <tr>
+          <th>Competency</th>
+          <th>End of Program Target Level</th>
+          <th>Student Self-Assessment</th>
+          <% if show_advisor_rating_column %>
+            <th>Advisor Rating</th>
+          <% end %>
+          <th>Course-Derived Rating</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% competency_rows.each do |row| %>
+          <% if row[:grade_derived_provenance].any? %>
+            <tr>
+              <td colspan="<%= competency_summary_colspan %>">
+                <strong>Course:</strong>
+                <%= row[:grade_derived_provenance].map { |item| [item[:course_code], item[:assignment_name]].reject(&:blank?).join(" · ") }.join(" | ") %>
+              </td>
+            </tr>
+          <% end %>
+          <tr>
+            <td><%= row[:competency] %></td>
+            <td class="numeric"><%= row[:target_level].present? ? row[:target_level] : "—" %></td>
+            <td class="numeric"><%= row[:student_rating].present? ? row[:student_rating] : "—" %></td>
+            <% if show_advisor_rating_column %>
+              <td class="numeric"><%= row[:advisor_rating].present? ? row[:advisor_rating] : "—" %></td>
+            <% end %>
+            <td class="numeric">
+              <% if row[:grade_derived_rating].present? %>
+                <%= row[:grade_derived_rating] %>
+                <div class="c-muted"><%= row[:grade_derived_evidence_count] %> contributing courses</div>
+                <% if row[:grade_derived_latest_at].present? %>
+                  <div class="c-muted"><%= row[:grade_derived_latest_at].strftime("%Y-%m-%d") %></div>
+                <% end %>
+              <% else %>
+                —
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+
+        <tr class="competency-average-row">
+          <td><strong>Average</strong></td>
+          <td class="numeric"><%= avg_target ? format("%.2f", avg_target) : "—" %></td>
+          <td class="numeric"><%= avg_student ? format("%.2f", avg_student) : "—" %></td>
+          <% if show_advisor_rating_column %>
+            <td class="numeric"><%= avg_advisor ? format("%.2f", avg_advisor) : "—" %></td>
+          <% end %>
+          <td class="numeric"><%= avg_grade_derived ? format("%.2f", avg_grade_derived) : "—" %></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+<% end %>
+
+<% if checkpoint_progress.present? %>
+  <section class="pdf-section">
+    <h2 class="c-section-title c-heading-inline">Progress Over Time</h2>
+    <p class="c-help">Self-assessment rating at each program checkpoint completed so far.</p>
+    <table class="competency-table">
+      <thead>
+        <tr>
+          <th>Competency</th>
+          <% checkpoint_progress[:checkpoints].each do |checkpoint| %>
+            <th><%= checkpoint %></th>
+          <% end %>
+        </tr>
+      </thead>
+      <tbody>
+        <% checkpoint_progress[:rows].each do |row| %>
+          <tr>
+            <td><%= row[:competency] %></td>
+            <% checkpoint_progress[:checkpoints].each do |checkpoint| %>
+              <td class="numeric"><%= row[:scores][checkpoint] || "—" %></td>
+            <% end %>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+<% end %>
 
 <section class="pdf-section">
-  <h2 class="section-title">Student Responses</h2>
+  <h2 class="c-section-title c-heading-inline">Student Responses</h2>
+
+  <% rendered_section_ids = [] %>
+  <% section_question_numbers = Hash.new(0) %>
+
   <% categories.each do |category| %>
+    <% section = category.section %>
+    <% if section.present? && !rendered_section_ids.include?(section.id) %>
+      <div class="section-card">
+        <div class="section-kicker">Section</div>
+        <div class="section-name"><%= section.title %></div>
+        <% if section.description.present? %>
+          <div class="section-description"><%= simple_format(section.description.to_s) %></div>
+        <% end %>
+      </div>
+      <% rendered_section_ids << section.id %>
+    <% end %>
+
     <div class="category-block">
       <div class="category-header">
-        <h3 class="category-title"><%= category.name %></h3>
+        <h3 class="c-h3"><%= category.name %></h3>
         <% if category.description.present? %>
-          <div class="category-description"><%= category.description %></div>
+          <div class="category-description"><%= simple_format(category.description.to_s) %></div>
         <% end %>
       </div>
 
-      <% ordered_questions = category.questions.sort_by(&:question_order) %>
+      <% ordered_questions = category.questions.ordered.to_a %>
+      <% feedback_entries = feedbacks_by_category[category.id] || [] %>
+      <% feedback_by_question_id = feedback_entries.group_by(&:question_id) %>
+      <% show_inline_feedback = category.section&.title.to_s == "MHA Competency Self-Assessment" %>
       <% if ordered_questions.any? %>
+        <% number_key = section&.id || category.id %>
+        <% question_number = section_question_numbers[number_key] %>
+        <% questions_by_id = ordered_questions.index_by(&:id) %>
+
         <% ordered_questions.each_with_index do |question, index| %>
+          <%# Hide conditional subquestions (e.g. Employment follow-ups) unless parent is answered "Yes" %>
+          <% if question.sub_question? %>
+            <% parent = questions_by_id[question.parent_question_id] %>
+            <% parent_raw = parent ? (answers_by_question[parent.id] || answers_by_question[parent.id.to_s]) : nil %>
+            <% parent_value = composite_answer_parts(parent_raw)[:value].to_s %>
+            <% parent_options = parent ? parent.answer_options_list.map { |opt| opt.to_s.strip.downcase } : [] %>
+            <% conditional_yes_no = parent.present? && parent.question_type == "multiple_choice" && parent_options.include?("yes") && parent_options.include?("no") %>
+            <% next if conditional_yes_no && !parent_value.casecmp?("Yes") %>
+          <% end %>
+
           <% response_record = responses_by_question[question.id] %>
-          <% raw_answer = answers_by_question[question.id] %>
-          <% display_answer = raw_answer.is_a?(Array) ? raw_answer.compact.join(", ") : raw_answer %>
-          <% truncated_answer, answer_truncated = truncate_for_composite_pdf(display_answer) %>
-          <div class="question-block">
-            <div class="question-header">
-              <span class="question-number">Q<%= index + 1 %></span>
-              <span class="question-body"><%= question.question_text %></span>
+          <% raw_answer = answers_by_question[question.id] || answers_by_question[question.id.to_s] %>
+          <% parts = composite_answer_parts(raw_answer) %>
+          <% answer_value = parts[:value] %>
+          <% answer_text = composite_display_answer(raw_answer) %>
+          <% truncated_answer, answer_truncated = truncate_for_composite_pdf(answer_text) %>
+
+          <% effective_target_level = effective_competency_target_level(question: question, survey: survey, student: student) %>
+          <% is_competency_rating_row = show_inline_feedback && competency_rating_question_ids.include?(question.id) && question.question_type == "dropdown" && effective_target_level.present? %>
+          <% if is_competency_rating_row %>
+            <% next %>
+          <% end %>
+
+          <% question_number = (section_question_numbers[number_key] += 1) unless question.sub_question? %>
+          <div class="c-question-card">
+            <div class="c-question-header">
+              <% if question.sub_question? %>
+                <span class="question-number">↳</span>
+              <% else %>
+                <span class="question-number">Q<%= question_number %></span>
+              <% end %>
+              <div class="question-heading">
+                <div class="c-question-body"><%= render_question_prompt(question) %></div>
+                <% if question.question_type == "dropdown" && effective_target_level.present? %>
+                  <div class="target-level-wrap">
+                    <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %></span>
+                  </div>
+                <% end %>
+              </div>
             </div>
+
+            <% if question.description.to_s.strip.present? %>
+              <div class="question-description"><%= render_markdown(question.description.to_s) %></div>
+            <% end %>
 
             <div class="question-answer">
               <% case question.question_type %>
               <% when "multiple_choice" %>
-                <% selected_values = Array(raw_answer).map(&:to_s) %>
+                <% selected_values = Array(answer_value).map(&:to_s) %>
+                <% option_pairs = question.answer_option_pairs.presence || [] %>
+
                 <ul class="choice-list">
-                  <% question.answer_options_list.each do |option| %>
-                    <% normalized = option.to_s %>
-                    <% chosen = selected_values.any? ? selected_values.any? { |val| val.casecmp?(normalized) } : (display_answer.to_s.casecmp?(normalized)) %>
+                  <% option_pairs.each do |label, value| %>
+                    <% chosen = selected_values.any? { |val| val.to_s == value.to_s || val.casecmp?(label.to_s) } %>
                     <li class="choice-item <%= chosen ? 'selected' : '' %>">
                       <span class="choice-marker"><%= chosen ? '●' : '○' %></span>
-                      <span><%= option %></span>
+                      <span><%= label %></span>
                     </li>
                   <% end %>
                 </ul>
-              <% when "scale" %>
-                <% scale_display = scale_label_for_value(question, display_answer) %>
+
+                <% show_other_text = selected_values.any? { |val| question.answer_option_requires_text?(val) || val.casecmp?("Other") } %>
+                <% if show_other_text && parts[:text].present? %>
+                  <div class="answer-text" style="margin-top: 6px;">
+                    <strong>Other:</strong> <%= parts[:text] %>
+                  </div>
+                <% end %>
+              <% when "dropdown" %>
+                <% option_pairs = question.answer_option_pairs %>
+                <% selected_value = answer_value.to_s.presence %>
+                <% selected_option_value = nil %>
+                <% if selected_value.present? %>
+                  <% selected_option_value = option_pairs.find { |(_label, value)| value.to_s == selected_value }&.last %>
+                  <% selected_option_value ||= option_pairs.find { |(label, _value)| label.to_s == selected_value }&.last %>
+                  <% selected_option_value ||= selected_value %>
+                <% end %>
+
                 <div class="answer-text">
-                  <strong>Rating:</strong>
-                  <%= display_answer.present? ? scale_display : "Not answered" %>
-                  <% if display_answer.present? && scale_display.to_s != display_answer.to_s %>
-                    <span class="muted">(Value <%= display_answer %>)</span>
+                  <% if selected_value.present? %>
+                    <select class="pdf-select" disabled>
+                      <option value=""></option>
+                      <% option_pairs.each do |label, value| %>
+                        <option value="<%= value %>" <%= value.to_s == selected_option_value.to_s ? "selected" : "" %>><%= label %></option>
+                      <% end %>
+                    </select>
+                  <% else %>
+                    Not answered
                   <% end %>
                 </div>
+
+                <% show_other_text = selected_value.present? && (question.answer_option_requires_text?(selected_value) || question.answer_option_requires_text?(selected_option_value) || selected_value.casecmp?("Other")) %>
+                <% if show_other_text && parts[:text].present? %>
+                  <div class="answer-text" style="margin-top: 6px;">
+                    <strong>Other:</strong> <%= parts[:text] %>
+                  </div>
+                <% end %>
               <% when "evidence" %>
                 <div class="answer-text">
-                  <% if display_answer.present? %>
+                  <% evidence_link = parts[:link].presence || answer_value.to_s.presence %>
+                  <% if evidence_link.present? %>
                     <% link_label = answer_truncated ? "View evidence" : truncated_answer %>
-                    <a href="<%= display_answer %>"><%= link_label %></a>
+                    <a href="<%= evidence_link %>"><%= link_label %></a>
                     <% if answer_truncated %>
                       <div class="truncation-note">Link truncated for PDF readability.</div>
                     <% end %>
@@ -127,7 +367,7 @@
                       <li>
                         <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %> — <%= history_text %>
                         <% if history_truncated %>
-                          <span class="muted">(truncated)</span>
+                          <span class="c-muted">(truncated)</span>
                         <% end %>
                       </li>
                     <% end %>
@@ -147,38 +387,92 @@
               <% end %>
             </div>
 
-            <div class="question-meta">
-              <span class="muted">Last updated: <%= response_record&.updated_at ? response_record.updated_at.strftime("%Y-%m-%d") : "—" %></span>
+            <div class="c-muted-meta">
+              <span class="c-muted">Last updated: <%= response_record&.updated_at ? response_record.updated_at.strftime("%Y-%m-%d") : "—" %></span>
               <% unless response_record&.answer.present? %>
                 <span class="badge badge-warning">Missing</span>
               <% end %>
             </div>
+
+            <% next_question = ordered_questions[index + 1] %>
+            <% group_parent_id = question.sub_question? ? question.parent_question_id : question.id %>
+            <% end_of_parent_group = next_question.nil? || !next_question.sub_question? || next_question.parent_question_id != group_parent_id %>
+            <% feedback_for_parent = (feedback_by_question_id[group_parent_id] || []).first %>
           </div>
+
+          <% if show_inline_feedback && end_of_parent_group && feedback_for_parent.present? %>
+            <% timestamp = feedback_for_parent.updated_at || feedback_for_parent.created_at %>
+            <% selected_proficiency = normalize_proficiency_value(feedback_for_parent.average_score) %>
+            <% submission = feedback_submission_by_advisor[feedback_for_parent.advisor_id] if feedback_for_parent.advisor_id.present? %>
+            <% feedback_status = submission&.submitted_at.present? ? "Submitted" : "Draft" %>
+            <div class="feedback-block">
+              <div class="feedback-header">
+                <div>
+                  <strong>Advisor feedback</strong>
+                  <span class="c-muted">(<%= feedback_for_parent.advisor&.display_name || "—" %>)</span>
+                  <span class="badge <%= feedback_status == 'Submitted' ? 'badge-success' : 'badge-warning' %>"><%= feedback_status %></span>
+                </div>
+                <div class="feedback-score">
+                  <% if selected_proficiency.present? %>
+                    <select class="pdf-select" disabled>
+                      <option value=""></option>
+                      <% proficiency_option_pairs_for(question).each do |label, value| %>
+                        <option value="<%= value %>" <%= value.to_s == selected_proficiency.to_s ? "selected" : "" %>><%= label %></option>
+                      <% end %>
+                    </select>
+                  <% else %>
+                    —
+                  <% end %>
+                </div>
+              </div>
+
+              <% comments_text, comments_truncated = truncate_for_composite_pdf(feedback_for_parent.comments) %>
+              <div class="feedback-comments">
+                <% if comments_text.present? %>
+                  <%= simple_format(comments_text) %>
+                  <% if comments_truncated %>
+                    <div class="truncation-note">Full feedback available in the Health application.</div>
+                  <% end %>
+                <% else %>
+                  <div class="feedback-empty">No feedback provided</div>
+                <% end %>
+              </div>
+              <div class="feedback-meta c-muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
+            </div>
+          <% end %>
         <% end %>
       <% else %>
-        <div class="empty-state">No questions recorded for this category.</div>
+        <div class="c-empty-state">No questions recorded for this category.</div>
       <% end %>
     </div>
   <% end %>
 </section>
 
-<section class="pdf-section">
-  <h2 class="section-title">Advisor Feedback</h2>
-  <% categories.each do |category| %>
-    <% feedback_entries = feedbacks_by_category[category.id] || [] %>
-    <div class="feedback-category">
-      <div class="category-header">
-        <h3 class="category-title"><%= category.name %></h3>
-      </div>
+<% legacy_feedback_by_category = feedbacks_by_category.transform_values { |entries| Array(entries).select { |entry| entry.question_id.blank? } } %>
+<% if legacy_feedback_by_category.values.any?(&:any?) %>
+  <section class="pdf-section">
+    <h2 class="c-section-title c-heading-inline">Advisor Feedback</h2>
+    <% categories.each do |category| %>
+      <% feedback_entries = legacy_feedback_by_category[category.id] || [] %>
+      <% next unless feedback_entries.any? %>
 
-      <% if feedback_entries.any? %>
+      <div class="feedback-category">
+        <div class="category-header">
+          <h3 class="c-h3"><%= category.name %></h3>
+        </div>
+
         <% feedback_entries.each do |feedback| %>
           <% timestamp = feedback.updated_at || feedback.created_at %>
+          <% submission = feedback_submission_by_advisor[feedback.advisor_id] if feedback.advisor_id.present? %>
+          <% feedback_status = submission&.submitted_at.present? ? "Submitted" : "Draft" %>
           <div class="feedback-block">
             <div class="feedback-header">
-              <div><strong>Advisor:</strong> <%= feedback.advisor&.display_name || "—" %></div>
+              <div>
+                <strong>Advisor:</strong> <%= feedback.advisor&.display_name || "—" %>
+                <span class="badge <%= feedback_status == 'Submitted' ? 'badge-success' : 'badge-warning' %>"><%= feedback_status %></span>
+              </div>
               <div class="feedback-score">
-                Score: <%= feedback.average_score.present? ? format('%.2f', feedback.average_score.to_f) : "—" %>
+                Score: <%= feedback.average_score != nil ? format('%.2f', feedback.average_score.to_f) : "—" %>
               </div>
             </div>
             <% comments_text, comments_truncated = truncate_for_composite_pdf(feedback.comments) %>
@@ -186,18 +480,69 @@
               <% if comments_text.present? %>
                 <%= simple_format(comments_text) %>
                 <% if comments_truncated %>
-                  <div class="truncation-note">Full comments available in the Health application.</div>
+                  <div class="truncation-note">Full feedback available in the Health application.</div>
                 <% end %>
               <% else %>
-                <div class="feedback-empty">No comments provided</div>
+                <div class="feedback-empty">No feedback provided</div>
               <% end %>
             </div>
-            <div class="feedback-meta muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
+            <div class="feedback-meta c-muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
           </div>
         <% end %>
-      <% else %>
-        <div class="feedback-empty">No advisor feedback recorded for this category.</div>
-      <% end %>
+      </div>
+    <% end %>
+  </section>
+<% end %>
+
+<%# Advisor feedback summary (PDF only). Render only when we have 2+ scored feedback entries with target levels. %>
+<%
+  questions_by_id_for_summary = categories.flat_map(&:questions).index_by(&:id)
+  feedback_rows_for_summary = feedbacks_by_category.values.flatten.select { |entry| entry.question_id.present? && entry.average_score != nil }
+  scored_feedback_count = feedback_rows_for_summary.size
+
+  summary_total = 0
+  summary_at_or_above = 0
+  summary_below = 0
+
+  feedback_rows_for_summary.each do |entry|
+    question = questions_by_id_for_summary[entry.question_id]
+    target = effective_competency_target_level(question: question, survey: survey, student: student)
+    next if target.blank?
+
+    score = entry.average_score.to_f
+    summary_total += 1
+    if score >= target.to_f
+      summary_at_or_above += 1
+    else
+      summary_below += 1
+    end
+  end
+
+  summary_at_pct = summary_total.positive? ? ((summary_at_or_above.to_f / summary_total) * 100).round(1) : 0.0
+  summary_below_pct = summary_total.positive? ? ((summary_below.to_f / summary_total) * 100).round(1) : 0.0
+%>
+
+<% if scored_feedback_count >= 1 %>
+  <section class="c-card c-card--muted u-stack u-stack--lg" data-advisor-feedback-summary>
+    <div class="c-panel-header">
+      <h3 class="c-panel-title">Summary Statistics</h3>
+      <p class="c-muted-meta">Based on saved advisor scores</p>
     </div>
-  <% end %>
-</section>
+
+    <div class="u-grid u-grid--2">
+      <div class="c-stat c-stat--success">
+        <div class="c-stat__label">At or Above Target</div>
+        <div class="c-stat__value"><%= summary_at_or_above %></div>
+        <div class="c-stat__subtext">(<%= summary_at_pct %>%)</div>
+      </div>
+
+      <div class="c-stat c-stat--warning">
+        <div class="c-stat__label">Below End of Program Target</div>
+        <div class="c-stat__value text-red-700"><%= summary_below %></div>
+        <div class="c-stat__subtext">(<%= summary_below_pct %>%)</div>
+      </div>
+    </div>
+
+    <p class="c-help">Based on advisor scores (0–5) compared to each question’s program target level.</p>
+  </section>
+<% end %>

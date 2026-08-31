@@ -1,4 +1,4 @@
-<% content_for :title, "Settings" %>
+<% content_for :title, "Edit Settings" %>
 
 <% lang_code = (@user&.language.presence || 'en') %>
 <% lang_labels = {
@@ -8,101 +8,208 @@
 } %>
 <% current_language_label = lang_labels[lang_code] || lang_code %>
 <% text_scale = @user.text_scale_percent || 100 %>
-<% back_path = if current_user&.role_admin?
-                 admin_dashboard_path
-               elsif current_user&.role_advisor?
-                 advisor_dashboard_path
-               elsif current_user&.role_student?
-                 student_dashboard_path
-               else
-                 root_path
-               end %>
+<% notifications_enabled = @user.notifications_enabled.nil? ? true : @user.notifications_enabled %>
+<% in_app_notifications_enabled = @user.in_app_notifications_enabled.nil? ? true : @user.in_app_notifications_enabled %>
+<% back_path = settings_path %>
+<% full_name = @user.full_name.presence || @user.email || "User" %>
+<% updated_text = @user.updated_at ? "#{time_ago_in_words(@user.updated_at)} ago" : "Just now" %>
+<% initials = full_name.split.first(2).map { |part| part.first&.upcase }.join.presence || "U" %>
+<% avatar_url = @user.avatar_url.presence %>
+<% notifications_label = notifications_enabled ? "On" : "Off" %>
+<% email_delivery_enabled = NotificationEmailDeliveryJob.email_notifications_enabled? %>
+<% in_app_notifications_label = in_app_notifications_enabled ? "On" : "Off" %>
 
-<main class="settings-page px-4 py-12">
-  <div class="settings-container mx-auto max-w-6xl space-y-10">
-    <section class="settings-hero">
-      <div>
-        <p class="settings-hero__eyebrow">Experience controls</p>
-        <h1 class="settings-hero__title">Personalize your workspace</h1>
-        <p class="settings-hero__subtitle">Language and text settings sync everywhere you sign in, so dashboards, surveys, and reports stay readable.</p>
-        <div class="settings-hero__badges">
-          <span class="hero-badge">
-            <span class="hero-badge__dot"></span>
-            Language · <span id="current-language-display"><%= current_language_label %></span>
-          </span>
-          <span class="hero-badge">
-            Text scale · <%= text_scale %>%
-          </span>
+<main class="c-main c-page">
+  <section class="c-card c-card--brand c-card--spacious u-stack u-stack--lg">
+    <header class="c-page-header">
+      <div class="u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Settings</p>
+          <h1 class="c-page-title c-page-title--brand">Edit workspace preferences</h1>
+          <p class="c-page-subtitle">Update language, text, notification, and read-aloud preferences for this account.</p>
+        </div>
+
+        <div class="u-actions u-actions--start u-gap-xs">
+          <span class="c-status-pill c-status-pill--success">Preferences active</span>
+          <span class="c-pill c-pill--muted">Language: <span id="current-language-display"><%= current_language_label %></span></span>
+          <span class="c-pill c-pill--muted">Text scale: <%= text_scale %>%</span>
+          <span class="c-pill c-pill--muted">In-app alerts: <%= in_app_notifications_label %></span>
         </div>
       </div>
-      <div class="settings-hero__card">
-        <p class="eyebrow">Need to revert?</p>
-        <h2>Changes apply instantly</h2>
-        <p>We refresh the app after saving so your accessibility preferences update without hunting for toggles again.</p>
-        <p class="card-hint">Prefer the default view? Set text size back to 100%.</p>
-      </div>
-    </section>
 
-    <div class="settings-grid">
-      <section class="settings-card">
-        <header>
-          <p class="eyebrow">Account-wide</p>
-          <h2>Accessibility preferences</h2>
-          <p>These settings change typography scales and translation helpers across reports, dashboards, and emails.</p>
-        </header>
-
-        <%= form_with model: @user, url: settings_path, method: :patch, local: true, id: "settings-form", class: "settings-form" do |f| %>
-          <% if @user.errors.any? %>
-            <div class="settings-alert">
-              <h3><%= pluralize(@user.errors.count, "error") %> need attention</h3>
-              <ul>
-                <% @user.errors.full_messages.each do |msg| %>
-                  <li><%= msg %></li>
-                <% end %>
-              </ul>
-            </div>
+      <div class="u-responsive-row u-items-center">
+        <div class="c-avatar-tile u-size-2xl text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@user)}\"" unless avatar_url %>>
+          <% if avatar_url %>
+            <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@user) %>" loading="lazy">
+          <% else %>
+            <span aria-hidden="true"><%= initials %></span>
+            <span class="sr-only"><%= avatar_aria_label(@user) %></span>
           <% end %>
+        </div>
+      </div>
+    </header>
 
-          <div class="form-grid">
-            <div class="form-field">
-              <label>Language</label>
-              <div class="language-pill">
-                <span id="language-pill-label"><%= current_language_label %></span>
-                <span class="pill-hint">Managed automatically via translation bar</span>
-              </div>
+    <div class="u-grid u-grid--stats">
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Language</p>
+        <p class="c-value c-value--lg"><span id="language-pill-label"><%= current_language_label %></span></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Text scale</p>
+        <p class="c-value c-value--lg"><%= text_scale %>%</p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">In-app alerts</p>
+        <p class="c-value c-value--lg"><%= in_app_notifications_label %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Last updated</p>
+        <p class="c-value c-value--lg"><%= updated_text %></p>
+      </article>
+    </div>
+  </section>
+
+  <%= form_with model: @user, url: settings_path, method: :patch, local: true, id: "settings-form" do |f| %>
+    <section class="c-student-overview-layout">
+      <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
+        <%= render "shared/account_settings_tabs", active: :settings %>
+      </aside>
+
+      <div class="c-student-overview-main u-stack u-stack--lg">
+        <% if @user.errors.any? %>
+          <section class="c-card c-card--tight c-card--danger u-shadow-none">
+            <h2 class="c-section-title">
+              <%= pluralize(@user.errors.count, "error") %> need attention
+            </h2>
+            <ul class="c-rich-text">
+              <% @user.errors.full_messages.each do |msg| %>
+                <li><%= msg %></li>
+              <% end %>
+            </ul>
+          </section>
+        <% end %>
+
+        <section class="c-card c-card--tight u-stack u-stack--lg">
+          <header class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Preferences</p>
+            <h2 class="c-section-title">Accessibility Details</h2>
+            <p class="c-help">Changes refresh after saving so your preferences update across dashboards, surveys, and reports.</p>
+          </header>
+
+          <div class="u-grid u-grid--2">
+            <div class="c-field">
+              <label class="c-label">Language</label>
+              <p class="c-value c-value--lg"><%= current_language_label %></p>
+              <small class="c-help">Managed automatically via the translation bar.</small>
               <%= f.hidden_field :language, value: lang_code, id: 'settings_language_input' %>
             </div>
 
-            <div class="form-field">
-              <label>Text size</label>
+            <div class="c-field">
+              <label class="c-label">Text size</label>
               <%= f.select :text_scale_percent,
                     options_for_select([["100% (default)", 100], ["125%", 125], ["150%", 150], ["175%", 175], ["200%", 200]], text_scale),
                     {},
-                    class: "settings-select" %>
-              <small>Increase up to 200% for larger copy. We scale line-height and key controls automatically.</small>
+                    class: "c-select u-w-full" %>
+              <small class="c-help">Increase up to 200% for larger copy.</small>
+            </div>
+
+            <div class="c-field">
+              <div class="u-actions u-actions--split">
+                <label class="c-label" for="tts-rate">Read Aloud speed</label>
+                <span class="c-help" id="tts-rate-value" aria-live="polite">1.0×</span>
+              </div>
+              <input
+                class="c-input"
+                id="tts-rate"
+                type="range"
+                min="0.25"
+                max="2.0"
+                step="0.1"
+                value="1.0"
+                data-tts-rate
+              />
+              <div class="u-actions u-actions--start u-mt-sm" aria-label="Read aloud speed presets">
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="0.25">0.25×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="0.5">0.5×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="0.75">0.75×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="1.0">1.0×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="1.25">1.25×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="1.5">1.5×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="1.75">1.75×</button>
+                <button type="button" class="btn btn-subtle" data-tts-rate-preset="2.0">2.0×</button>
+              </div>
+              <small class="c-help">Saved on this device and used when you toggle Read Aloud in the header.</small>
             </div>
           </div>
+        </section>
 
-          <div class="form-actions">
-            <%= link_to "← Back", back_path, class: "settings-btn settings-btn--ghost" %>
-            <%= f.submit "Save changes", class: "settings-btn settings-btn--primary" %>
+        <section class="c-card c-card--tight u-stack u-stack--lg">
+          <header class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Notifications</p>
+            <h2 class="c-section-title">Delivery Settings</h2>
+            <p class="c-help">Email delivery is controlled by the app-level feature flag. In-app notifications are controlled by your saved preference.</p>
+          </header>
+
+          <div class="u-grid u-grid--2">
+            <div class="c-field">
+              <label class="c-toggle">
+                <input id="system_email_delivery_toggle"
+                       type="checkbox"
+                       class="c-toggle__input"
+                       <%= "checked" if email_delivery_enabled %>
+                       disabled>
+                <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+                <span>
+                  <span class="c-toggle__label">System email delivery</span>
+                  <span class="c-help u-block">
+                    <% if email_delivery_enabled %>
+                      Email jobs can send through the configured SMTP service.
+                    <% else %>
+                      Email notifications are hidden until EMAIL_NOTIFICATIONS_ENABLED is turned on.
+                    <% end %>
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <% if email_delivery_enabled %>
+              <div class="c-field">
+                <label class="c-toggle u-cursor-pointer" for="user_notifications_enabled">
+                  <%= f.check_box :notifications_enabled, class: "c-toggle__input" %>
+                  <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+                  <span>
+                    <span class="c-toggle__label">Email notifications</span>
+                    <span class="c-help u-block">Send survey, competency, and advisor workflow alerts to your email.</span>
+                  </span>
+                </label>
+              </div>
+            <% end %>
+
+            <div class="c-field">
+              <label class="c-toggle u-cursor-pointer" for="user_in_app_notifications_enabled">
+                <%= f.check_box :in_app_notifications_enabled, class: "c-toggle__input" %>
+                <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+                <span>
+                  <span class="c-toggle__label">In-app notifications</span>
+                  <span class="c-help u-block">Show unread notifications in the navbar and notification center.</span>
+                </span>
+              </label>
+            </div>
           </div>
-        <% end %>
-      </section>
+        </section>
 
-      <aside class="settings-card settings-card--support">
-        <header>
-          <p class="eyebrow">Helpful context</p>
-          <h2>Why these settings live here</h2>
-        </header>
-        <ul class="support-list">
-          <li>Language preference follows your Google Translate selection so dashboards are instantly readable.</li>
-          <li>Text scale applies to reports, surveys, and exports — no extra zooming required.</li>
-        </ul>
-        <p class="support-tip">Future releases will add notification controls based on these preferences.</p>
-      </aside>
-    </div>
-  </div>
+        <section class="c-card c-card--tight">
+          <div class="u-actions u-actions--split">
+            <div class="u-actions u-actions--start">
+              <button type="button" class="btn btn-secondary" id="reset-local-defaults">Reset to defaults</button>
+              <%= link_to "Cancel", back_path, class: button_classes(:secondary) %>
+            </div>
+            <%= f.submit "Save settings", class: button_classes(:primary) %>
+          </div>
+        </section>
+      </div>
+    </section>
+  <% end %>
 </main>
 <script>
   // Submit settings via fetch to ensure we can reload the app immediately on success.
@@ -152,9 +259,122 @@
       }).catch(function() {
         // network failure - re-enable submit and show a simple alert
         if (submit) submit.disabled = false;
-        alert('Failed to save settings. Please try again.');
+        if (window.AppModal && typeof window.AppModal.alert === 'function') {
+          window.AppModal.alert({
+            title: 'Settings not saved',
+            message: 'We could not save your settings. Please try again.'
+          });
+        } else {
+          alert('We could not save your settings. Please try again.');
+        }
       });
     });
+  })();
+</script>
+<script>
+  // Read Aloud speed (local-only): store in localStorage so it applies to TTS everywhere.
+  (function() {
+    var KEY = 'mha:tts_rate';
+    var HIGH_CONTRAST_KEY = 'mha_high_contrast';
+    var slider = document.querySelector('[data-tts-rate]');
+    var valueLabel = document.getElementById('tts-rate-value');
+    if (!slider || !valueLabel) return;
+
+    var presets = Array.prototype.slice.call(document.querySelectorAll('[data-tts-rate-preset]'));
+
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function formatRate(rate) {
+      return (Math.round(rate * 10) / 10).toFixed(1) + '×';
+    }
+
+    try {
+      var stored = window.localStorage.getItem(KEY);
+      var initial = stored ? parseFloat(stored) : 1.0;
+      if (!isFinite(initial)) initial = 1.0;
+      initial = clamp(initial, 0.25, 2.0);
+
+      slider.value = String(initial);
+      valueLabel.textContent = formatRate(initial);
+    } catch (e) {
+      // ignore
+    }
+
+    slider.addEventListener('input', function() {
+      var next = parseFloat(slider.value);
+      if (!isFinite(next)) return;
+      valueLabel.textContent = formatRate(next);
+    });
+
+    function persist(rate) {
+      try {
+        window.localStorage.setItem(KEY, String(rate));
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    slider.addEventListener('change', function() {
+      var next = parseFloat(slider.value);
+      if (!isFinite(next)) return;
+      persist(next);
+    });
+
+    presets.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var rate = parseFloat(btn.getAttribute('data-tts-rate-preset'));
+        if (!isFinite(rate)) return;
+        rate = clamp(rate, 0.25, 2.0);
+        slider.value = String(rate);
+        valueLabel.textContent = formatRate(rate);
+        persist(rate);
+      });
+    });
+
+    // Reset local-only preferences back to defaults.
+    var resetBtn = document.getElementById('reset-local-defaults');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function() {
+        try {
+          window.localStorage.removeItem(KEY);
+          window.localStorage.removeItem(HIGH_CONTRAST_KEY);
+        } catch (e) {
+          // ignore
+        }
+
+        // Reset Read Aloud speed UI
+        slider.value = '1.0';
+        valueLabel.textContent = '1.0×';
+
+        // Stop reading if active
+        try {
+          if (window.speechSynthesis && window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Remove highlight overlay if present
+        var highlight = document.querySelector('.c-tts-highlight');
+        if (highlight) {
+          highlight.style.width = '0';
+          highlight.style.height = '0';
+        }
+
+        // Turn off high contrast immediately
+        document.body && document.body.classList.remove('high-contrast');
+        var hcToggles = document.querySelectorAll('[data-high-contrast-toggle]');
+        hcToggles.forEach(function(el) {
+          if (el && el.type === 'checkbox') {
+            el.checked = false;
+            el.setAttribute('aria-checked', 'false');
+          }
+        });
+      });
+    }
   })();
 </script>
 <script>
@@ -166,6 +386,7 @@
     }
 
     var display = document.getElementById('current-language-display');
+    var pillDisplay = document.getElementById('language-pill-label');
     var hiddenInput = document.getElementById('settings_language_input');
     if (!display || !hiddenInput) return;
 
@@ -182,12 +403,16 @@
         var code = g.split('/').pop();
         // Google sometimes uses short codes like 'zh-CN' or 'zh_TW' with underscore
         code = code.replace('_', '-');
-        display.textContent = labels[code] || code;
+        var label = labels[code] || code;
+        display.textContent = label;
+        if (pillDisplay) pillDisplay.textContent = label;
         hiddenInput.value = code;
       } else {
         // No active translation cookie; ensure display matches saved user language
         var saved = hiddenInput.value || 'en';
-        display.textContent = labels[saved] || saved;
+        var savedLabel = labels[saved] || saved;
+        display.textContent = savedLabel;
+        if (pillDisplay) pillDisplay.textContent = savedLabel;
       }
     } catch (e) {
       // ignore

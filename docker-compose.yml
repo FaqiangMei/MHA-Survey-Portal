@@ -1,15 +1,18 @@
+name: tamu-cat
+
 services:
   db:
-    image: postgres:14
-    container_name: health-db
+    image: postgres:17
+    container_name: tamu-cat-db
     environment:
       POSTGRES_USER: dev_user
       POSTGRES_PASSWORD: dev_pass
-      POSTGRES_DB: health_app_development
+      POSTGRES_DB: tamu_cat_development
     ports:
       - "5433:5432" 
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
 
   web:
     build:
@@ -17,7 +20,9 @@ services:
       args:
         RUBY_VERSION: 3.4.6
       target: dev
-    container_name: health-web
+    container_name: tamu-cat-web
+    env_file:
+      - .env
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -25,15 +30,18 @@ services:
       PGPASSWORD: dev_pass
       RAILS_ENV: development
       BUNDLE_WITHOUT: ""
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
     ports:
       - "3000:3000"
     volumes:
-      - .:/csce431/501_health:cached
+      - .:/app:cached
       - bundle-cache:/usr/local/bundle
-    working_dir: /csce431/501_health
+    working_dir: /app
     depends_on:
       - db
-    command: bash -lc "rm -f tmp/pids/server.pid && bin/rails tailwindcss:build && bin/rails s -b 0.0.0.0 -p 3000"
+    command: bash -lc "bundle check || bundle install; bin/rails db:prepare; rm -f tmp/pids/server.pid && bin/rails tailwindcss:build && bin/rails s -b 0.0.0.0 -p 3000"
 
   css:
     build:
@@ -41,7 +49,9 @@ services:
       args:
         RUBY_VERSION: 3.4.6
       target: dev
-    container_name: health-css
+    container_name: tamu-cat-css
+    env_file:
+      - .env
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -49,13 +59,16 @@ services:
       PGPASSWORD: dev_pass
       RAILS_ENV: development
       BUNDLE_WITHOUT: ""
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
     volumes:
-      - .:/csce431/501_health:cached
+      - .:/app:cached
       - bundle-cache:/usr/local/bundle
-    working_dir: /csce431/501_health
+    working_dir: /app
     depends_on:
       - db
-    command: bash -lc "bin/rails tailwindcss:watch"
+    command: bash -lc "bundle check || bundle install; bin/rails tailwindcss:watch"
 
 volumes:
   db-data:

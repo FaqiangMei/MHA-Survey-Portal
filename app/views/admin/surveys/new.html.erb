@@ -1,8 +1,18 @@
-<main class="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
-  <header class="space-y-2">
-    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Create Survey</h1>
-    <p class="max-w-3xl text-sm text-slate-600">Configure a new survey with questions, tracks, and advisor visibility.</p>
-  </header>
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Survey admin</p>
+          <h1 class="c-page-title c-page-title--brand">Create Survey</h1>
+          <p class="c-page-subtitle">Configure a new survey with questions, tracks, and advisor visibility.</p>
+        </div>
+        <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
+      </header>
+    </section>
 
-  <%= render "form", survey: @survey %>
+    <section class="c-card u-stack u-stack--xl">
+      <%= render "form", survey: @survey %>
+    </section>
+  </div>
 </main>

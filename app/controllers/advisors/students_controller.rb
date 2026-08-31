@@ -1,7 +1,7 @@
 module Advisors
   class StudentsController < BaseController
     def index
-      redirect_to student_records_path
+      redirect_to survey_records_path
     end
 
     def show
@@ -15,8 +15,8 @@ module Advisors
       valid_keys = Student.tracks.keys # => ["residential", "executive"]
 
       unless incoming && valid_keys.include?(incoming)
-        redirect_back fallback_location: student_records_path,
-                      alert: "Unable to change track: the student's track is missing or cannot be determined."
+        redirect_back fallback_location: survey_records_path,
+                      alert: "We could not change the track because the student's current track is missing or cannot be determined."
         return
       end
 
@@ -24,7 +24,7 @@ module Advisors
         timestamp = begin
           I18n.l(Time.zone.now, format: :long)
         rescue I18n::MissingTranslationData
-          Time.zone.now.to_s(:long)
+          Time.zone.now.to_fs(:long)
         end
         redirect_to advisors_student_path(@student),
                     notice: %(Track changed to "#{@student.track.titleize}" at #{timestamp}.)
@@ -33,7 +33,7 @@ module Advisors
                       alert: @student.errors.full_messages.to_sentence
       end
     rescue ActiveRecord::RecordNotFound
-      redirect_back fallback_location: student_records_path,
+      redirect_back fallback_location: survey_records_path,
                     alert: "Student not found."
     end
 

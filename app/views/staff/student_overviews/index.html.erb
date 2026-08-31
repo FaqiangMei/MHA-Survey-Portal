@@ -1,0 +1,287 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-container c-container--wide">
+    <div class="c-page u-stack u-stack--xl">
+      <section class="c-card c-card--brand">
+        <header class="c-page-header">
+          <div>
+            <p class="c-eyebrow">Student overview</p>
+            <h1 class="c-page-title c-page-title--brand">Student Overview</h1>
+            <p class="c-page-subtitle">
+              <%= current_user&.role_admin? ? "Browse all students with survey, competency, and record context." : "Browse your advisees with survey, competency, and record context." %>
+            </p>
+          </div>
+
+          <div class="u-actions">
+            <%= link_to "Back", current_user&.role_admin? ? admin_dashboard_path : advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Survey Records", survey_records_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Download Excel",
+                        export_excel_student_overviews_path(request.query_parameters),
+                        class: button_classes(:secondary),
+                        data: {
+                          turbo: false,
+                          turbo_confirm: ferpa_export_confirmation("student-level overview data")
+                        } %>
+          </div>
+        </header>
+      </section>
+
+      <section class="c-card c-card--spacious">
+        <%= form_with url: student_overviews_path, method: :get, local: true, class: "u-stack u-stack--md" do %>
+          <div class="c-filter-bar">
+            <div class="c-filter-bar__field c-filter-bar__field--wide">
+              <%= label_tag :q, "Search students", class: "c-label c-label--eyebrow" %>
+              <%= text_field_tag :q, @filters[:q], placeholder: "Name, email, UIN, or student ID", class: "c-input c-search-input u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :track, "Track", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :track,
+                    options_for_select([["All tracks", ""]] + @track_options.map { |track| [track, track] }, @filters[:track]),
+                    class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :program_year, "Program year", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :program_year,
+                    options_for_select([["All years", ""]] + @program_year_options.map { |year| [year, year] }, @filters[:program_year]),
+                    class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :student_status, "Student status", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :student_status,
+                    options_for_select(@student_lifecycle_filter_options, @filters[:student_status]),
+                    class: "c-select u-w-full" %>
+            </div>
+
+            <div class="u-actions u-actions--start">
+              <%= button_tag "Apply", type: :submit, class: button_classes(:primary) %>
+              <%= link_to "Clear", student_overviews_path, class: button_classes(:ghost), data: { turbo: false } %>
+            </div>
+          </div>
+        <% end %>
+      </section>
+
+      <% if @student_profile_warnings.present? %>
+        <div class="c-callout c-callout--warning u-stack u-stack--sm" role="alert">
+          <div>
+            <div class="c-callout__title">Student profile data needs attention</div>
+            <p class="c-help">These current students are missing fields used for advisor assignment, reports, grade imports, and notifications.</p>
+          </div>
+
+          <div class="u-grid u-grid--dense" style="--u-grid-min: 220px">
+            <% @student_profile_warnings.each do |warning| %>
+              <div class="u-stack u-stack--xs">
+                <div class="u-actions u-actions--start u-gap-xs">
+                  <span class="c-pill c-pill--muted"><%= pluralize(warning[:count], "student") %></span>
+                  <span class="c-strong"><%= warning[:label] %></span>
+                </div>
+                <p class="c-help"><%= warning[:students].join(", ") %><%= warning[:count] > warning[:students].size ? ", and #{warning[:count] - warning[:students].size} more" : "" %></p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <section class="c-card c-card--spacious u-stack u-stack--lg" data-controller="tabs" data-tabs-default-id-value="student-overview-students">
+        <header class="c-panel-header">
+          <div>
+            <p class="c-eyebrow">Overview workspace</p>
+            <h2 class="c-section-title c-heading-inline">Survey Records and Stats</h2>
+          </div>
+          <div class="c-tabs" role="tablist" aria-label="Student overview sections">
+            <button type="button"
+                    id="student-overview-students-tab"
+                    class="c-tab is-active"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="student-overview-students-panel"
+                    data-tabs-target="button"
+                    data-tab-id="student-overview-students"
+                    data-action="tabs#activate">
+              Students
+            </button>
+            <button type="button"
+                    id="student-overview-stats-tab"
+                    class="c-tab"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="student-overview-stats-panel"
+                    data-tabs-target="button"
+                    data-tab-id="student-overview-stats"
+                    data-action="tabs#activate">
+              Stats
+            </button>
+          </div>
+        </header>
+
+        <div id="student-overview-students-panel"
+             class="c-tab-panel u-stack u-stack--lg"
+             role="tabpanel"
+             aria-labelledby="student-overview-students-tab"
+             data-tabs-target="panel"
+             data-tab-id="student-overview-students">
+          <header class="c-panel-header">
+            <div>
+              <p class="c-eyebrow">Student list</p>
+              <h3 class="c-section-title c-heading-inline"><%= pluralize(@student_rows.size, "student") %></h3>
+            </div>
+          </header>
+
+          <% if @student_rows.present? %>
+            <% current_rows = @student_rows.select { |row| row[:student]&.current_record? } %>
+            <% historical_rows = @student_rows.reject { |row| row[:student]&.current_record? } %>
+            <% [["Current Students", current_rows], ["Graduated / Inactive Students", historical_rows]].each do |group_label, group_rows| %>
+              <% next if group_rows.blank? %>
+              <section class="u-stack u-stack--sm">
+                <header class="c-toolbar__row u-justify-between">
+                  <h4 class="c-h3 c-heading-inline"><%= group_label %></h4>
+                  <span class="c-muted-meta"><%= pluralize(group_rows.size, "student") %></span>
+                </header>
+                <div class="c-table-wrapper">
+                  <table class="c-table">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Track</th>
+                        <th>Year</th>
+                        <th>Advisor</th>
+                        <th>Surveys</th>
+                        <th>Competencies</th>
+                        <th class="u-text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% group_rows.each do |row| %>
+                        <% student = row[:student] %>
+                        <tr>
+                          <td>
+                            <div class="u-stack u-stack--xs">
+                              <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
+                              <% if student.user&.email.present? %>
+                                <span class="c-table__meta"><%= student.user.email %></span>
+                              <% end %>
+                              <% if student.uin.present? %>
+                                <span class="c-table__meta">UIN: <%= student.uin %></span>
+                              <% else %>
+                                <%= status_badge("Missing UIN", value: "unassigned") %>
+                              <% end %>
+                            </div>
+                            <% unless student.current_record? %>
+                              <span class="c-pill c-pill--muted"><%= student.lifecycle_label %></span>
+                            <% end %>
+                          </td>
+                          <td>
+                            <% if student.track.present? %>
+                              <span><%= student.track %></span>
+                            <% else %>
+                              <%= status_badge("Missing track", value: "unassigned") %>
+                            <% end %>
+                          </td>
+                          <td>
+                            <% if student.program_year.present? %>
+                              <%= student.program_year %>
+                            <% else %>
+                              <%= status_badge("Missing year", value: "unassigned") %>
+                            <% end %>
+                          </td>
+                          <td>
+                            <% if student.advisor.present? %>
+                              <%= student.advisor.display_name %>
+                            <% else %>
+                              <%= status_badge("Unassigned advisor", value: "unassigned") %>
+                            <% end %>
+                          </td>
+                          <td>
+                            <span class="c-table__title"><%= row[:completed_count] %> / <%= row[:assigned_count] %></span>
+                            <span class="c-table__meta"><%= row[:completion_rate].present? ? "#{row[:completion_rate]}% complete" : "No assigned surveys" %></span>
+                          </td>
+                          <td>
+                            <% attainment = row[:competency_attainment] %>
+                            <span class="c-table__title"><%= attainment[:met_count] %> / <%= attainment[:total_count] %></span>
+                            <span class="c-table__meta">meeting target</span>
+                          </td>
+                          <td class="u-text-right">
+                            <%= link_to "Open overview", student_overview_path(student), class: button_classes(:primary), data: { turbo: false } %>
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            <% end %>
+          <% else %>
+            <div class="c-empty-state">
+              <p class="c-empty-state__body">No students match the current filters.</p>
+            </div>
+          <% end %>
+        </div>
+
+        <div id="student-overview-stats-panel"
+             class="c-tab-panel u-stack u-stack--lg hidden"
+             role="tabpanel"
+             aria-labelledby="student-overview-stats-tab"
+             data-tabs-target="panel"
+             data-tab-id="student-overview-stats"
+             hidden>
+          <header class="c-panel-header">
+            <div>
+              <p class="c-eyebrow">Competency heatmap</p>
+              <h3 class="c-section-title c-heading-inline">Students by Domain</h3>
+              <p class="c-help">Each cell uses the best available domain average, preferring course-derived scores and falling back to self-assessment.</p>
+            </div>
+          </header>
+
+          <% if @heatmap_rows.present? %>
+            <div class="c-table-wrapper">
+              <table class="c-table c-table--sm c-table--sticky-header">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Year</th>
+                    <% @heatmap_rows.first[:domains].each do |domain| %>
+                      <th><%= domain[:name] %></th>
+                    <% end %>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @heatmap_rows.each do |row| %>
+                    <tr>
+                      <td>
+                        <%= link_to row[:student_name], student_overview_path(row[:student_id]), class: "c-table__title" %>
+                        <% if row[:track].present? %>
+                          <span class="c-table__meta"><%= row[:track] %></span>
+                        <% else %>
+                          <%= status_badge("Missing track", value: "unassigned") %>
+                        <% end %>
+                      </td>
+                      <td>
+                        <% if row[:program_year].present? %>
+                          <%= row[:program_year] %>
+                        <% else %>
+                          <%= status_badge("Missing year", value: "unassigned") %>
+                        <% end %>
+                      </td>
+                      <% row[:domains].each do |domain| %>
+                        <td>
+                          <span class="c-heatmap-cell c-heatmap-cell--<%= domain[:status] %>">
+                            <%= domain[:average].presence || "-" %>
+                          </span>
+                        </td>
+                      <% end %>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="c-empty-state">
+              <p class="c-empty-state__body">No heatmap data is available for these students yet.</p>
+            </div>
+          <% end %>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>

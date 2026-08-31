@@ -5,6 +5,8 @@
 class Admin::BaseController < ApplicationController
   before_action :require_admin!
 
+  helper ApplicationHelper
+
   helper_method :current_admin_profile
 
   private
@@ -15,7 +17,7 @@ class Admin::BaseController < ApplicationController
   def require_admin!
     return if current_user&.role_admin?
 
-    redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
+    redirect_to dashboard_path, alert: ADMIN_ONLY_MESSAGE
   end
 
   # @return [Admin, nil] the admin profile for the logged-in user, if present.

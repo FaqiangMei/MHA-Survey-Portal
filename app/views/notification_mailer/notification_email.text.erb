@@ -1,0 +1,8 @@
+<%= @notification.title %>
+
+<%= @notification.display_message %>
+
+<% if @target_url.present? %>
+View in TAMU Competency Assessment Tracking:
+<%= @target_url %>
+<% end %>

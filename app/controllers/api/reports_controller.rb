@@ -20,8 +20,12 @@ module Api
       render json: aggregator.competency_detail
     end
 
-    def course_summary
-      render json: aggregator.course_summary
+    def track_summary
+      render json: aggregator.track_summary
+    end
+
+    def employment_summary
+      render json: aggregator.employment_summary
     end
 
     private
@@ -37,7 +41,20 @@ module Api
     end
 
     def reports_params
-      params.permit(:track, :semester, :survey_id, :category_id, :student_id, :advisor_id, :competency)
+      params.permit(
+        :track,
+        :semester,
+        :survey_id,
+        :category_id,
+        :student_id,
+        :advisor_id,
+        :competency,
+        :domain,
+        :q,
+        :program_year,
+        :student_status,
+        competencies: []
+      )
     end
   end
 end

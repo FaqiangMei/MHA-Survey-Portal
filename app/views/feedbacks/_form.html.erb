@@ -1,7 +1,7 @@
 <%= form_with(model: feedback) do |form| %>
   <% if feedback.errors.any? %>
     <div style="color: red">
-      <h2><%= pluralize(feedback.errors.count, "error") %> prohibited this feedback from being saved:</h2>
+      <h2 class="c-panel-title"><%= pluralize(feedback.errors.count, "error") %> prohibited this feedback from being saved:</h2>
 
       <ul>
         <% feedback.errors.each do |error| %>
@@ -20,20 +20,29 @@
 
   <div>
     <%= form.label :category_id, style: "display: block" %>
-    <%= form.collection_select :category_id, Category.order(:name), :id, :name, include_blank: true %>
+    <%= form.collection_select :category_id, Category.order(:name), :id, :name, { include_blank: true }, { class: "c-select u-w-full" } %>
+  </div>
+
+  <% if feedback.survey&.advisor_numeric_feedback_enabled? %>
+    <div>
+      <%= form.label :average_score, "Proficiency", style: "display: block" %>
+      <%= render "shared/proficiency_select",
+                 id: "#{form.object_name}_average_score",
+                 name: "#{form.object_name}[average_score]",
+                 selected: normalize_proficiency_value(feedback.average_score) %>
+    </div>
+  <% end %>
+
+  <div data-controller="character-counter">
+    <%= form.label :comments, "Feedback (optional)", style: "display: block" %>
+    <%= form.text_area :comments,
+                       rows: 3,
+                       maxlength: Feedback::COMMENTS_MAX_LENGTH,
+                       data: { "character-counter-target": "input", action: "input->character-counter#input" } %>
+    <div style="margin-top: 4px; font-size: 12px; color: #64748b" data-character-counter-target="counter"><%= feedback.comments.to_s.length %>/<%= Feedback::COMMENTS_MAX_LENGTH %> characters</div>
   </div>
 
   <div>
-    <%= form.label :average_score, "Score (1-5)", style: "display: block" %>
-    <%= form.number_field :average_score, step: 1, min: 1, max: 5 %>
-  </div>
-
-  <div>
-    <%= form.label :comments, style: "display: block" %>
-    <%= form.text_field :comments %>
-  </div>
-
-  <div>
-    <%= form.submit "Save" %>
+    <%= form.submit "Submit" %>
   </div>
 <% end %>

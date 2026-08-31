@@ -1,93 +1,210 @@
-<main class="flex justify-center px-4 py-8">
-  <div class="w-full max-w-5xl space-y-6">
-    <header class="space-y-2">
-      <h1 class="text-3xl font-semibold text-[#500000]">Student Records</h1>
-      <% intro_text = if current_user&.respond_to?(:role_admin?) && current_user.role_admin?
-        "Browse survey progress across all students."
-      elsif current_user&.respond_to?(:role_advisor?) && current_user.role_advisor?
-        "Browse survey progress by semester for the students you advise."
-      else
-        "Browse survey progress by semester."
-      end %>
-      <p class="text-sm text-slate-600"><%= intro_text %></p>
+<main class="c-main c-main--dashboard">
+  <div class="c-container c-container--wide">
+    <div class="c-page">
+    <section class="c-card c-card--brand">
+    <header class="c-page-header">
+      <div>
+        <p class="c-eyebrow">Survey reporting</p>
+        <h1 class="c-page-title c-page-title--brand">Survey Records</h1>
+        <% intro_text = if current_user&.respond_to?(:role_admin?) && current_user.role_admin?
+          "Track survey assignment, completion, and advisor feedback across all students."
+        elsif current_user&.respond_to?(:role_advisor?) && current_user.role_advisor?
+          "Track survey assignment, completion, and advisor feedback for the students you advise."
+        else
+          "Track survey assignment, completion, and advisor feedback by semester."
+        end %>
+        <p class="c-page-subtitle"><%= intro_text %></p>
+      </div>
+      <div class="u-actions">
+        <% if defined?(advisor_dashboard_path) && current_user&.respond_to?(:role_advisor?) && current_user.role_advisor? %>
+          <%= link_to "Back",
+                      advisor_dashboard_path,
+                      class: button_classes(:secondary),
+                      data: { turbo: false } %>
+        <% elsif defined?(admin_dashboard_path) && current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
+          <%= link_to "Back",
+                      admin_dashboard_path,
+                      class: button_classes(:secondary),
+                      data: { turbo: false } %>
+        <% else %>
+          <%= link_to "Back",
+                      dashboard_path,
+                      class: button_classes(:secondary),
+                      data: { turbo: false } %>
+        <% end %>
+        <%= link_to "Export Excel",
+                    export_survey_records_excel_path(request.query_parameters),
+                    class: button_classes(:secondary),
+                    data: {
+                      turbo: false,
+                      turbo_confirm: ferpa_export_confirmation("student-level records")
+                    } %>
+      </div>
     </header>
+    </section>
+
+    <section class="c-card c-card--spacious u-stack u-stack--xl">
+    <div class="c-callout u-w-full">
+        <%= form_with url: survey_records_path, method: :get, local: true, class: "u-w-full u-stack u-stack--md" do %>
+          <div class="c-filter-bar">
+            <div class="c-filter-bar__field c-filter-bar__field--wide">
+              <%= label_tag :survey_id, "Survey", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :survey_id,
+                             options_for_select([["All surveys", ""]] + Array(@survey_filter_options), @survey_filter_id),
+                             class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :semester, "Semester", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :semester,
+                             options_for_select(
+                               [["All semesters", ""]] + Array(@semester_filter_options).map { |name| [name, name] },
+                               @semester_filter
+                             ),
+                             class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :status, "Status", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :status,
+                             options_for_select(
+                                [["All", ""], ["Completed", "completed"], ["Assigned", "assigned"]],
+                               @status_filter
+                             ),
+                             class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :track, "Track", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :track,
+                             options_for_select(
+                               [["All tracks", ""]] + Array(@track_filter_options).map { |track| [track, track] },
+                               @track_filter
+                             ),
+                             class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :program_year, "Program year", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :program_year,
+                             options_for_select(
+                               [["All years", ""]] + Array(@program_year_options).map { |year| [year, year] },
+                               @program_year_filter
+                             ),
+                             class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :student_status, "Student status", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :student_status,
+                             options_for_select(Array(@student_lifecycle_filter_options), @student_lifecycle_filter),
+                             class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field">
+              <%= label_tag :sort, "Sort", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :sort,
+                             options_for_select(
+                               [
+                                 ["Name (A–Z)", "name_asc"],
+                                 ["Name (Z–A)", "name_desc"],
+                                 ["Status (Completed first)", "status"],
+                                 ["Closes (soonest)", "due_asc"],
+                                 ["Closes (latest)", "due_desc"],
+                                 ["Completion (most recent)", "completed_desc"],
+                                 ["Track (A–Z)", "track"],
+                                 ["Program year (ascending)", "program_year_asc"],
+                                 ["Program year (descending)", "program_year_desc"]
+                               ],
+                               @sort_key
+                             ),
+                             class: "c-select u-w-full" %>
+            </div>
+          </div>
+
+          <div class="c-filter-bar">
+            <div class="c-filter-bar__field c-filter-bar__field--wide">
+              <%= label_tag :q, "Search students", class: "c-label c-label--eyebrow" %>
+              <%= text_field_tag :q,
+                                 @search_query,
+                                 placeholder: "Search by name, email, or UIN",
+                                 class: "c-input c-search-input u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--wide">
+              <%= label_tag :survey_query, "Search surveys", class: "c-label c-label--eyebrow" %>
+              <%= text_field_tag :survey_query,
+                                  @survey_query,
+                                  placeholder: "Filter surveys by title",
+                                  class: "c-input c-search-input u-w-full" %>
+            </div>
+
+            <div class="u-actions u-actions--start">
+              <%= button_tag "Apply", type: :submit, class: button_classes(:primary) %>
+              <%= link_to "Clear", survey_records_path, class: button_classes(:ghost), data: { turbo: false } %>
+            </div>
+          </div>
+        <% end %>
+    </div>
 
     <% if @students.blank? %>
-      <div class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
-        <span class="text-4xl" aria-hidden="true">📭</span>
-        <p class="text-sm text-slate-600">No students were found for your account.</p>
+      <div class="c-empty-state c-card c-card--tight c-card--dashed">
+        <p class="c-empty-state__title" aria-hidden="true">No students</p>
+        <p class="c-empty-state__body">No students were found for your account.</p>
       </div>
     <% elsif @student_records.blank? %>
-      <div class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
-        <span class="text-4xl" aria-hidden="true">🗂️</span>
-        <p class="text-sm text-slate-600">No surveys have been scheduled yet for the selected students.</p>
+      <div class="c-empty-state c-card c-card--tight c-card--dashed">
+        <p class="c-empty-state__title" aria-hidden="true">No surveys</p>
+        <p class="c-empty-state__body">No surveys have been scheduled yet for the selected students.</p>
       </div>
     <% else %>
-      <div class="space-y-6">
+      <div class="u-stack u-stack--xl">
         <% @student_records.each do |semester_block| %>
-          <details class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" open>
-            <summary class="flex cursor-pointer items-center justify-between gap-3 bg-slate-100 px-6 py-4 text-left text-slate-800">
-              <span class="text-lg font-semibold"><%= semester_block[:semester] %></span>
-              <span class="text-sm text-slate-500"><%= pluralize(semester_block[:surveys].size, "survey") %></span>
+          <details class="c-surface u-overflow-hidden" open>
+            <summary class="c-disclosure-summary">
+              <span class="c-section-title"><%= semester_block[:semester] %></span>
+              <span class="c-muted"><%= pluralize(semester_block[:surveys].size, "survey") %></span>
             </summary>
 
-            <div class="space-y-4 px-6 py-5">
+            <div class="u-stack u-stack--lg c-panel-body">
               <% semester_block[:surveys].each do |survey_block| %>
                 <% survey = survey_block[:survey] %>
+                <% filtered_rows = survey_block[:rows] %>
 
-                <% survey_track_key =
-                     if survey.respond_to?(:track) && survey.track.present?
-                       survey.track.to_s.downcase
-                     else
-                       t = survey.title.to_s.downcase
-                       if t.include?("executive")
-                         "executive"
-                       elsif t.include?("residential")
-                         "residential"
-                       else
-                         nil
-                       end
-                     end %>
-
-                <% filtered_rows =
-                     if survey_track_key.present?
-                       survey_block[:rows].select do |r|
-                         r[:student].track.to_s.downcase == survey_track_key
-                       end
-                     else
-                       survey_block[:rows]
-                     end %>
-
-                <details class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50" open>
-                  <summary class="flex cursor-pointer flex-col gap-1 bg-slate-100 px-5 py-4 text-slate-700 sm:flex-row sm:items-center sm:justify-between">
-                    <span class="text-base font-semibold text-slate-800"><%= survey.title %></span>
-                    <span class="text-sm text-slate-500">Assigned <%= l(survey.created_at.to_date, format: :long) rescue survey.created_at.to_s(:long) %></span>
+                <details class="c-surface u-overflow-hidden u-bg-muted" open>
+                  <% survey_lifecycle = survey_lifecycle_label(survey, filtered_rows) %>
+                  <% due_dates = filtered_rows.filter_map { |row| row[:available_until] }.uniq.sort %>
+                  <% due_date_text = if due_dates.blank?
+                    "No due date"
+                  elsif due_dates.one?
+                    "Due #{l(due_dates.first.to_date, format: :long)}"
+                  else
+                    "Due dates vary"
+                  end %>
+                  <summary class="c-disclosure-summary c-disclosure-summary--compact c-disclosure-summary--stacked">
+                    <span class="u-actions u-actions--start">
+                      <span><%= survey.title %></span>
+                      <span class="<%= survey_lifecycle_badge_classes(survey_lifecycle) %>"><%= survey_lifecycle %></span>
+                    </span>
+                    <span class="c-muted">
+                      Assigned <%= l(survey.created_at.to_date, format: :long) rescue survey.created_at.to_s(:long) %>
+                      ·
+                      <%= due_date_text %>
+                    </span>
                   </summary>
 
-                  <div class="overflow-x-auto">
-                    <table class="mx-auto w-full divide-y divide-slate-200 text-sm">
-                      <thead class="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        <tr>
-                          <th scope="col" class="px-4 py-3">#</th>
-                          <th scope="col" class="px-4 py-3">Student</th>
-                          <th scope="col" class="px-4 py-3">Advisor</th>
-                          <th scope="col" class="px-4 py-3">Track</th>
-                          <th scope="col" class="px-4 py-3">Status</th>
-                          <th scope="col" class="px-4 py-3">Completion</th>
-                          <th scope="col" class="px-4 py-3">Feedback</th>
-                          <th scope="col" class="px-4 py-3 text-right">Survey</th>
-                        </tr>
-                      </thead>
-
-                      <tbody class="divide-y divide-slate-200 bg-white">
+                  <%= render TableComponent.new(
+                    headers: ["#", "Student", "Advisor", "Completion", "Feedback", "Advisor Feedback", "Actions"],
+                    right_align: [6]
+                  ) do %>
                         <% if filtered_rows.blank? %>
                           <% empty_track_message = if current_user&.respond_to?(:role_admin?) && current_user.role_admin?
-                            "No students currently in this track."
+                            "No survey records match this survey yet."
                           else
-                            "No students currently in this track are assigned to you."
+                            "No survey records for this survey are assigned to you."
                           end %>
                           <tr>
-                            <td colspan="7" class="px-4 py-6 text-center text-sm text-slate-500">
+                            <td colspan="7" class="u-text-center c-muted">
                               <%= empty_track_message %>
                             </td>
                           </tr>
@@ -96,102 +213,143 @@
                             <% student                 = row[:student] %>
                             <% advisor                 = row[:advisor] %>
                             <% status_text             = row[:status] %>
+                            <% assigned_at             = row[:assigned_at] %>
                             <% completion_date         = row[:completed_at] %>
+                            <% available_until         = row[:available_until] %>
+                            <% admin_updated_at         = row[:admin_updated_at] %>
                             <% survey_response         = row[:survey_response] %>
                             <% download_token          = row[:download_token] %>
                             <% feedback_entries        = Array(row[:feedbacks]) %>
                             <% has_feedback            = feedback_entries.any? %>
+                            <% feedback_status_label   = row[:feedback_status_label] %>
+                            <% feedback_status_ts      = row[:feedback_status_timestamp] %>
+                            <% feedback_status_text    = feedback_status_label.to_s %>
+                            <% feedback_status_name    = if feedback_status_text.start_with?("Draft")
+                              "Draft"
+                            elsif feedback_status_text.start_with?("Submitted")
+                              "Submitted"
+                            elsif feedback_status_text.start_with?("No Feedback")
+                              "No Feedback"
+                            else
+                              feedback_status_text.presence || "No Feedback"
+                            end %>
+                            <% survey_archived         = survey.respond_to?(:is_active?) && !survey.is_active? %>
                             <% has_completed          = status_text == "Completed" %>
-                            <% survey_label            = has_completed ? (has_feedback ? "Edit Feedback" : "Review") : nil %>
-                            <% survey_link_params      = { survey_id: survey.id, student_id: student.student_id } %>
-                            <% survey_link_params[:prefill] = true if has_feedback %>
+                            <% is_assigned           = status_text == "Assigned" %>
+                            <% is_unassigned         = status_text == "Unassigned" %>
+                            <% survey_label            = feedback_status_name == "Submitted" ? "Edit" : "Review" %>
+                            <% survey_link_params      = { survey_id: survey.id, student_id: student.student_id, prefill: true } %>
                             <% survey_link             = new_feedback_path(survey_link_params) %>
+                            <% review_only_link        = survey_response.present? ? survey_response_path(survey_response, return_to: request.fullpath) : nil %>
+                            <% admin_can_open          = current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
+                            <% advisor_can_open        = current_advisor_profile&.advisor_id.present? && student.advisor_id.present? && current_advisor_profile.advisor_id == student.advisor_id %>
+                            <% can_open                = admin_can_open || advisor_can_open %>
+                            <% show_feedback_action    = has_completed && survey_response.present? && can_open && !survey_archived %>
 
-                            <tr class="transition hover:bg-slate-50">
-                              <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#500000]"><%= idx + 1 %></td>
+                            <tr class="c-table-row">
+                              <td class="u-text-primary u-whitespace-nowrap"><%= idx + 1 %></td>
 
-                              <td class="min-w-[14rem] px-4 py-3 text-sm text-slate-700">
-                                <div class="font-semibold text-slate-900"><%= student.user&.name || "Unknown Student" %></div>
-                                <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                                  <% if student.user&.email.present? %><span>Email: <%= student.user.email %></span><% end %>
-                                  <% if student.uin.present? %><span>UIN: <%= student.uin %></span><% end %>
+                              <td class="u-min-w-md">
+                                <div class="c-table__title"><%= student.user&.name || "Unknown Student" %></div>
+                                <% graduation_year = if student.respond_to?(:has_attribute?) && student.has_attribute?(:class_of) && student[:class_of].present?
+                                  student[:class_of]
+                                else
+                                  student.program_year
+                                end %>
+                                <div class="c-table__meta u-stack u-stack--xs">
+                                  <% if student.uin.present? %><div><%= student.uin %></div><% end %>
+                                  <% if student.user&.email.present? %><div><%= student.user.email %></div><% end %>
+                                  <div><%= student.track.present? ? student.track.titleize : "Unknown" %></div>
+                                  <div><%= graduation_year.present? ? graduation_year : "—" %></div>
                                 </div>
                               </td>
 
-                              <td class="min-w-[12rem] px-4 py-3 text-sm text-slate-700">
+                              <td class="u-min-w-sm">
                                 <% if advisor.present? %>
-                                  <div class="font-semibold text-slate-900"><%= advisor.name %></div>
-                                  <% if advisor.email.present? %>
-                                    <div class="mt-1 text-xs text-slate-500"><%= advisor.email %></div>
+                                  <% advisor_uin = if advisor.respond_to?(:uin)
+                                    advisor.uin
+                                  elsif advisor.user&.student_profile.present?
+                                    advisor.user.student_profile.uin
+                                  end %>
+                                  <div class="c-table__title"><%= advisor.name %></div>
+                                  <div class="c-table__meta u-stack u-stack--xs">
+                                    <% if advisor_uin.present? %><div><%= advisor_uin %></div><% end %>
+                                    <% if advisor.email.present? %><div><%= advisor.email %></div><% end %>
+                                  </div>
+                                <% else %>
+                                  <%= status_badge("Unassigned") %>
+                                <% end %>
+                              </td>
+
+                              <td>
+                                <span class="<%= survey_status_badge_classes(status_text) %>"><%= status_text %></span>
+                                <% status_timestamp = if status_text == "Completed"
+                                  completion_date
+                                elsif status_text == "Assigned"
+                                  assigned_at
+                                end %>
+                                <% if status_timestamp.present? %>
+                                  <div class="c-table__meta"><%= l(status_timestamp, format: :long) %></div>
+                                <% end %>
+                              </td>
+
+                              <td>
+                                <% if feedback_status_label.present? %>
+                                  <div class="u-actions u-actions--start u-flex-nowrap">
+                                    <span class="<%= feedback_status_badge_classes(feedback_status_name) %>"><%= feedback_status_name %></span>
+                                  </div>
+                                  <% if feedback_status_ts.present? %>
+                                    <div class="c-table__meta"><%= l(feedback_status_ts, format: :long) %></div>
                                   <% end %>
                                 <% else %>
-                                  <div class="font-semibold text-rose-600">Unassigned</div>
+                                  <span class="c-muted">No Feedback</span>
                                 <% end %>
                               </td>
 
-                              <td class="px-4 py-3 text-sm text-slate-700">
-                                <% if student.track.present? %>
-                                  <div class="font-semibold text-slate-900"><%= student.track.titleize %></div>
-                                <% else %>
-                                  <div class="font-semibold text-slate-400">Track unknown</div>
+                              <td class="u-whitespace-nowrap">
+                                <% if show_feedback_action %>
+                                  <%= link_to survey_label,
+                                              survey_link,
+                                              class: "#{button_classes(:secondary)} u-whitespace-nowrap" %>
                                 <% end %>
                               </td>
 
-                              <td class="px-4 py-3 text-sm text-slate-700">
-                                <span class="<%= survey_status_badge_classes(status_text) %>"><%= status_text %></span>
-                              </td>
-
-                              <td class="px-4 py-3 text-sm text-slate-700">
-                                <% if completion_date.present? %>
-                                  <div class="font-semibold text-slate-900"><%= l(completion_date, format: :long) %></div>
-                                  <div class="mt-1 text-xs text-slate-500">Updated <%= time_ago_in_words(completion_date) %> ago</div>
-                                <% else %>
-                                  <span class="text-xs text-slate-500">Not yet completed</span>
-                                <% end %>
-                              </td>
-
-                              <td class="px-4 py-3 text-sm text-slate-700">
-                                <% if feedback_entries.present? %>
-                                  <span class="font-semibold text-slate-900">Has feedback</span>
-                                <% else %>
-                                  <span class="text-xs text-slate-500">No feedback</span>
-                                <% end %>
-                              </td>
-
-                              <td class="px-4 py-3 text-right text-sm">
-                                <% admin_can_open = current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
-                                <% advisor_can_open = current_advisor_profile&.advisor_id.present? && student.advisor_id.present? && current_advisor_profile.advisor_id == student.advisor_id %>
-                                <% can_open = admin_can_open || advisor_can_open %>
+                              <td class="u-text-right u-whitespace-nowrap">
                                 <% show_actions = has_completed && can_open %>
-                                <div class="flex justify-end gap-2 whitespace-nowrap">
-                                  <% if show_actions %>
-                                    <%= link_to survey_label,
-                                                survey_link,
-                                                class: [tailwind_button_classes(:secondary), "whitespace-nowrap"].join(" ") %>
-                                    <% if survey_response.present? %>
-                                      <%= link_to "Download PDF",
-                                                  download_survey_response_path(survey_response, token: download_token),
-                                                  class: [tailwind_button_classes(:primary), "whitespace-nowrap"].join(" "),
-                                                  target: "_blank", rel: "noopener noreferrer" %>
-                                    <% end %>
-                                  <% elsif has_completed %>
-                                    <span
-                                      class="<%= [tailwind_button_classes(:secondary), 'opacity-50 cursor-not-allowed pointer-events-none'].join(' ') %>"
-                                      aria-disabled="true"
-                                      title="Only the student's advisor or an admin can open this survey">
-                                      <%= survey_label || "Review" %>
-                                    </span>
-                                  <% else %>
-                                    <span class="text-xs text-slate-500">Awaiting student completion</span>
+                                <div class="u-actions u-flex-nowrap u-justify-end">
+                                  <% if show_actions && survey_archived && review_only_link.present? %>
+                                    <%= link_to "Review",
+                                                review_only_link,
+                                                class: "#{button_classes(:secondary)} u-whitespace-nowrap" %>
+                                  <% end %>
+
+                                  <% if show_actions && survey_response.present? %>
+                                    <%= link_to "Download PDF",
+                                                download_survey_response_path(survey_response, token: download_token),
+                                                class: button_classes(:primary),
+                                                target: "_blank",
+                                                rel: "noopener noreferrer",
+                                                data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student survey response data") } %>
+                                  <% end %>
+
+                                  <% if show_actions && survey_response.present? && admin_can_open %>
+                                    <%= link_to "Edit Response",
+                                                edit_survey_response_path(survey_response, return_to: request.fullpath),
+                                                class: button_classes(:secondary) %>
+
+                                    <%= button_to "Delete",
+                                                survey_response_path(survey_response),
+                                                method: :delete,
+                                                form_class: "u-inline-form",
+                                                class: button_classes(:danger),
+                                                data: { turbo_confirm: "Delete this student's survey responses? This action cannot be undone." } %>
                                   <% end %>
                                 </div>
                               </td>
                             </tr>
                           <% end %>
                         <% end %>
-                      </tbody>
-                    </table>
-                  </div>
+                  <% end %>
                 </details>
               <% end %>
             </div>
@@ -200,27 +358,7 @@
       </div>
     <% end %>
 
-    <div class="mt-6 flex justify-between">
-      <div>
-        <% if defined?(advisor_dashboard_path) && current_user&.respond_to?(:role_advisor?) && current_user.role_advisor? %>
-          <%= link_to "← Back",
-                      advisor_dashboard_path,
-                      class: "inline-flex items-center rounded-lg bg-slate-200 px-4 py-2 text-slate-800 hover:bg-slate-300",
-                      data: { turbo: false } %>
-        <% elsif defined?(admin_dashboard_path) && current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
-          <%= link_to "← Back",
-                      admin_dashboard_path,
-                      class: "inline-flex items-center rounded-lg bg-slate-200 px-4 py-2 text-slate-800 hover:bg-slate-300",
-                      data: { turbo: false } %>
-        <% else %>
-          <%= link_to "← Back",
-                      dashboard_path,
-                      class: "inline-flex items-center rounded-lg bg-slate-200 px-4 py-2 text-slate-800 hover:bg-slate-300",
-                      data: { turbo: false } %>
-        <% end %>
-      </div>
-
-      
+    </section>
     </div>
   </div>
 </main>

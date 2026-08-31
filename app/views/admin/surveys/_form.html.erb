@@ -1,16 +1,23 @@
 <% track_options = (@available_tracks + survey.track_list).uniq.compact.sort %>
-<% input_classes = "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" %>
-<% textarea_classes = "#{input_classes} min-h-[5rem]" %>
-<% checkbox_classes = "h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" %>
+<% input_classes = "c-input" %>
+<% textarea_classes = "#{input_classes} c-textarea" %>
+<% checkbox_classes = "c-choice" %>
 
 <%= form_with(model: [:admin, survey],
               local: true,
-              class: "space-y-10",
-              data: { controller: "survey-autosave", "survey-autosave-debounce-value": 4000 }) do |form| %>
+              class: "survey-form u-w-full u-stack u-stack--xl",
+              data: {
+                controller: "survey-tabs modal-confirm",
+                action: "submit->modal-confirm#submit",
+                "modal-confirm-title-value": survey.persisted? ? "Save survey changes?" : "Create survey?",
+                "modal-confirm-message-value": survey.persisted? ? "Review your changes before updating this survey." : "Review the setup before creating this survey.",
+                "modal-confirm-confirm-label-value": survey.persisted? ? "Save changes" : "Create survey",
+                "modal-confirm-cancel-label-value": "Go back to editing"
+              }) do |form| %>
   <% if survey.errors.any? %>
-    <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-      <h2 class="mb-2 text-base font-semibold"><%= pluralize(survey.errors.count, "error") %> prevented this survey from being saved:</h2>
-      <ul class="list-disc space-y-1 pl-5">
+    <div class="c-callout c-callout--danger">
+      <h2 class="c-panel-title"><%= pluralize(survey.errors.count, "error") %> prevented this survey from being saved:</h2>
+      <ul>
         <% survey.errors.each do |error| %>
           <li><%= error.full_message %></li>
         <% end %>
@@ -18,160 +25,67 @@
     </div>
   <% end %>
 
-  <div class="flex justify-end text-xs text-slate-500" aria-live="polite">
-    <span data-survey-autosave-target="status">All changes saved</span>
-  </div>
-
-  <section class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold text-slate-900">Survey basics</h2>
-      <p class="text-sm text-slate-600">Provide a clear title, semester, and description for advisors.</p>
-    </header>
-
-    <div class="grid gap-6 md:grid-cols-2">
-      <div class="space-y-2">
-        <%= form.label :title, "Survey title", class: "block text-sm font-medium text-slate-700" %>
-        <%= form.text_field :title, required: true, class: input_classes, placeholder: "Capstone Competency Survey" %>
+  <header class="c-card c-card--brand">
+    <div class="c-page-header">
+      <div class="u-stack u-stack--md">
+        <h2 class="c-section-title">Survey Setup</h2>
+        <p class="c-page-subtitle">This builder mirrors the student survey layout. Use the sidebar to add and navigate sections, categories, and questions.</p>
       </div>
 
-      <div class="space-y-2">
-        <%= form.label :semester, "Semester", class: "block text-sm font-medium text-slate-700" %>
-        <% if @program_semester_options.present? %>
-          <%= form.select :semester,
-                          options_for_select(@program_semester_options, survey.semester.presence || @program_semester_options.first),
-                          { include_blank: "Select semester" },
-                          class: input_classes %>
-          <p class="text-xs text-slate-500">Manage semesters from the Survey Builder page.</p>
-        <% else %>
-          <%= form.text_field :semester, required: true, class: input_classes, placeholder: "Fall 2025" %>
-          <p class="text-xs text-amber-600">Add program semesters from the admin panel to unlock the dropdown selector.</p>
+      <div class="c-muted-meta" aria-live="polite">
+        <span>Autosave disabled</span>
+      </div>
+    </div>
+  </header>
+
+  <%= render "admin/surveys/survey_tabs" %>
+
+  <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" data-survey-tabs-target="panel" data-tab-panel="settings" aria-hidden="false" class="u-stack u-stack--xl">
+    <%= render "admin/surveys/survey_settings_form",
+               form: form,
+               survey: survey,
+               track_options: track_options,
+               input_classes: input_classes,
+               textarea_classes: textarea_classes,
+               checkbox_classes: checkbox_classes %>
+
+    <div class="u-sticky-action-bar">
+      <div class="c-form-actions u-actions">
+        <%= link_to "Cancel", admin_surveys_path, class: button_classes(:secondary) %>
+        <% if survey.persisted? %>
+          <%= button_tag "Change Deadline for Everyone",
+                         type: "submit",
+                         name: "force_deadline_for_everyone",
+                         value: "1",
+                         data: { turbo_confirm: "Clear all individual assignment deadlines? All students, including those with completed responses, will follow the survey due date." },
+                         class: button_classes(:secondary) %>
         <% end %>
+        <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>
       </div>
+    </div>
+  </section>
 
-      <div class="md:col-span-2 space-y-2">
-        <%= form.label :description, "Summary", class: "block text-sm font-medium text-slate-700" %>
-        <%= form.text_area :description, class: textarea_classes, placeholder: "Explain where this survey fits in the advising process." %>
-      </div>
+  <section id="panel-builder" role="tabpanel" aria-labelledby="tab-builder" data-survey-tabs-target="panel" data-tab-panel="builder" aria-hidden="true" class="hidden">
+    <%= render "admin/surveys/survey_builder_workspace",
+               form: form,
+               survey: survey,
+               input_classes: input_classes,
+               textarea_classes: textarea_classes,
+               checkbox_classes: checkbox_classes %>
+  </section>
 
-      <div class="md:col-span-2 flex items-start gap-3">
-        <%= form.check_box :is_active, class: checkbox_classes %>
-        <div class="space-y-1 text-sm">
-          <span class="font-medium text-slate-700">Survey is active</span>
-          <p class="text-slate-500">Inactive surveys stay hidden from advisors until you reactivate them.</p>
+  <section id="panel-legend" role="tabpanel" aria-labelledby="tab-legend" data-survey-tabs-target="panel" data-tab-panel="legend" aria-hidden="true" class="hidden u-stack u-stack--xl">
+    <%= render "admin/surveys/survey_legend_form",
+               form: form,
+               survey: survey %>
+
+    <div class="u-sticky-action-bar">
+      <div class="c-toolbar__row u-justify-end u-w-full">
+        <div class="u-actions">
+          <%= link_to "Cancel", admin_surveys_path, class: button_classes(:secondary) %>
+          <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>
         </div>
       </div>
     </div>
   </section>
-
-  <section class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold text-slate-900">Track assignments</h2>
-      <p class="text-sm text-slate-600">Choose which program track should see this survey.</p>
-    </header>
-
-    <div class="space-y-2">
-      <label for="survey-track-list" class="block text-sm font-medium text-slate-700">Select track</label>
-      <%= hidden_field_tag "survey[track_list][]", "" %>
-      <% track_dropdown_options = [["Select a track", ""]] + track_options.map { |track| [track, track] } %>
-      <%= select_tag "survey[track_list][]",
-                     options_for_select(track_dropdown_options, survey.track_list.first),
-                     id: "survey-track-list",
-                     class: input_classes %>
-      <p class="text-xs text-slate-500">Leave the dropdown blank to keep the survey hidden from all tracks.</p>
-    </div>
-  </section>
-
-  <% if survey.new_record? && survey.sections.empty? %>
-    <% survey.sections.build(title: "", description: "", position: (survey.sections.map(&:position).compact.max || -1) + 1) %>
-  <% end %>
-
-  <% survey.sections.each do |section_record| %>
-    <% next unless section_record.respond_to?(:form_uid=) %>
-    <% if section_record.form_uid.blank? %>
-      <% section_record.form_uid = section_record.id.present? ? "section-#{section_record.id}" : "section-temp-#{SecureRandom.hex(6)}" %>
-    <% end %>
-  <% end %>
-
-  <% section_select_options = [["No section", ""]] + survey.sections.map { |section_record| [section_record.title.presence || "Untitled section", section_record.form_uid] } %>
-
-  <section class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-controller="section-fields">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold text-slate-900">Sections</h2>
-      <p class="text-sm text-slate-600">Add optional headers that group categories. Use the display order field to control their sequence.</p>
-    </header>
-
-    <div class="space-y-4" data-section-fields-target="container">
-      <%= form.fields_for :sections do |section_fields| %>
-        <%= render "admin/surveys/section_fields",
-                   section_fields: section_fields,
-                   input_classes: input_classes,
-                   textarea_classes: textarea_classes %>
-      <% end %>
-    </div>
-
-    <% new_section = survey.sections.build(title: "", description: "", position: (survey.sections.map(&:position).compact.max || -1) + 1) %>
-    <% new_section.form_uid ||= "NEW_SECTION_UID" %>
-    <% section_template = capture do %>
-      <%= form.fields_for :sections, new_section, child_index: "NEW_SECTION" do |section_fields| %>
-        <%= render "admin/surveys/section_fields",
-                   section_fields: section_fields,
-                   input_classes: input_classes,
-                   textarea_classes: textarea_classes %>
-      <% end %>
-    <% end %>
-    <% survey.sections.target.delete(new_section) %>
-
-    <template data-section-fields-target="template"><%= section_template %></template>
-
-    <button type="button"
-            class="rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400"
-            data-action="section-fields#add">
-      + Add section
-    </button>
-  </section>
-
-  <section class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-controller="category-fields">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold text-slate-900">Categories &amp; questions</h2>
-      <p class="text-sm text-slate-600">Each category should contain the questions shown together. Assign categories to sections using the dropdown below and control order with the number fields.</p>
-    </header>
-
-    <div class="space-y-6" data-category-fields-target="container">
-      <%= form.fields_for :categories do |category_fields| %>
-        <%= render "admin/surveys/category_fields",
-                   category_fields: category_fields,
-                   input_classes: input_classes,
-                   textarea_classes: textarea_classes,
-                   checkbox_classes: checkbox_classes,
-                   section_options: section_select_options %>
-      <% end %>
-    </div>
-
-    <% new_category = survey.categories.build(name: "", description: "") %>
-    <% new_category.questions.build(question_text: "", question_order: 1) if new_category.questions.empty? %>
-    <% category_template = capture do %>
-      <%= form.fields_for :categories, new_category, child_index: "NEW_CATEGORY" do |category_fields| %>
-        <%= render "admin/surveys/category_fields",
-                   category_fields: category_fields,
-                   input_classes: input_classes,
-                   textarea_classes: textarea_classes,
-                   checkbox_classes: checkbox_classes,
-                   section_options: section_select_options %>
-      <% end %>
-    <% end %>
-    <% survey.categories.target.delete(new_category) %>
-
-    <template data-category-fields-target="template"><%= category_template %></template>
-
-    <button type="button"
-            class="rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400"
-            data-action="category-fields#add">
-      + Add another category
-    </button>
-  </section>
-
-  <div class="flex flex-wrap items-center gap-3">
-    <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: tailwind_button_classes(:primary)) %>
-    <%= link_to "Cancel", admin_surveys_path, class: tailwind_button_classes(:secondary) %>
-  </div>
 <% end %>

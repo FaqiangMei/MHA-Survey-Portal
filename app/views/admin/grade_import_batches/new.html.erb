@@ -1,0 +1,152 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="u-stack u-stack--lg">
+      <header class="c-card c-card--brand c-page-header">
+        <div>
+          <p class="c-eyebrow">Faculty imports</p>
+          <h1 class="c-page-title c-page-title--brand">New Grade Import Batch</h1>
+          <p class="c-page-subtitle">Upload workbooks and preview matches before committing.</p>
+        </div>
+        <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
+      </header>
+
+      <div class="c-two-column-layout">
+        <section class="c-card u-stack u-stack--md">
+          <div>
+            <h2 class="c-section-title c-heading-inline">Upload & Preview</h2>
+          </div>
+
+          <%= form_with url: admin_grade_import_batches_path, method: :post, local: true, multipart: true, class: "u-stack u-stack--md" do %>
+            <div class="u-grid" style="--u-grid-min: 320px">
+              <div class="c-field">
+                <%= label_tag :program_semester_id, "Program semester", class: "c-label" %>
+                <%= select_tag :program_semester_id,
+                      options_from_collection_for_select(ProgramSemester.ordered, :id, :name, ProgramSemester.current&.id),
+                      include_blank: "Select semester",
+                      required: true,
+                      class: "c-input" %>
+                <small class="c-help">Required. Course sections are semester-specific and are used for student competency views and reports.</small>
+              </div>
+
+              <div class="c-field">
+                <%= label_tag "files[]", "Upload files (Excel or CSV)", class: "c-label" %>
+                <%= file_field_tag "files[]", multiple: true, accept: ".xlsx,.xlsm,.csv", class: "c-input" %>
+                <small class="c-help">Select one or more files.</small>
+              </div>
+
+              <div class="c-field">
+                <%= label_tag "folder_files[]", "Or upload a folder", class: "c-label" %>
+                <%= file_field_tag "folder_files[]", multiple: true, webkitdirectory: true, directory: true, class: "c-input" %>
+                <small class="c-help">One workbook per course.</small>
+              </div>
+            </div>
+
+            <div class="c-field">
+              <%= label_tag :import_notes, "Import notes", class: "c-label" %>
+              <%= text_area_tag :import_notes,
+                    nil,
+                    rows: 3,
+                    class: "c-input",
+                    placeholder: "Example: Canvas export from PHPM 631, downloaded by Dr. Smith after final grades posted." %>
+              <small class="c-help">Visible on the batch record so reviewers know where the file came from.</small>
+            </div>
+
+            <div class="u-border-top u-pt-lg">
+              <label class="c-toggle u-cursor-pointer">
+                <%= check_box_tag :dry_run, "1", true, class: "c-toggle__input" %>
+                <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+                <span class="u-stack u-stack--xs">
+                  <span class="c-toggle__label u-block">Preview first</span>
+                  <span class="c-help">Review matches and derived ratings before committing.</span>
+                </span>
+              </label>
+            </div>
+
+            <div class="c-form-actions u-actions u-actions--start">
+              <%= submit_tag "Run Import", class: button_classes(:primary) %>
+            </div>
+          <% end %>
+        </section>
+
+        <aside class="u-stack u-stack--sm">
+          <div class="c-card c-card--tight c-card--muted u-stack u-stack--xs">
+            <p class="c-table__title">Upload options</p>
+            <ul class="c-help u-stack u-stack--xs">
+              <li><strong>Canvas grades:</strong> Direct export with mapping sheet</li>
+              <li><strong>Canvas competencies:</strong> Direct competency export</li>
+            </ul>
+          </div>
+
+          <div class="c-card c-card--tight u-stack u-stack--xs">
+            <p class="c-table__title">Template files</p>
+            <div class="u-stack u-stack--sm">
+              <%= link_to "Canvas grade template",
+                          "/grade-import-examples/Example%20Canvas%20Grade%20Export.xlsx",
+                          class: button_classes(:secondary),
+                          data: { turbo: false },
+                          download: true %>
+              <%= link_to "Canvas competency template",
+                          "/grade-import-examples/Example%20Canvas%20Competency%20Export.csv",
+                          class: button_classes(:secondary),
+                          data: { turbo: false },
+                          download: true %>
+              <%= link_to "Faculty competency template",
+                          "/grade-import-examples/Example%20Faculty%20Competency%20Export%2026S%20PHPM%20601.csv",
+                          class: button_classes(:secondary),
+                          data: { turbo: false },
+                          download: true %>
+            </div>
+          </div>
+
+          <details class="c-card c-card--tight c-card--muted u-stack u-stack--xs">
+            <summary class="u-cursor-pointer c-table__title">View guide</summary>
+            <div class="c-card c-card--tight u-mt-sm" data-controller="markdown-render">
+              <textarea class="hidden" data-markdown-render-target="source"># Grade Import Guide
+
+## Option 1: Canvas direct grade export
+- Include Student ID and assignment columns
+- Add a `mapping` sheet with:
+  - `assignment_match_type` (exact/contains/regex)
+  - `assignment_match_value` (name or pattern)
+  - `course_code` (format ABCD-000-000)
+  - `competency_title` (exact match required)
+  - `score_basis` (points or percent)
+  - `min_score`, `max_score`, `competency_level`
+
+## Option 2: Canvas competency export
+- Keep Student name and Student UIN/Student ID plus competency columns
+- Use `[Competency Title] RESULT` or `[Competency Title] ASSESSED LEVEL` for each student's assessed competency level
+- Use `[Competency Title] MASTERY POINTS` or `[Competency Title] COURSE TARGET` for the course target
+- Course code derived from file/sheet name
+- No mapping sheet required
+
+## Approved competency titles
+- Public and Population Health Assessment
+- Delivery, Organization, and Financing of Health Services and Health Systems
+- Policy Analysis
+- Legal and Ethical Bases for Health Services and Health Systems
+- Ethics, Accountability, and Self-Assessment
+- Organizational Dynamics
+- Problem Solving, Decision Making, and Critical Thinking
+- Team Building and Collaboration
+- Strategic Planning
+- Business Planning
+- Communication
+- Financial Management
+- Performance Improvement
+- Project Management
+- Systems Thinking
+- Data Analysis and Information Management
+- Quantitative Methods for Health Services Delivery
+
+## Workflow
+1. Run as Preview to review matches and ratings
+2. Make corrections if needed
+3. Re-upload to commit</textarea>
+              <div class="c-rich-text" data-markdown-render-target="output"></div>
+            </div>
+          </details>
+        </aside>
+    </section>
+  </div>
+</main>

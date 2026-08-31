@@ -1,0 +1,102 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Survey assignments</p>
+          <h1 class="c-page-title c-page-title--brand">Available Surveys</h1>
+          <p class="c-page-subtitle">
+            Review surveys you can assign to students. Current semester:
+            <strong><%= ProgramSemester.current_name || "Not set" %></strong>
+          </p>
+        </div>
+
+        <% back_path = current_user&.role_admin? ? admin_dashboard_path : advisor_dashboard_path %>
+        <%= link_to "Back", back_path, class: button_classes(:secondary), data: { turbo: false } %>
+      </header>
+    </section>
+
+    <% if @surveys.present? %>
+      <section class="c-stats-grid">
+        <div class="c-stat c-stat--muted">
+          <div class="c-stat__label">Total surveys</div>
+          <div class="c-stat__value c-stat__value--md"><%= @surveys.size %></div>
+        </div>
+
+        <div class="c-stat c-stat--muted">
+          <div class="c-stat__label">Tracks covered</div>
+          <div class="c-stat__value c-stat__value--md"><%= @surveys.flat_map(&:track_list).uniq.sort.presence&.size || 0 %></div>
+          <div class="c-stat__subtext"><%= @surveys.flat_map(&:track_list).uniq.sort.presence&.join(", ") || "—" %></div>
+        </div>
+
+        <div class="c-stat c-stat--muted">
+          <div class="c-stat__label">Last updated</div>
+          <div class="c-stat__value c-stat__value--md">—</div>
+          <div class="c-stat__subtext"><%= l(@surveys.max_by(&:updated_at).updated_at, format: :long) rescue "Unknown" %></div>
+        </div>
+      </section>
+
+      <section class="c-card c-card--flush u-overflow-hidden">
+        <%= render TableComponent.new(
+          headers: ["Survey", "Semester", "Status", "Default Due", "Questions", "Categories", "Tracks", "Updated", ""],
+          right_align: [8]
+        ) do %>
+          <% @surveys.each do |survey| %>
+            <% track_labels = survey.track_list %>
+            <% cleaned_title = survey.title.to_s.sub(/^survey\s*#?:\s*/i, "").gsub("#", "").squish %>
+            <% display_title = cleaned_title.presence || survey.title %>
+
+            <tr>
+              <td>
+                <div class="c-table__title"><%= display_title %></div>
+                <% if survey.try(:description).present? %>
+                  <div class="c-table__meta"><%= survey.description %></div>
+                <% end %>
+              </td>
+
+              <td><%= survey.semester.presence || "—" %></td>
+
+              <td>
+                <% if survey.is_active? %>
+                  <span class="c-pill"><span class="c-pill__dot c-pill__dot--brand" aria-hidden="true"></span>Active</span>
+                <% else %>
+                  <span class="c-pill"><span class="c-pill__dot" aria-hidden="true"></span>Archived</span>
+                <% end %>
+              </td>
+
+              <td><%= survey.available_until.present? ? format_calendar_date(survey.available_until) : "No deadline" %></td>
+              <td><%= survey.questions.size %></td>
+              <td><%= survey.categories.size %></td>
+
+              <td>
+                <% if track_labels.present? %>
+                  <div class="u-actions u-actions--start u-gap-xs">
+                    <% track_labels.each do |track| %>
+                      <span class="c-pill c-pill--muted"><%= track %></span>
+                    <% end %>
+                  </div>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+
+              <td><%= l(survey.updated_at, format: :short) rescue "—" %></td>
+
+              <td>
+                <% if survey.is_active? %>
+                  <%= link_to "Assign to Students", assignments_survey_path(survey), class: button_classes(:secondary), data: { turbo: false } %>
+                <% else %>
+                  <span class="c-muted-meta">Archived</span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        <% end %>
+      </section>
+    <% else %>
+      <div class="c-empty-state c-card">
+        <p class="c-empty-state__body">No surveys available. Create a survey first to begin assigning it to students.</p>
+      </div>
+    <% end %>
+  </div>
+</main>

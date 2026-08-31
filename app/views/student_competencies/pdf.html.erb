@@ -1,0 +1,215 @@
+<% visible_sources = @payload[:visible_sources] || [] %>
+<% show_self = visible_sources.include?("self") %>
+<% show_course = visible_sources.include?("course") %>
+<% show_target = visible_sources.include?("target") %>
+<% show_advisor = @payload[:show_advisor] %>
+<% selected_semester = @payload.dig(:filters, :semester).presence || "All semesters" %>
+<% student_name = @payload[:student].user&.display_name || @payload[:student].full_name %>
+<% change_summary = @payload[:change_summary] || {} %>
+<% content_for :pdf_brand, "#{app_full_name} - Competencies" %>
+<% content_for :pdf_meta, "#{student_name} | #{selected_semester} | Generated: #{Time.current.strftime('%Y-%m-%d %H:%M')}" %>
+
+<h1 class="c-item-title">My Competencies</h1>
+
+<div class="user-info">
+  <div class="col">
+    <div class="label">Student</div>
+    <div class="value"><%= student_name %></div>
+  </div>
+  <div class="col">
+    <div class="label">Semester View</div>
+    <div class="value"><%= selected_semester %></div>
+  </div>
+</div>
+
+<div class="pdf-section">
+  <h2 class="c-section-title">How To Read This Page</h2>
+  <table class="competency-table">
+    <thead>
+      <tr>
+        <th>Self-assessment</th>
+        <th>Course result</th>
+        <th>Course target</th>
+        <th>End-of-program target</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Your survey rating for how confident you feel in a competency.</td>
+        <td>A released course-derived rating from imported course evidence.</td>
+        <td>The expected level for a specific course evidence item.</td>
+        <td>The program benchmark for your track and cohort.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="pdf-section">
+  <h2 class="c-section-title">What Changed Since Last Semester?</h2>
+  <p class="c-muted"><%= change_summary[:headline] %></p>
+
+  <table class="competency-table">
+    <thead>
+      <tr>
+        <th>Source Averages</th>
+        <th>Largest Competency Moves</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <% if change_summary[:source_changes].present? %>
+            <% change_summary[:source_changes].each do |change| %>
+              <div><%= change[:sentence] %></div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No source-level comparison is available yet.</span>
+          <% end %>
+        </td>
+        <td>
+          <% if change_summary[:competency_changes].present? %>
+            <% change_summary[:competency_changes].each do |change| %>
+              <div><strong><%= change[:label] %></strong>: <%= change[:title] %> (<%= change[:direction] %> <%= number_with_precision(change[:delta].abs, precision: 2, strip_insignificant_zeros: true) %>)</div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No competency-level changes were found for the selected sources.</span>
+          <% end %>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="pdf-section">
+  <h2 class="c-section-title">Student Summary</h2>
+  <table class="competency-table">
+    <thead>
+      <tr>
+        <th>Strongest Domains</th>
+        <th>Lowest Domains</th>
+        <th>Growth Areas</th>
+        <th>Data Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <% if @payload.dig(:summary, :strongest_domains).present? %>
+            <% @payload.dig(:summary, :strongest_domains).each do |domain| %>
+              <div><strong><%= domain[:name] %></strong>: <%= domain[:score] %></div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No score data yet.</span>
+          <% end %>
+        </td>
+        <td>
+          <% if @payload.dig(:summary, :lowest_domains).present? %>
+            <% @payload.dig(:summary, :lowest_domains).each do |domain| %>
+              <div><strong><%= domain[:name] %></strong>: <%= domain[:score] %></div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No score data yet.</span>
+          <% end %>
+        </td>
+        <td>
+          <% if @payload.dig(:summary, :growth_areas).present? %>
+            <% @payload.dig(:summary, :growth_areas).each do |area| %>
+              <div><strong><%= area[:title] %></strong>: <%= area[:current] %> / <%= area[:target] %></div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No below-target gaps found.</span>
+          <% end %>
+        </td>
+        <td>
+          <% if show_self %>
+            <div>Missing self ratings: <%= @payload.dig(:summary, :missing_self_count) %></div>
+          <% end %>
+          <% if show_course %>
+            <div>No course evidence: <%= @payload.dig(:summary, :no_course_evidence_count) %></div>
+            <div>Not yet released: <%= @payload.dig(:summary, :embargoed_course_count) %></div>
+          <% end %>
+          <div>Below target: <%= @payload.dig(:summary, :below_target_count) %></div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<% @payload[:domains].each do |domain| %>
+  <div class="pdf-section">
+    <h2 class="c-section-title"><%= domain[:name] %></h2>
+    <div class="c-muted">
+      <% averages = [] %>
+      <% averages << "Self avg #{domain[:averages][:self] || '-'}" if show_self %>
+      <% averages << "Advisor avg #{domain[:averages][:advisor] || '-'}" if show_advisor %>
+      <% averages << "Course avg #{domain[:averages][:course] || '-'}" if show_course %>
+      <% averages << "Target avg #{domain[:averages][:target] || '-'}" if show_target %>
+      <%= averages.join(" | ") %>
+    </div>
+
+    <table class="competency-table">
+      <thead>
+        <tr>
+          <th>Competency</th>
+          <% if show_self %>
+            <th>Self</th>
+          <% end %>
+          <% if show_advisor %>
+            <th>Advisor</th>
+          <% end %>
+          <% if show_course %>
+            <th>Course</th>
+          <% end %>
+          <% if show_target %>
+            <th>End-of-Program Target</th>
+          <% end %>
+        </tr>
+      </thead>
+      <tbody>
+        <% domain[:competencies].each do |competency| %>
+          <tr>
+            <td><%= competency[:title] %></td>
+            <% if show_self %>
+              <td class="numeric">
+                <%= competency[:self_rating].presence || "-" %>
+                <% if competency[:self_below_target] %><br><span class="badge badge-warning">Below target</span><% end %>
+                <% if competency[:self_updated_at].present? %><br><span class="c-muted"><%= l(competency[:self_updated_at], format: :short) %></span><% end %>
+              </td>
+            <% end %>
+            <% if show_advisor %>
+              <td class="numeric">
+                <%= competency[:advisor_rating].presence || "-" %>
+                <% if competency[:advisor_updated_at].present? %><br><span class="c-muted"><%= l(competency[:advisor_updated_at], format: :short) %></span><% end %>
+              </td>
+            <% end %>
+            <% if show_course %>
+              <td class="numeric">
+                <% if competency[:course_status] == "embargoed" %>
+                  Not yet released
+                <% else %>
+                  <%= competency[:course_rating].presence || "-" %>
+                <% end %>
+                <% if competency[:course_below_target] %><br><span class="badge badge-warning">Below target</span><% end %>
+                <% if competency[:course_status] == "no_evidence" %><br><span class="c-muted">No course evidence</span><% end %>
+                <% if competency[:course_updated_at].present? %><br><span class="c-muted"><%= l(competency[:course_updated_at], format: :short) %></span><% end %>
+                <% if competency[:course_sources].present? %>
+                  <br><span class="c-muted"><%= pluralize(competency[:course_sources].size, "source") %></span>
+                  <% course_targets = competency[:course_sources].filter_map { |source| source[:course_target_level].presence }.uniq %>
+                  <% if course_targets.present? %>
+                    <br><span class="c-muted">Course targets: <%= course_targets.join(", ") %></span>
+                  <% end %>
+                <% end %>
+              </td>
+            <% end %>
+            <% if show_target %>
+              <td class="numeric">
+                <%= competency[:end_program_target].presence || "-" %>
+                <% if competency[:target_updated_at].present? %><br><span class="c-muted"><%= l(competency[:target_updated_at], format: :short) %></span><% end %>
+              </td>
+            <% end %>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>

@@ -1,0 +1,48 @@
+<div class="c-field" data-combobox="true">
+  <label for="<%= "#{id}-display" %>" class="c-label"><%= label %></label>
+
+  <input type="hidden" name="<%= name %>" value="" data-combobox-value="true" />
+
+  <div class="u-relative">
+    <input
+      id="<%= "#{id}-display" %>"
+      type="text"
+      class="c-input c-search-input u-w-full"
+      placeholder="<%= placeholder %>"
+      autocomplete="off"
+      data-combobox-input="true"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      <%= required ? "required" : "" %>
+    />
+
+    <div
+      class="c-popup hidden"
+      data-combobox-menu="true"
+      role="listbox"
+    >
+      <% normalized_options.each do |opt| %>
+        <button
+          type="button"
+          class="c-popup__item"
+          data-combobox-option="true"
+          data-combobox-option-value="<%= opt[:value] %>"
+          data-combobox-option-label="<%= opt[:label] %>"
+          data-combobox-option-search="<%= [opt[:label], opt[:description]].compact.join(" ").downcase %>"
+          role="option"
+        >
+          <div class="font-medium"><%= opt[:label] %></div>
+          <% if opt[:description].present? %>
+            <div class="c-muted text-xs"><%= opt[:description] %></div>
+          <% end %>
+        </button>
+      <% end %>
+
+      <div class="c-popup__empty" data-combobox-empty="true" hidden>
+        No matches.
+      </div>
+    </div>
+  </div>
+
+  <p class="c-help">Start typing to search.</p>
+</div>

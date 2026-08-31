@@ -1,11 +1,11 @@
 <% content_for :title, "New Category" %>
 
-<h1>New Category</h1>
+<h1 class="c-page-title">New Category</h1>
 
 <%= render "form", category: @category %>
 
 <br>
 
 <div>
-  <%= link_to "Back to categories", categories_path %>
+  <%= link_to "Back to categories", categories_path, class: button_classes(:secondary) %>
 </div>

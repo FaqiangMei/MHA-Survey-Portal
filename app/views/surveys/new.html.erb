@@ -1,11 +1,11 @@
 <% content_for :title, "New survey" %>
 
-<h1>New survey</h1>
+<h1 class="c-page-title">New survey</h1>
 
 <%= render "form", survey: @survey %>
 
 <br>
 
 <div>
-  <%= link_to "Back", surveys_path %>
+  <%= link_to "Back", surveys_path, class: button_classes(:secondary) %>
 </div>

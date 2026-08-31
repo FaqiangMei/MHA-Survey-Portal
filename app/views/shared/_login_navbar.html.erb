@@ -1,55 +1,65 @@
 <!-- Login Navigation Header -->
-<header class="app-header" role="banner">
-  <div class="header-content">
-    <div class="header-left">
-      <div class="logo" aria-label="Texas A&amp;M University">
-        <div class="logo-icon" aria-hidden="true"></div>
-        <div class="logo-text">
-          TEXAS A&M<br>
-          UNIVERSITY
-        </div>
-      </div>
+<header class="c-app-header" role="banner">
+  <div class="c-app-header__content">
+    <div class="c-app-header__left c-app-header__left--brand-only">
+      <%= link_to root_path, class: "c-brand-link", aria: { label: "Texas A&M University home" } do %>
+        <div class="c-brand-logo" aria-hidden="true"></div>
+        <span class="sr-only">Texas A&amp;M University</span>
+      <% end %>
 
-      <nav class="nav-links" aria-label="Primary">
-        <%= link_to "Home", root_path, class: "nav-link" %>
-
-        <!-- About page (documentation landing) -->
-        <%= link_to "About the Portal", about_path, class: "nav-link" %>
-
-        <!-- FAQ page -->
-        <%= link_to "FAQ", faq_path, class: "nav-link" %>
-      </nav>
+      <button type="button"
+              class="c-mobile-menu-button"
+              data-mobile-nav-toggle
+              aria-label="Open navigation menu"
+              aria-controls="public-mobile-nav"
+              aria-expanded="false">
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+      </button>
     </div>
 
-    <div class="user-section">
-      <!-- High contrast toggle -->
-      <button
-        type="button"
-        class="btn btn-secondary"
-        data-high-contrast-toggle="true"
-        aria-pressed="false"
-        aria-label="Toggle high contrast mode">
-        High Contrast: Off
-      </button>
+    <div id="public-mobile-nav" class="c-nav-drawer" data-mobile-nav-drawer aria-label="Site navigation">
+      <div class="c-nav-drawer__header">
+        <span class="c-nav-drawer__title">Menu</span>
+        <button type="button" class="c-nav-drawer__close" data-mobile-nav-close aria-label="Close navigation menu">&times;</button>
+      </div>
 
-      <!-- Text-to-speech toggle -->
-      <button
-        type="button"
-        class="btn btn-secondary"
-        data-tts-toggle="true"
-        aria-pressed="false"
-        aria-label="Read this page aloud">
-        Read Page Aloud
-      </button>
+      <nav class="c-nav-links" aria-label="Primary">
+        <%= link_to "Home", root_path, class: "c-nav-link" %>
+
+        <!-- About page (documentation landing) -->
+        <%= link_to "About the Portal", about_path, class: "c-nav-link" %>
+
+        <!-- FAQ page -->
+        <%= link_to "FAQ", faq_path, class: "c-nav-link" %>
+      </nav>
+
+      <div class="c-user-section">
+      <%= render ToggleSwitchComponent.new(
+        id: "high-contrast-toggle",
+        checked: false,
+        label: "High Contrast",
+        data: { high_contrast_toggle: true }
+      ) %>
+
+      <%= render ToggleSwitchComponent.new(
+        id: "tts-toggle",
+        checked: false,
+        label: "Read Aloud",
+        data: { tts_toggle: true }
+      ) %>
+
+      <%= render "shared/translate_toggle" %>
 
       <a href="https://public-health.tamu.edu/degrees/hpm/mha/index.html"
-         class="btn btn-secondary">
+        class="<%= button_classes(:secondary) %>">
         Program Overview
       </a>
 
-      <div class="sign-in-launcher" data-signin-menu>
+      <div class="c-sign-in-launcher" data-signin-menu>
         <button type="button"
-                class="btn btn-primary sign-in-launcher__button"
+          class="<%= button_classes(:primary, extra_classes: 'c-sign-in-launcher__button') %>"
                 data-signin-trigger
                 aria-haspopup="true"
                 aria-expanded="false"
@@ -57,34 +67,37 @@
           Sign In
           <span aria-hidden="true">▾</span>
         </button>
-        <div class="sign-in-launcher__panel"
+        <div class="c-sign-in-launcher__panel"
              id="sign-in-menu-panel"
              data-signin-panel
              hidden
              role="menu"
              aria-label="Choose a role to sign in">
-          <p class="sign-in-launcher__label">Pick the dashboard you need:</p>
+          <p class="c-sign-in-launcher__label">Pick the dashboard you need:</p>
           <button type="button"
-                  class="sign-in-launcher__option"
+                  class="c-sign-in-launcher__option"
                   data-login-role="student"
                   role="menuitem">
             <span>🎓 Student access</span>
-            <span class="sign-in-launcher__chevron">→</span>
+            <span class="c-sign-in-launcher__chevron">→</span>
           </button>
           <button type="button"
-                  class="sign-in-launcher__option"
+                  class="c-sign-in-launcher__option"
                   data-login-role="advisor"
                   role="menuitem">
             <span>🧑‍🏫 Advisor access</span>
-            <span class="sign-in-launcher__chevron">→</span>
+            <span class="c-sign-in-launcher__chevron">→</span>
           </button>
           <a href="<%= new_user_session_path %>"
-             class="sign-in-launcher__link"
+             class="c-sign-in-launcher__link"
              role="menuitem">
           </a>
         </div>
       </div>
     </div>
+    </div>
+
+    <div class="c-nav-drawer-backdrop" data-mobile-nav-backdrop hidden></div>
   </div>
 </header>
 

@@ -2,26 +2,43 @@
 require "test_helper"
 
 class QuestionTest < ActiveSupport::TestCase
-  setup do
-    Rails.application.load_seed
-  end
+    setup do
+      original_regex = StudentQuestion::GOOGLE_URL_REGEX
+      legacy_regex = %r{\Ahttps?://(?:(?:drive|docs|sites)\.google\.com|(?:[a-z0-9-]+\.)?googleusercontent\.com)(?:/|$)\S*}i
 
-  # --- Executive Survey ---
-  test "Project Management question in Fall 2025 Executive Survey exists" do
-    survey = Survey.find_by(title: "Executive Survey", semester: "Fall 2025")
-    assert_not_nil survey, "Executive Survey (Fall 2025) should exist"
+      StudentQuestion.send(:remove_const, :GOOGLE_URL_REGEX)
+      StudentQuestion.const_set(:GOOGLE_URL_REGEX, legacy_regex)
+
+      StudentQuestion.delete_all
+      Rails.application.load_seed
+    ensure
+      if StudentQuestion.const_defined?(:GOOGLE_URL_REGEX)
+        StudentQuestion.send(:remove_const, :GOOGLE_URL_REGEX)
+      end
+      StudentQuestion.const_set(:GOOGLE_URL_REGEX, original_regex)
+    end
+
+  SURVEY_TITLES = {
+    emha_midpoint: "EMHA Mid-point Competency Survey",
+    rmha_initial: "RMHA Initial Competency Survey"
+  }.freeze
+
+  # --- EMHA stage surveys ---
+  test "Project Management question in Spring 2026 EMHA Mid-point Competency Survey exists" do
+    survey = Survey.joins(:program_semester).find_by(title: SURVEY_TITLES.fetch(:emha_midpoint), program_semesters: { name: "Spring 2026" })
+    assert_not_nil survey, "EMHA Mid-point Competency Survey (Spring 2026) should exist"
 
     category = survey.categories.find_by(name: "Management Skills")
-    assert_not_nil category, "Management Skills category should exist in Executive Survey"
+    assert_not_nil category, "Management Skills category should exist in EMHA Mid-point Competency Survey"
 
     question = category.questions.find_by(question_text: "Project Management")
     assert_not_nil question, "Project Management question should exist"
     assert question.required, "Project Management question should be required"
   end
 
-  test "Evidence question in Executive Survey is required" do
-    survey = Survey.find_by(title: "Executive Survey", semester: "Fall 2025")
-    assert_not_nil survey, "Executive Survey should exist"
+  test "Evidence question in EMHA Mid-point Competency Survey is required" do
+    survey = Survey.joins(:program_semester).find_by(title: SURVEY_TITLES.fetch(:emha_midpoint), program_semesters: { name: "Spring 2026" })
+    assert_not_nil survey, "EMHA Mid-point Competency Survey should exist"
 
     evidence_questions = survey.questions.where(question_type: "evidence")
     assert evidence_questions.any?, "There should be at least one evidence question"
@@ -31,21 +48,21 @@ class QuestionTest < ActiveSupport::TestCase
     end
   end
 
-  # --- Residential Survey ---
-  test "Residential Survey categories and Project Management exist" do
-    survey = Survey.find_by(title: "Residential Survey", semester: "Fall 2025")
-    assert_not_nil survey, "Residential Survey (Fall 2025) should exist"
+  # --- RMHA stage surveys ---
+  test "RMHA Initial Competency Survey categories and Project Management exist" do
+    survey = Survey.joins(:program_semester).find_by(title: SURVEY_TITLES.fetch(:rmha_initial), program_semesters: { name: "Spring 2026" })
+    assert_not_nil survey, "RMHA Initial Competency Survey (Spring 2026) should exist"
 
     expected_categories = [ "Health Care Environment and Community", "Leadership Skills", "Management Skills", "Analytic and Technical Skills" ]
     actual_names = survey.categories.pluck(:name)
     expected_categories.each do |name|
-      assert_includes actual_names, name, "Residential Survey should include category '#{name}'"
+      assert_includes actual_names, name, "RMHA Initial Competency Survey should include category '#{name}'"
     end
 
     category = survey.categories.find_by(name: "Management Skills")
     assert_not_nil category, "Management Skills category should exist"
     q = category.questions.find_by(question_text: "Project Management")
-    assert_not_nil q, "Project Management question should exist in Residential Survey"
+    assert_not_nil q, "Project Management question should exist in RMHA Initial Competency Survey"
     assert q.required, "Project Management should be required"
   end
 
@@ -85,9 +102,43 @@ class QuestionTest < ActiveSupport::TestCase
 
   test "Flexibility questions are optional" do
     flexibility_questions = Question.where("LOWER(question_text) LIKE ?", "%flexible%work%")
+    assert flexibility_questions.any?, "Expected at least one flexibility question"
 
     flexibility_questions.each do |q|
       assert_not q.required?, "Flexibility question '#{q.question_text}' should be optional (not required)"
+    end
+  end
+
+  test "portfolio review questions exist for requested surveys" do
+    survey_titles = [
+      "EMHA Final Competency Survey",
+      "EMHA Mid-point Competency Survey",
+      "RMHA Final Competency Survey"
+    ]
+    expected_questions = [
+      "Are you satisfied with where you are (competency [knowledge, skills, behaviors] development) at this time?",
+      "What are you thinking (at this time) for career direction (location, type of organization, position/role, etc.)?",
+      "What are you going to do to support your development and gain further career direction?",
+      "What do you need from me to support your development?"
+    ]
+
+    survey_titles.each do |title|
+      survey = Survey.joins(:program_semester).find_by(title: title, program_semesters: { name: "Spring 2026" })
+      assert_not_nil survey, "#{title} should exist"
+
+      section = survey.sections.find_by(title: "Portfolio Review")
+      assert_not_nil section, "#{title} should include Portfolio Review section"
+
+      category = survey.categories.find_by(name: "Portfolio Review")
+      assert_not_nil category, "#{title} should include Portfolio Review category"
+      assert_equal section.id, category.survey_section_id, "#{title} category should be attached to Portfolio Review section"
+
+      expected_questions.each_with_index do |question_text, index|
+        question = category.questions.find_by(question_text: question_text)
+        assert_not_nil question, "#{title} missing reflection question: #{question_text}"
+        assert_equal "short_answer", question.question_type
+        assert_equal index + 1, question.question_order
+      end
     end
   end
 

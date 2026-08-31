@@ -1,619 +1,333 @@
 mha_competency_tooltip: &mha_competency_tooltip |
-  Mastery (5)
-  ----------
+  ## Mastery (5)
   - The student is a recognized authority and a leader who can shape professional practice.
   - They demonstrate extensive knowledge of current trends and complex theories.
   - They can pioneer new solutions and troubleshoot complex, non-routine problems.
   - They function with complete independence and contribute to strategic-level decision-making.
 
-  Experienced (4)
-  -------------
+  ## Experienced (4)
   - The student has a strong, well-developed skill set and can apply complex theories in their professional practice.
   - They have a deep understanding of core concepts and specialized theories and can articulate nuances to others.
   - They independently apply theoretical knowledge to solve real-world problems with minimal to no guidance.
 
-  Capable (3)
-  ----------
+  ## Capable (3)
   - The student has a practical, working grasp of the professional area and can perform standard tasks independently.
   - They possess foundational knowledge and skills and can complete a range of standard job tasks.
   - They can work without assistance on most routine assignments and effectively participate in team projects.
   - They reliably meet expectations for their position but may need minimal guidance for unusual situations.
 
-  Emerging (2)
-  ----------
+  ## Emerging (2)
   - The student has a limited, but growing, understanding of professional concepts and requires direct guidance for complex tasks.
   - They are familiar with foundational terminology and techniques, but their understanding is limited in scope.
   - They can perform basic, simple tasks but their performance does not consistently meet professional standards.
   - They operate under close supervision and need frequent checks and clear instructions.
 
-  Beginner (1)
-  ----------
+  ## Beginner (1)
   - The student has only a basic or superficial understanding with little to no practical experience.
   - They have a basic awareness of the topic and can identify core concepts.
   - They cannot perform job duties independently, and their performance generally fails to meet expectations even with guidance.
   - They require constant and direct supervision for all tasks.
 
-  Not able to assess (0) [Advisor Only]
-  ---------------------
+  ## Not able to assess (0) [Advisor Only]
   - Advisor only option for cases where a rating cannot be provided.
 
+mha_competency_dropdown_options: &mha_competency_dropdown_options
+  - ["Mastery (5)", "5"]
+  - ["Experienced (4)", "4"]
+  - ["Capable (3)", "3"]
+  - ["Emerging (2)", "2"]
+  - ["Beginner (1)", "1"]
+
+templates:
+  mha_section: &mha_section
+    title: "MHA Competency Self-Assessment"
+    description: >-
+      Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Please note that the (end of the) Program Target level is provided for each competency to assist you in your self-assessment and a comment section is available to record a note to your Faculty Advisor. A note should be provided if your self-assessment is below or above the target course level (see course syllabi for course targets). Refer to the sidebar for a description of the 1-5 proficiency scale.
+
+  professional_snapshot_section: &professional_snapshot_section
+    title: "Professional Snapshot"
+    description: "Share your current employment context."
+
+  competency_dropdown: &competency_dropdown
+    type: "dropdown"
+    options: *mha_competency_dropdown_options
+    tooltip: *mha_competency_tooltip
+    required: true
+    has_feedback: true
+
+  reflection_sub_question: &reflection_sub_question
+    order: 1
+    type: "short_answer"
+    required: false
+
+  evidence_question: &evidence_question
+    text: "Please provide a link to your MHA Portfolio (Google Sites) as evidence for this survey."
+    type: "evidence"
+    required: true
+
+  evidence_section: &evidence_section
+    title: "Evidence"
+    description: "Submit one link for the entire survey."
+
+  portfolio_review_section: &portfolio_review_section
+    title: "Portfolio Review"
+    description: >-
+      Each student should review their portfolio, reflect on their experience/performance
+      in the program, and then respond to the questions that follow.
+
+  portfolio_review_category: &portfolio_review_category
+    name: "Portfolio Review"
+    description: "Student reflection before advisor review meeting"
+    section: *portfolio_review_section
+    questions:
+      - order: 1
+        text: "Are you satisfied with where you are (competency [knowledge, skills, behaviors] development) at this time?"
+        type: "short_answer"
+        required: true
+      - order: 2
+        text: "What are you thinking (at this time) for career direction (location, type of organization, position/role, etc.)?"
+        type: "short_answer"
+        required: true
+      - order: 3
+        text: "What are you going to do to support your development and gain further career direction?"
+        type: "short_answer"
+        required: true
+      - order: 4
+        text: "What do you need from me to support your development?"
+        type: "short_answer"
+        required: true
+
+common_categories: &common_categories
+  - name: "Employment Information"
+    description: "Current Employment Status and Details"
+    section: *professional_snapshot_section
+    questions:
+      - order: 1
+        text: "Are you currently employed?"
+        type: "multiple_choice"
+        options: ["Yes", "No"]
+        required: true
+        sub_questions:
+          - order: 1
+            text: "If yes, where are you employed? (name and address)"
+            type: "short_answer"
+          - order: 2
+            text: "What is your title?"
+            type: "short_answer"
+          - order: 3
+            text: "How many **hours per week** do you work on ++average++?"
+            type: "integer"
+            prompt_format: "rich_text"
+            integer_min: 1
+          - order: 4
+            text: "How flexible are your work hours?"
+            type: "multiple_choice"
+            options:
+              - ["1 — No flexibility: days per week and hours per day are fixed.", "1"]
+              - ["2 — Limited flexibility: limited ability to adjust days per week or hours per day; you must work the total hours per week.", "2"]
+              - ["3 — Some flexibility: some ability to adjust days per week or hours per day; you must work the total hours per week.", "3"]
+              - ["4 — Flexible schedule: flexibility in days worked or hours worked per week, with limited variation in total hours per week.", "4"]
+              - ["5 — Very flexible schedule: flexibility in days or hours worked each day, including total hours worked per week.", "5"]
+              - { label: "Other — Please describe the flexibility of your work schedule.", value: "0", requires_text: true }
+
+  - name: "Health Care Environment and Community"
+    description: "Relation between health care operations and community organizations and policies"
+    section: *mha_section
+    questions:
+      - <<: *competency_dropdown
+        order: 1
+        text: "Public and Population Health Assessment"
+        description: "Historic, current, and anticipated future characteristics and requirements for health care at local, state, regional, and national markets."
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Public and Population Health Assessment Reflection"
+      - <<: *competency_dropdown
+        order: 3
+        text: "Delivery, Organization, and Financing of Health Services and Health Systems"
+        description: "Resources, structure, process, and outcomes associated with providing health care informed by theory, data, and analytic methods."
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Delivery, Organization, and Financing of Health Services and Health Systems Reflection"
+      - <<: *competency_dropdown
+        order: 5
+        text: "Policy Analysis"
+        description: "Creation, analysis, and implications for the rules governing health care structures and delivery systems"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Policy Analysis Reflection"
+      - <<: *competency_dropdown
+        order: 7
+        text: "Legal & Ethical Bases for Health Services and Health Systems"
+        description: "Laws, regulations, and social or other norms that formally or informally provide guidance for health care delivery"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Legal & Ethical Bases for Health Services and Health Systems Reflection"
+
+  - name: "Leadership Skills"
+    description: "Motivation and empowerment of organizational resources"
+    section: *mha_section
+    questions:
+      - <<: *competency_dropdown
+        order: 1
+        text: "Ethics, Accountability, and Self-Assessment"
+        description: "Professional and personal values and responsibilities that result in ongoing self-reflection, professional awareness, learning, and development."
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Ethics, Accountability, and Self-Assessment Reflection"
+      - <<: *competency_dropdown
+        order: 3
+        text: "Organizational Dynamics"
+        description: "Organizational behavior methods and human resource strategies to maximize individual and team development while ensuring cultural awareness and inclusiveness."
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Organizational Dynamics Reflection"
+      - <<: *competency_dropdown
+        order: 5
+        text: "Problem Solving, Decision Making, and Critical Thinking"
+        description: "Data, analytic methods, and judgment used in support of leadership decisions"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Problem Solving, Decision Making, and Critical Thinking Reflection"
+      - <<: *competency_dropdown
+        order: 7
+        text: "Team Building and Collaboration"
+        description: "Partnerships that result in functional, motivated, skill-based groups formed to accomplish identifiable goals"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Team Building and Collaboration Reflection"
+
+  - name: "Management Skills"
+    description: "Control and organization of health services delivery"
+    section: *mha_section
+    questions:
+      - <<: *competency_dropdown
+        order: 1
+        text: "Strategic Planning"
+        description: "Market and community needs served by defined alternatives, goals, and programs which are supported by appropriate implementation methods."
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Strategic Planning Reflection"
+      - <<: *competency_dropdown
+        order: 3
+        text: "Business Planning"
+        description: "Develop and manage budgets, conduct financial analysis; identify opportunities and threats to organizations using relevant information."
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Business Planning Reflection"
+      - <<: *competency_dropdown
+        order: 5
+        text: "Communication"
+        description: "Verbal and non-verbal communication to effectively convey pertinent information"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Communication Reflection"
+      - <<: *competency_dropdown
+        order: 7
+        text: "Financial Management"
+        description: "Read, understand, and analyze financial statements and audited financial reports"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Financial Management Reflection"
+      - <<: *competency_dropdown
+        order: 9
+        text: "Performance Improvement"
+        description: "Data, information, analytic tools, and judgment used to guide goal setting for individuals, teams, and organizations"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Performance Improvement Reflection"
+      - <<: *competency_dropdown
+        order: 11
+        text: "Project Management"
+        description: "Design, plan, execute, and assess tasks and develop appropriate timelines related to performance, structure, and outcomes in the pursuit of stated goals"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Project Management Reflection"
+
+  - name: "Analytic and Technical Skills"
+    description: "Successful accomplishment of tasks in health services delivery"
+    section: *mha_section
+    questions:
+      - <<: *competency_dropdown
+        order: 1
+        text: "Systems Thinking"
+        description: "Interrelationships between and among constituent parts of an organization"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Systems Thinking Reflection"
+      - <<: *competency_dropdown
+        order: 3
+        text: "Data Analysis and Information Management"
+        description: "Data, information, technology, and supporting structures used in completing assigned tasks"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Data Analysis and Information Management Reflection"
+      - <<: *competency_dropdown
+        order: 5
+        text: "Quantitative Methods for Health Services Delivery"
+        description: "Economic, financial, statistical, and other discipline-specific techniques needed to understand, model, assess, and inform health care decision making and address health care questions"
+        sub_questions:
+          - <<: *reflection_sub_question
+            text: "Quantitative Methods for Health Services Delivery Reflection"
+
+  - name: "Evidence"
+    description: "Single evidence link submission"
+    section: *evidence_section
+    questions:
+      - <<: *evidence_question
+        order: 1
+
+survey_base: &survey_base
+  program_semester: "Spring 2026"
+  available_from: "2026-01-05 09:00"
+  available_until: "2026-04-28"
+  legend:
+    title: "Rating Scale Reference"
+    body: *mha_competency_tooltip
+  is_active: true
+  categories: *common_categories
+
+# Track-specific base templates (anchors only; not seeded directly).
+executive_track_survey_base: &executive_track_survey_base
+  <<: *survey_base
+  description: "Semester activity and competency tracking."
+  tracks:
+    - "Executive"
+
+residential_track_survey_base: &residential_track_survey_base
+  <<: *survey_base
+  description: "Semester activity and competency tracking."
+  tracks:
+    - "Residential"
+
 surveys:
-  - &executive_survey_base
-    title: "Executive Survey"
-    semester: "Fall 2025"
-    description: "Executive cohort semester activity and competency tracking."
-    is_active: true
-    seed_auto_assign_students: true
-    tracks:
-      - "Executive"
-    categories:
-      - name: "Employment Information"
-        description: "Current Employment Status and Details"
-        section:
-          title: "Professional Snapshot"
-          description: "Share your current employment context for the Executive cohort."
-        questions:
-          - order: 1
-            text: "Are you currently employed?"
-            type: "multiple_choice"
-            options: ["Yes", "No"]
-            required: true
-          - order: 2
-            text: "If yes, where are you employed? (name and address)"
-            type: "short_answer"
-          - order: 3
-            text: "What is your title?"
-            type: "short_answer"
-          - order: 4
-            text: "How many hours per week do you work on average?"
-            type: "short_answer"
-          - order: 5
-            text: "How flexible are your work hours?"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            description: 
-            tooltip: |
-              Highly Flexible (5)
-              -------------------
-              - Your work hours are fully adjustable, with complete autonomy to set or shift your schedule.
-              - Changes to your hours rarely require approval and have minimal constraints.
+  # Stage-based surveys (portfolio schedule-driven).
+  - <<: *residential_track_survey_base
+    title: "RMHA Initial Competency Survey"
+    program_semester: "Spring 2026"
+    available_until: "2026-01-16"
 
-              Very Flexible (4)
-              -----------------
-              - You have strong control over your schedule and can adjust hours when needed.
-              - Some coordination may be required, but flexibility is generally supported.
+  - <<: *residential_track_survey_base
+    title: "RMHA Mid-point Competency Survey"
+    program_semester: "Spring 2026"
+    available_until: "2026-01-16"
 
-              Moderately Flexible (3)
-              ----------------------
-              - You have set hours but can make occasional adjustments.
-              - Flexibility exists but usually requires prior communication or approval.
+  - <<: *residential_track_survey_base
+    title: "RMHA Final Competency Survey"
+    program_semester: "Spring 2026"
+    available_until: "2026-03-20"
+    extra_categories:
+      - *portfolio_review_category
 
-              Somewhat Limited (2)
-              --------------------
-              - Your schedule is mostly fixed, with only minor or infrequent adjustments allowed.
-              - Changes require approval and may not always be granted.
+  - <<: *executive_track_survey_base
+    title: "EMHA Mid-point Competency Survey"
+    program_semester: "Spring 2026"
+    available_until: "2026-05-31"
+    extra_categories:
+      - *portfolio_review_category
 
-              Not Flexible (1)
-              ----------------
-              - Your work hours are strictly fixed and cannot be adjusted.
-              - Schedule changes are rarely permitted and typically not feasible.
-      - name: "Health Care Environment and Community"
-        description: "Relation between health care operations and community organizations and policies"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Public and Population Health Assessment"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Historic, current, and anticipated future characteristics and requirements for health care at local, state, regional, and national markets."
-            required: true
-          - order: 2
-            text: "Public and Population Health Assessment Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Delivery, Organization, and Financing of Health Services and Health Systems"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Resources, structure, process, and outcomes associated with providing health care informed by theory, data, and analytic methods."
-            required: true
-          - order: 4
-            text: "Delivery, Organization, and Financing of Health Services and Health Systems Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Policy Analysis"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Creation, analysis, and implications for the rules governing health care structures and delivery systems"
-            required: true
-          - order: 6
-            text: "Policy Analysis Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Legal & Ethical Bases for Health Services and Health Systems"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Laws, regulations, and social or other norms that formally or informally provide guidance for health care delivery"
-            required: true
-          - order: 8
-            text: "Legal & Ethical Bases for Health Services and Health Systems Reflection"
-            type: "short_answer"
-            required: false
-          - order: 9
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-      - name: "Leadership Skills"
-        description: "Motivation and empowerment of organizational resources"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Ethics, Accountability, and Self-Assessment"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Professional and personal values and responsibilities that result in ongoing self-reflection, professional awareness, learning, and development."
-            required: true
-          - order: 2
-            text: "Ethics, Accountability, and Self-Assessment Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Organizational Dynamics"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Organizational behavior methods and human resource strategies to maximize individual and team development while ensuring cultural awareness and inclusiveness."
-            required: true
-          - order: 4
-            text: "Organizational Dynamics Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Problem Solving, Decision Making, and Critical Thinking"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Data, analytic methods, and judgment used in support of leadership decisions"
-            required: true
-          - order: 6
-            text: "Problem Solving, Decision Making, and Critical Thinking Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Team Building and Collaboration"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Partnerships that result in functional, motivated, skill-based groups formed to accomplish identifiable goals"
-            required: true
-          - order: 8
-            text: "Team Building and Collaboration Reflection"
-            type: "short_answer"
-            required: false
-          - order: 9
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-      - name: "Management Skills"
-        description: "Control and organization of health services delivery"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Strategic Planning"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Market and community needs served by defined alternatives, goals, and programs which are supported by appropriate implementation methods."
-            required: true
-          - order: 2
-            text: "Strategic Planning Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Business Planning"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Develop and manage budgets, conduct financial analysis; identify opportunities and threats to organizations using relevant information."
-            required: true
-          - order: 4
-            text: "Business Planning Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Communication"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Verbal and non-verbal communication to effectively convey pertinent information"
-            required: true
-          - order: 6
-            text: "Communication Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Financial Management"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Read, understand, and analyze financial statements and audited financial reports"
-            required: true
-          - order: 8
-            text: "Financial Management Reflection"
-            type: "short_answer"
-            required: false
-          - order: 9
-            text: "Performance Improvement"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Data, information, analytic tools, and judgment used to guide goal setting for individuals, teams, and organizations"
-            required: true
-          - order: 10
-            text: "Performance Improvement Reflection"
-            type: "short_answer"
-            required: false
-          - order: 11
-            text: "Project Management"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Design, plan, execute, and assess tasks and develop appropriate timelines related to performance, structure, and outcomes in the pursuit of stated goals"
-            required: true
-          - order: 12
-            text: "Project Management Reflection"
-            type: "short_answer"
-            required: false
-          - order: 13
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-      - name: "Analytic and Technical Skills"
-        description: "Successful accomplishment of tasks in health services delivery"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Systems Thinking"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Interrelationships between and among constituent parts of an organization"
-            required: true
-          - order: 2
-            text: "Systems Thinking Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Data Analysis and Information Management"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Data, information, technology, and supporting structures used in completing assigned tasks"
-            required: true
-          - order: 4
-            text: "Data Analysis and Information Management Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Quantitative Methods for Health Services Delivery"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Economic, financial, statistical, and other discipline-specific techniques needed to understand, model, assess, and inform health care decision making and address health care questions"
-            required: true
-          - order: 6
-            text: "Quantitative Methods for Health Services Delivery Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-
-  - &residential_survey_base
-    title: "Residential Survey"
-    semester: "Fall 2025"
-    description: "Residential cohort competency and experience tracking."
-    is_active: true
-    seed_auto_assign_students: true
-    tracks:
-      - "Residential"
-    categories:
-      - name: "Employment Information"
-        description: "Current Employment Status and Details"
-        section:
-          title: "Professional Snapshot"
-          description: "Share your current employment context for the Residential cohort."
-        questions:
-          - order: 1
-            text: "Are you currently employed?"
-            type: "multiple_choice"
-            options: ["Yes", "No"]
-            required: true
-          - order: 2
-            text: "If yes, where are you employed? (name and address)"
-            type: "short_answer"
-          - order: 3
-            text: "What is your title?"
-            type: "short_answer"
-          - order: 4
-            text: "How many hours per week do you work on average?"
-            type: "short_answer"
-          - order: 5
-            text: "How flexible are your work hours?"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: |
-              Highly Flexible (5)
-              -------------------
-              - Your work hours are fully adjustable, with complete autonomy to set or shift your schedule.
-              - Changes to your hours rarely require approval and have minimal constraints.
-
-              Very Flexible (4)
-              -----------------
-              - You have strong control over your schedule and can adjust hours when needed.
-              - Some coordination may be required, but flexibility is generally supported.
-
-              Moderately Flexible (3)
-              ----------------------
-              - You have set hours but can make occasional adjustments.
-              - Flexibility exists but usually requires prior communication or approval.
-
-              Somewhat Limited (2)
-              --------------------
-              - Your schedule is mostly fixed, with only minor or infrequent adjustments allowed.
-              - Changes require approval and may not always be granted.
-
-              Not Flexible (1)
-              ----------------
-              - Your work hours are strictly fixed and cannot be adjusted.
-              - Schedule changes are rarely permitted and typically not feasible.
-      - name: "Health Care Environment and Community"
-        description: "Relationship between health care operations and their communities"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Public and Population Health Assessment"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Historic, current, and anticipated future characteristics and requirements for health care at local, state, regional, and national markets."
-            required: true
-          - order: 2
-            text: "Public and Population Health Assessment Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Delivery, Organization, and Financing of Health Services and Health Systems"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Resources, structure, process, and outcomes associated with providing health care informed by theory, data, and analytic methods."
-            required: true
-          - order: 4
-            text: "Delivery, Organization, and Financing of Health Services and Health Systems Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Policy Analysis"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Creation, analysis, and implications for the rules governing health care structures and delivery systems"
-            required: true
-          - order: 6
-            text: "Policy Analysis Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Legal & Ethical Bases for Health Services and Health Systems"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Laws, regulations, and social or other norms that formally or informally provide guidance for health care delivery"
-            required: true
-          - order: 8
-            text: "Legal & Ethical Bases for Health Services and Health Systems Reflection"
-            type: "short_answer"
-            required: false
-          - order: 9
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-      - name: "Leadership Skills"
-        description: "Motivation and empowerment of organizational resources"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Ethics, Accountability, and Self-Assessment"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Professional and personal values and responsibilities that result in ongoing self-reflection, professional awareness, learning, and development."
-            required: true
-          - order: 2
-            text: "Ethics, Accountability, and Self-Assessment Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Organizational Dynamics"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Organizational behavior methods and human resource strategies to maximize individual and team development while ensuring cultural awareness and inclusiveness."
-            required: true
-          - order: 4
-            text: "Organizational Dynamics Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Problem Solving, Decision Making, and Critical Thinking"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Data, analytic methods, and judgment used in support of leadership decisions"
-            required: true
-          - order: 6
-            text: "Problem Solving, Decision Making, and Critical Thinking Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Team Building and Collaboration"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Partnerships that result in functional, motivated, skill-based groups formed to accomplish identifiable goals"
-            required: true
-          - order: 8
-            text: "Team Building and Collaboration Reflection"
-            type: "short_answer"
-            required: false
-          - order: 9
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-      - name: "Management Skills"
-        description: "Control and organization of health services delivery"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Strategic Planning"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Market and community needs served by defined alternatives, goals, and programs which are supported by appropriate implementation methods."
-            required: true
-          - order: 2
-            text: "Strategic Planning Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Business Planning"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Develop and manage budgets, conduct financial analysis; identify opportunities and threats to organizations using relevant information."
-            required: true
-          - order: 4
-            text: "Business Planning Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Communication"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Verbal and non-verbal communication to effectively convey pertinent information"
-            required: true
-          - order: 6
-            text: "Communication Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Financial Management"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Read, understand, and analyze financial statements and audited financial reports"
-            required: true
-          - order: 8
-            text: "Financial Management Reflection"
-            type: "short_answer"
-            required: false
-          - order: 9
-            text: "Performance Improvement"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Data, information, analytic tools, and judgment used to guide goal setting for individuals, teams, and organizations"
-            required: true
-          - order: 10
-            text: "Performance Improvement Reflection"
-            type: "short_answer"
-            required: false
-          - order: 11
-            text: "Project Management"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Design, plan, execute, and assess tasks and develop appropriate timelines related to performance, structure, and outcomes in the pursuit of stated goals"
-            required: true
-          - order: 12
-            text: "Project Management Reflection"
-            type: "short_answer"
-            required: false
-          - order: 13
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-      - name: "Analytic and Technical Skills"
-        description: "Successful accomplishment of tasks in health services delivery"
-        section:
-          title: "MHA Competency Self-Assessment"
-          description: "Please review each of the 17 competencies that make up the MHA Competency Model and determine your level of proficiency (achievement) at this point in your program. Click on the information button for a description of the 1-5 proficiency scale."
-        questions:
-          - order: 1
-            text: "Systems Thinking"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Interrelationships between and among constituent parts of an organization"
-            required: true
-          - order: 2
-            text: "Systems Thinking Reflection"
-            type: "short_answer"
-            required: false
-          - order: 3
-            text: "Data Analysis and Information Management"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Data, information, technology, and supporting structures used in completing assigned tasks"
-            required: true
-          - order: 4
-            text: "Data Analysis and Information Management Reflection"
-            type: "short_answer"
-            required: false
-          - order: 5
-            text: "Quantitative Methods for Health Services Delivery"
-            type: "multiple_choice"
-            options: ["1", "2", "3", "4", "5"]
-            tooltip: *mha_competency_tooltip
-            description: "Economic, financial, statistical, and other discipline-specific techniques needed to understand, model, assess, and inform health care decision making and address health care questions"
-            required: true
-          - order: 6
-            text: "Quantitative Methods for Health Services Delivery Reflection"
-            type: "short_answer"
-            required: false
-          - order: 7
-            text: "Please provide a Google Drive or Google Sites link as evidence for this section."
-            type: "evidence"
-            required: true
-  - <<: *executive_survey_base
-    semester: "Spring 2025"
-    seed_auto_assign_students: false
-
-  - <<: *residential_survey_base
-    semester: "Spring 2025"
-    seed_auto_assign_students: false
+  - <<: *executive_track_survey_base
+    title: "EMHA Final Competency Survey"
+    program_semester: "Spring 2026"
+    available_until: "2026-03-20"
+    extra_categories:
+      - *portfolio_review_category

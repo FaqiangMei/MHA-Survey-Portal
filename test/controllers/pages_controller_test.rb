@@ -25,6 +25,15 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_not_nil @response.body
   end
 
+  test "public navbar exposes mobile drawer controls" do
+    get about_path
+
+    assert_response :success
+    assert_select "button.c-mobile-menu-button[aria-controls='public-mobile-nav'][aria-expanded='false']"
+    assert_select "#public-mobile-nav.c-nav-drawer[data-mobile-nav-drawer]"
+    assert_select ".c-nav-drawer-backdrop[data-mobile-nav-backdrop][hidden]"
+  end
+
   test "about page accessible by admin" do
     sign_in @admin
 
@@ -119,6 +128,25 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_not @response.redirect?
+  end
+
+  test "faq page includes workflow and export guidance" do
+    get faq_path
+
+    assert_response :success
+    assert_includes response.body, "How do notifications work?"
+    assert_includes response.body, "What should advisors use first?"
+    assert_includes response.body, "What is the Reports page for?"
+    assert_includes response.body, "Why might program targets differ by semester?"
+    assert_includes response.body, "Which exports contain student-level data?"
+    assert_includes response.body, "What should I do if a Google Translate box gets stuck loading?"
+  end
+
+  # Maintenance page tests
+  test "maintenance page returns service unavailable" do
+    get maintenance_path
+
+    assert_response :service_unavailable
   end
 
   test "faq action exists and is callable" do

@@ -49,31 +49,43 @@ Rails.application.configure do
   # Replace the default in-process memory cache store with a durable alternative.
   config.cache_store = :solid_cache_store
 
-  # Replace the default in-process and non-durable queuing backend for Active Job.
-  # Use inline in production temporarily to avoid dependency on SolidQueue and
-  # its separate queue DB while diagnosing Heroku failures. This makes jobs
-  # execute synchronously within the request lifecycle — acceptable as a
-  # short-term mitigation but not for long-term async workloads.
+  # Default Active Job adapter stays inline app-wide (most jobs have never
+  # been verified running genuinely async in production). Individual job
+  # classes can opt into Solid Queue via `self.queue_adapter = :solid_queue`
+  # -- see GradeImports::BatchImportJob. Requires SOLID_QUEUE_IN_PUMA=true
+  # (or a separate worker process) to actually dequeue jobs; see
+  # config/puma.rb.
   config.active_job.queue_adapter = :inline
-  # If you later re-enable SolidQueue, restore the following line and ensure
-  # the queue database is migrated and SolidQueue workers are running:
-  # config.solid_queue.connects_to = { database: { writing: :queue } }
 
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
   # config.action_mailer.raise_delivery_errors = false
 
-  # Set host to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: "example.com" }
+  email_notifications_enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch("EMAIL_NOTIFICATIONS_ENABLED", "false"))
+  if email_notifications_enabled && ENV["APP_HOST"].blank?
+    raise "APP_HOST is required when EMAIL_NOTIFICATIONS_ENABLED=true so email links point to the correct app."
+  end
 
-  # Specify outgoing SMTP server. Remember to add smtp/* credentials via rails credentials:edit.
-  # config.action_mailer.smtp_settings = {
-  #   user_name: Rails.application.credentials.dig(:smtp, :user_name),
-  #   password: Rails.application.credentials.dig(:smtp, :password),
-  #   address: "smtp.example.com",
-  #   port: 587,
-  #   authentication: :plain
-  # }
+  # Set host to be used by links generated in mailer templates.
+  config.action_mailer.default_url_options = {
+    host: ENV.fetch("APP_HOST", "localhost:3000"),
+    protocol: ENV.fetch("APP_PROTOCOL", "https")
+  }
+
+  # TAMU/SMTP email delivery. Emails are only sent when EMAIL_NOTIFICATIONS_ENABLED=true.
+  # Configure these environment variables in production when enabling email:
+  # EMAIL_NOTIFICATIONS_ENABLED, SMTP_ADDRESS, SMTP_PORT, SMTP_DOMAIN, SMTP_USER_NAME, SMTP_PASSWORD, MAILER_FROM.
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.raise_delivery_errors = true
+  config.action_mailer.smtp_settings = {
+    address: ENV.fetch("SMTP_ADDRESS", "smtp-relay.tamu.edu"),
+    port: ENV.fetch("SMTP_PORT", 587).to_i,
+    domain: ENV.fetch("SMTP_DOMAIN", "tamu.edu"),
+    user_name: ENV["SMTP_USER_NAME"],
+    password: ENV["SMTP_PASSWORD"],
+    authentication: ENV.fetch("SMTP_AUTHENTICATION", "plain").to_sym,
+    enable_starttls_auto: ActiveModel::Type::Boolean.new.cast(ENV.fetch("SMTP_ENABLE_STARTTLS_AUTO", "true"))
+  }.compact
 
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation cannot be found).
